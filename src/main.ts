@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 
-type SourceKey = "mic" | "system";
 type PermissionKind = "microphone" | "systemAudio";
 type PermissionStatus = "neverRequested" | "authorized" | "denied";
+type View = "onboarding" | "home" | "meeting";
+type MeetingStatus = "live" | "done";
 
 type OnboardingState = {
   productName: string;
@@ -12,292 +13,611 @@ type OnboardingState = {
   ready: boolean;
 };
 
-type PermissionCopy = {
-  badge: string;
-  enableTitle: string;
-  readyTitle: string;
-  enableBody: string;
-  readyBody: string;
+type Meeting = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  status: MeetingStatus;
+  transcript: string[];
+  exportPath: string | null;
 };
 
-const permissionOrder: PermissionKind[] = ["microphone", "systemAudio"];
+type MarkdownExport = {
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  status: MeetingStatus;
+  transcript: string;
+};
 
-const permissionCopy: Record<PermissionKind, PermissionCopy> = {
+const STORE_KEY = "unsigned-char-meetings";
+const appRoot: HTMLElement = (() => {
+  const node = document.querySelector<HTMLElement>("#app");
+  if (!node) {
+    throw new Error("Missing app root");
+  }
+  return node;
+})();
+
+const permissionCopy: Record<
+  PermissionKind,
+  {
+    title: string;
+    body: string;
+    ready: string;
+    denied: string;
+  }
+> = {
   microphone: {
-    badge: "Mic",
-    enableTitle: "Allow microphone access",
-    readyTitle: "unsigned char can hear your voice",
-    enableBody: "Help unsigned char hear your side of the meeting.",
-    readyBody: "Microphone access turned on.",
+    title: "Allow microphone access",
+    body: "unsigned char needs to hear your voice.",
+    ready: "Microphone access is on.",
+    denied: "Microphone access was denied. Open Settings and enable it.",
   },
   systemAudio: {
-    badge: "Sys",
-    enableTitle: "Allow system audio access",
-    readyTitle: "unsigned char can hear everyone else",
-    enableBody: "Help unsigned char hear the meeting audio coming through your Mac.",
-    readyBody: "System audio access turned on.",
+    title: "Allow system audio access",
+    body: "unsigned char needs to hear the rest of the meeting.",
+    ready: "System audio access is on.",
+    denied: "System audio access was denied. Open Settings and enable it.",
   },
 };
 
 const state = {
-  running: false,
-  activeSources: new Set<SourceKey>(["mic", "system"]),
+  view: "onboarding" as View,
   onboarding: null as OnboardingState | null,
-  refreshInterval: 0 as number | undefined,
-  permissionBusy: new Set<PermissionKind>(),
+  meetings: loadMeetings(),
+  activeMeetingId: null as string | null,
+  permissionBusy: null as PermissionKind | null,
+  permissionNote: "",
+  saveBusy: false,
+  meetingNote: "",
+  permissionPollId: 0 as number | undefined,
 };
 
-function setText(selector: string, value: string) {
-  const element = document.querySelector<HTMLElement>(selector);
-  if (element) {
-    element.textContent = value;
+function loadMeetings(): Meeting[] {
+  try {
+    const raw = window.localStorage.getItem(STORE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(isMeeting);
+  } catch {
+    return [];
   }
 }
 
-function updateSourceSummary() {
-  const summary = document.querySelector<HTMLElement>("#source-summary");
-  if (!summary) {
-    return;
+function isMeeting(value: unknown): value is Meeting {
+  if (!value || typeof value !== "object") {
+    return false;
   }
 
-  const active = [...state.activeSources];
-  if (active.length === 0) {
-    summary.textContent = "Selected: none. Pick at least one source before recording.";
-    return;
-  }
-
-  const labels = active.map((source) =>
-    source === "mic" ? "microphone" : "system audio",
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === "string" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.createdAt === "string" &&
+    typeof candidate.updatedAt === "string" &&
+    (candidate.status === "live" || candidate.status === "done") &&
+    Array.isArray(candidate.transcript) &&
+    (typeof candidate.exportPath === "string" || candidate.exportPath === null)
   );
-  summary.textContent = `Selected: ${labels.join(" and ")}`;
 }
 
-function updateSessionState() {
-  const sessionState = document.querySelector<HTMLElement>("#session-state");
-  const sessionNote = document.querySelector<HTMLElement>("#session-note");
-  const toggle = document.querySelector<HTMLButtonElement>("#session-toggle");
-  const stages = document.querySelectorAll<HTMLElement>("[data-stage]");
+function persistMeetings() {
+  window.localStorage.setItem(STORE_KEY, JSON.stringify(state.meetings));
+}
 
-  if (!sessionState || !sessionNote || !toggle) {
-    return;
-  }
+function sortedMeetings() {
+  return [...state.meetings].sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+  );
+}
 
-  if (state.running) {
-    sessionState.textContent = "Local session running";
-    sessionNote.textContent =
-      "Permissions are ready. The next step is wiring real audio capture and transcript streaming.";
-    toggle.textContent = "Stop simulated session";
-  } else {
-    sessionState.textContent = "Permissions ready";
-    sessionNote.textContent =
-      "The app is unlocked. Native capture and Qwen ASR still need to be wired in.";
-    toggle.textContent = "Simulate local session";
-  }
+function getActiveMeeting() {
+  return state.meetings.find((meeting) => meeting.id === state.activeMeetingId) ?? null;
+}
 
-  stages.forEach((stage, index) => {
-    const isActive = state.running || index === 0;
-    stage.classList.toggle("is-active", isActive);
+function updateMeeting(id: string, updater: (meeting: Meeting) => Meeting) {
+  state.meetings = state.meetings.map((meeting) =>
+    meeting.id === id ? updater(meeting) : meeting,
+  );
+  persistMeetings();
+}
+
+function createMeeting() {
+  const createdAt = new Date().toISOString();
+  const meeting: Meeting = {
+    id: crypto.randomUUID(),
+    title: buildMeetingTitle(createdAt),
+    createdAt,
+    updatedAt: createdAt,
+    status: "live",
+    transcript: [],
+    exportPath: null,
+  };
+
+  state.meetings = [meeting, ...state.meetings];
+  state.activeMeetingId = meeting.id;
+  state.view = "meeting";
+  state.meetingNote = "";
+  persistMeetings();
+  render();
+}
+
+function buildMeetingTitle(iso: string) {
+  const date = new Date(iso);
+  const datePart = date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  const timePart = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Meeting ${datePart} ${timePart}`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
-function bindSourceChips() {
-  const chips = document.querySelectorAll<HTMLButtonElement>("[data-source]");
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
 
-  chips.forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const source = chip.dataset.source as SourceKey | undefined;
-      if (!source) {
+function permissionLabel(status: PermissionStatus) {
+  switch (status) {
+    case "authorized":
+      return "Granted";
+    case "denied":
+      return "Needs settings";
+    default:
+      return "Not requested";
+  }
+}
+
+function permissionActionLabel(permission: PermissionKind, status: PermissionStatus) {
+  if (state.permissionBusy === permission) {
+    return "Working...";
+  }
+  if (status === "authorized") {
+    return "Granted";
+  }
+  if (status === "denied") {
+    return "Open settings";
+  }
+  return "Allow access";
+}
+
+function renderOnboarding() {
+  const onboarding = state.onboarding;
+  if (!onboarding) {
+    return `<section class="screen onboarding"><p class="body">Loading permissions...</p></section>`;
+  }
+
+  const cards = (["microphone", "systemAudio"] as PermissionKind[])
+    .map((permission) => {
+      const status = onboarding.permissions[permission];
+      const copy = permissionCopy[permission];
+      const body =
+        status === "authorized"
+          ? copy.ready
+          : status === "denied"
+            ? copy.denied
+            : copy.body;
+
+      return `
+        <article class="permission-card ${status === "authorized" ? "is-ready" : ""}">
+          <div class="permission-copy">
+            <p class="eyebrow">${permission === "microphone" ? "Mic" : "System"}</p>
+            <h2>${copy.title}</h2>
+            <p class="body">${body}</p>
+          </div>
+          <div class="permission-row">
+            <span class="status-chip">${permissionLabel(status)}</span>
+            <button
+              class="button secondary"
+              data-permission-action="${permission}"
+              ${status === "authorized" || state.permissionBusy === permission ? "disabled" : ""}
+              type="button"
+            >
+              ${permissionActionLabel(permission, status)}
+            </button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+
+  return `
+    <section class="screen onboarding">
+      <header class="screen-header">
+        <p class="eyebrow">Onboarding</p>
+        <h1>Give unsigned char permission first.</h1>
+        <p class="body">
+          Before you use the app, grant microphone and system audio access.
+        </p>
+      </header>
+
+      <div class="permission-list">${cards}</div>
+
+      <footer class="screen-footer">
+        <p class="meta">
+          ${
+            state.permissionNote ||
+            "The app unlocks automatically once both permissions are granted."
+          }
+        </p>
+        <button class="button ghost" id="refresh-permissions" type="button">
+          Refresh
+        </button>
+      </footer>
+    </section>
+  `;
+}
+
+function renderHome() {
+  const items = sortedMeetings();
+  const content =
+    items.length === 0
+      ? `
+        <div class="empty-state">
+          <p class="empty-title">No meetings yet</p>
+          <p class="body">
+            Create a meeting from the button below and transcripts will show up here.
+          </p>
+        </div>
+      `
+      : `
+        <div class="meeting-list">
+          ${items
+            .map((meeting) => {
+              const preview = meeting.transcript[meeting.transcript.length - 1] ?? "No transcript yet";
+              return `
+                <button class="meeting-row" data-open-meeting="${meeting.id}" type="button">
+                  <div class="meeting-row-copy">
+                    <div class="meeting-row-top">
+                      <h2>${escapeHtml(meeting.title)}</h2>
+                      <span class="status-badge ${meeting.status}">${meeting.status}</span>
+                    </div>
+                    <p class="meeting-preview">${escapeHtml(preview)}</p>
+                    <p class="meeting-meta">
+                      ${formatDate(meeting.updatedAt)} · ${meeting.transcript.length} lines
+                    </p>
+                  </div>
+                </button>
+              `;
+            })
+            .join("")}
+        </div>
+      `;
+
+  return `
+    <section class="screen home">
+      <header class="screen-header">
+        <p class="eyebrow">Home</p>
+        <h1>Meetings</h1>
+        <p class="body">Your saved transcripts live here.</p>
+      </header>
+
+      ${content}
+
+      <button class="fab" id="new-meeting" type="button" aria-label="Create new meeting">
+        +
+      </button>
+    </section>
+  `;
+}
+
+function renderMeeting() {
+  const meeting = getActiveMeeting();
+  if (!meeting) {
+    state.view = "home";
+    return renderHome();
+  }
+
+  const transcript =
+    meeting.transcript.length === 0
+      ? `
+        <div class="empty-state transcript-empty">
+          <p class="empty-title">Live transcript</p>
+          <p class="body">
+            Transcript lines will appear here. For now, use the input below to simulate live text.
+          </p>
+        </div>
+      `
+      : `
+        <div class="transcript-list">
+          ${meeting.transcript
+            .map(
+              (line, index) => `
+                <article class="transcript-line">
+                  <span class="line-index">${index + 1}</span>
+                  <p>${escapeHtml(line)}</p>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+      `;
+
+  const note = state.meetingNote || meeting.exportPath || "";
+
+  return `
+    <section class="screen meeting">
+      <header class="meeting-header">
+        <button class="back-button" id="back-home" type="button">Back</button>
+        <div class="meeting-heading">
+          <p class="eyebrow">Meeting</p>
+          <h1>${escapeHtml(meeting.title)}</h1>
+          <p class="meeting-subtitle">
+            <span class="status-badge ${meeting.status}">${meeting.status}</span>
+            <span>${formatTime(meeting.createdAt)}</span>
+          </p>
+        </div>
+      </header>
+
+      <div class="meeting-actions">
+        <button class="button ghost" id="toggle-meeting-status" type="button">
+          ${meeting.status === "live" ? "End live" : "Resume"}
+        </button>
+        <button class="button secondary" id="save-markdown" type="button" ${
+          state.saveBusy ? "disabled" : ""
+        }>
+          ${state.saveBusy ? "Saving..." : "Save .md"}
+        </button>
+      </div>
+
+      <section class="transcript-panel" id="transcript-panel">
+        ${transcript}
+      </section>
+
+      <form class="composer" id="transcript-form">
+        <input
+          id="transcript-input"
+          class="composer-input"
+          name="line"
+          autocomplete="off"
+          placeholder="Add a transcript line"
+        />
+        <button class="button primary" type="submit">Add</button>
+      </form>
+
+      <p class="meta meeting-note">${escapeHtml(note)}</p>
+    </section>
+  `;
+}
+
+function render() {
+  const markup =
+    state.view === "onboarding"
+      ? renderOnboarding()
+      : state.view === "home"
+        ? renderHome()
+        : renderMeeting();
+
+  appRoot.innerHTML = markup;
+  bindViewHandlers();
+
+  if (state.view === "meeting") {
+    const panel = document.querySelector<HTMLElement>("#transcript-panel");
+    if (panel) {
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }
+}
+
+function bindViewHandlers() {
+  if (state.view === "onboarding") {
+    document
+      .querySelector<HTMLButtonElement>("#refresh-permissions")
+      ?.addEventListener("click", () => {
+        void refreshOnboarding();
+      });
+
+    (["microphone", "systemAudio"] as PermissionKind[]).forEach((permission) => {
+      document
+        .querySelector<HTMLButtonElement>(`[data-permission-action="${permission}"]`)
+        ?.addEventListener("click", () => {
+          void handlePermissionAction(permission);
+        });
+    });
+    return;
+  }
+
+  if (state.view === "home") {
+    document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
+      createMeeting();
+    });
+
+    document.querySelectorAll<HTMLElement>("[data-open-meeting]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const id = button.dataset.openMeeting;
+        if (!id) {
+          return;
+        }
+
+        state.activeMeetingId = id;
+        state.meetingNote = "";
+        state.view = "meeting";
+        render();
+      });
+    });
+    return;
+  }
+
+  const meeting = getActiveMeeting();
+  if (!meeting) {
+    return;
+  }
+
+  document.querySelector<HTMLButtonElement>("#back-home")?.addEventListener("click", () => {
+    state.activeMeetingId = null;
+    state.meetingNote = "";
+    state.view = "home";
+    render();
+  });
+
+  document
+    .querySelector<HTMLButtonElement>("#toggle-meeting-status")
+    ?.addEventListener("click", () => {
+      updateMeeting(meeting.id, (current) => ({
+        ...current,
+        status: current.status === "live" ? "done" : "live",
+        updatedAt: new Date().toISOString(),
+      }));
+      state.meetingNote = "";
+      render();
+    });
+
+  document
+    .querySelector<HTMLButtonElement>("#save-markdown")
+    ?.addEventListener("click", () => {
+      void saveMeetingAsMarkdown(meeting);
+    });
+
+  document
+    .querySelector<HTMLFormElement>("#transcript-form")
+    ?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const input = document.querySelector<HTMLInputElement>("#transcript-input");
+      const line = input?.value.trim() ?? "";
+      if (!line) {
         return;
       }
 
-      if (state.activeSources.has(source) && state.activeSources.size > 1) {
-        state.activeSources.delete(source);
-      } else {
-        state.activeSources.add(source);
-      }
-
-      chip.classList.toggle("is-active", state.activeSources.has(source));
-      updateSourceSummary();
+      updateMeeting(meeting.id, (current) => ({
+        ...current,
+        transcript: [...current.transcript, line],
+        updatedAt: new Date().toISOString(),
+      }));
+      state.meetingNote = "";
+      render();
     });
-  });
 }
 
-function startPermissionPolling() {
-  if (state.refreshInterval) {
+async function handlePermissionAction(permission: PermissionKind) {
+  const onboarding = state.onboarding;
+  if (!onboarding) {
     return;
   }
 
-  state.refreshInterval = window.setInterval(() => {
-    void refreshOnboarding(true);
-  }, 2000);
-}
+  state.permissionBusy = permission;
+  render();
 
-function stopPermissionPolling() {
-  if (!state.refreshInterval) {
-    return;
-  }
+  try {
+    const current = onboarding.permissions[permission];
+    if (current === "denied") {
+      await invoke("open_permission_settings", { permission });
+      state.permissionNote = "System Settings opened. Enable access there, then come back.";
+    } else {
+      await invoke("request_permission", { permission });
+      state.permissionNote = "";
+    }
 
-  window.clearInterval(state.refreshInterval);
-  state.refreshInterval = undefined;
-}
-
-function updatePermissionCard(permission: PermissionKind, status: PermissionStatus) {
-  const card = document.querySelector<HTMLElement>(`[data-permission-card="${permission}"]`);
-  const title = document.querySelector<HTMLElement>(`[data-permission-title="${permission}"]`);
-  const body = document.querySelector<HTMLElement>(`[data-permission-body="${permission}"]`);
-  const statusLabel = document.querySelector<HTMLElement>(
-    `[data-permission-status="${permission}"]`,
-  );
-  const button = document.querySelector<HTMLButtonElement>(
-    `[data-permission-action="${permission}"]`,
-  );
-
-  if (!card || !title || !body || !statusLabel || !button) {
-    return;
-  }
-
-  const copy = permissionCopy[permission];
-  const isAuthorized = status === "authorized";
-  const isDenied = status === "denied";
-  const isBusy = state.permissionBusy.has(permission);
-
-  title.textContent = isAuthorized ? copy.readyTitle : copy.enableTitle;
-  body.textContent = isAuthorized ? copy.readyBody : copy.enableBody;
-  statusLabel.textContent = isAuthorized
-    ? "Granted"
-    : isDenied
-      ? "Needs settings"
-      : "Not requested";
-
-  button.textContent = isAuthorized
-    ? "Granted"
-    : isBusy
-      ? "Working..."
-      : isDenied
-        ? "Open settings"
-        : "Allow access";
-  button.disabled = isAuthorized || isBusy;
-
-  card.classList.toggle("is-authorized", isAuthorized);
-  card.classList.toggle("is-denied", isDenied);
-}
-
-function updateGateNote(snapshot: OnboardingState) {
-  const blocked = permissionOrder.filter(
-    (permission) => snapshot.permissions[permission] !== "authorized",
-  );
-
-  if (blocked.length === 0) {
-    setText("#gate-note", "All permissions granted. Unlocking the app.");
-    return;
-  }
-
-  if (blocked.some((permission) => snapshot.permissions[permission] === "denied")) {
-    setText(
-      "#gate-note",
-      "At least one permission was denied. Open System Settings, enable it, then come back or press refresh.",
-    );
-    return;
-  }
-
-  setText(
-    "#gate-note",
-    "unsigned char stays locked until both microphone and system audio access are granted.",
-  );
-}
-
-function renderOnboarding(snapshot: OnboardingState) {
-  state.onboarding = snapshot;
-
-  document.title = snapshot.productName;
-  setText("#engine-name", snapshot.engine);
-  setText("#reference-engine", snapshot.engine);
-  setText("#reference-path", snapshot.reference);
-
-  permissionOrder.forEach((permission) => {
-    updatePermissionCard(permission, snapshot.permissions[permission]);
-  });
-  updateGateNote(snapshot);
-
-  const onboardingView = document.querySelector<HTMLElement>("#onboarding-view");
-  const workspaceView = document.querySelector<HTMLElement>("#workspace-view");
-
-  if (onboardingView && workspaceView) {
-    onboardingView.classList.toggle("is-hidden", snapshot.ready);
-    workspaceView.classList.toggle("is-hidden", !snapshot.ready);
-  }
-
-  if (snapshot.ready) {
-    stopPermissionPolling();
-    updateSessionState();
-  } else {
-    startPermissionPolling();
+    await refreshOnboarding(true);
+  } catch (error) {
+    state.permissionNote = `Permission flow failed: ${String(error)}`;
+  } finally {
+    state.permissionBusy = null;
+    render();
   }
 }
 
 async function refreshOnboarding(silent = false) {
   try {
-    const snapshot = await invoke<OnboardingState>("onboarding_state");
-    renderOnboarding(snapshot);
+    const onboarding = await invoke<OnboardingState>("onboarding_state");
+    state.onboarding = onboarding;
+
+    if (onboarding.ready) {
+      stopPermissionPolling();
+      if (state.view === "onboarding") {
+        state.view = "home";
+      }
+    } else {
+      state.view = "onboarding";
+      startPermissionPolling();
+    }
   } catch (error) {
     if (!silent) {
-      setText("#gate-note", `Failed to load permissions: ${String(error)}`);
+      state.permissionNote = `Failed to load permissions: ${String(error)}`;
     }
   }
+
+  render();
 }
 
-async function handlePermissionAction(permission: PermissionKind) {
-  if (!state.onboarding) {
+function startPermissionPolling() {
+  if (state.permissionPollId) {
     return;
   }
 
-  const currentStatus = state.onboarding.permissions[permission];
-  state.permissionBusy.add(permission);
-  updatePermissionCard(permission, currentStatus);
+  state.permissionPollId = window.setInterval(() => {
+    void refreshOnboarding(true);
+  }, 2000);
+}
+
+function stopPermissionPolling() {
+  if (!state.permissionPollId) {
+    return;
+  }
+
+  window.clearInterval(state.permissionPollId);
+  state.permissionPollId = undefined;
+}
+
+async function saveMeetingAsMarkdown(meeting: Meeting) {
+  state.saveBusy = true;
+  state.meetingNote = "";
+  render();
+
+  const exportPayload: MarkdownExport = {
+    title: meeting.title,
+    createdAt: meeting.createdAt,
+    updatedAt: meeting.updatedAt,
+    status: meeting.status,
+    transcript: meeting.transcript.join("\n\n"),
+  };
 
   try {
-    if (currentStatus === "denied") {
-      await invoke("open_permission_settings", { permission });
-    } else {
-      await invoke<PermissionStatus>("request_permission", { permission });
-    }
-
-    await refreshOnboarding(true);
+    const path = await invoke<string>("save_meeting_markdown", { export: exportPayload });
+    updateMeeting(meeting.id, (current) => ({
+      ...current,
+      exportPath: path,
+      updatedAt: new Date().toISOString(),
+    }));
+    state.meetingNote = `Saved to ${path}`;
   } catch (error) {
-    setText("#gate-note", `Permission flow failed: ${String(error)}`);
+    state.meetingNote = `Save failed: ${String(error)}`;
   } finally {
-    state.permissionBusy.delete(permission);
-    if (state.onboarding) {
-      updatePermissionCard(permission, state.onboarding.permissions[permission]);
-    }
+    state.saveBusy = false;
+    render();
   }
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  bindSourceChips();
-  updateSourceSummary();
-  updateSessionState();
-
-  document
-    .querySelector<HTMLButtonElement>("#session-toggle")
-    ?.addEventListener("click", () => {
-      state.running = !state.running;
-      updateSessionState();
-    });
-
-  document
-    .querySelector<HTMLButtonElement>("#refresh-permissions")
-    ?.addEventListener("click", () => {
-      void refreshOnboarding();
-    });
-
-  permissionOrder.forEach((permission) => {
-    document
-      .querySelector<HTMLButtonElement>(`[data-permission-action="${permission}"]`)
-      ?.addEventListener("click", () => {
-        void handlePermissionAction(permission);
-      });
-  });
-
   await refreshOnboarding();
 });

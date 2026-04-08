@@ -9,20 +9,27 @@ It is meant to:
 - transcribe the conversation locally
 - use Qwen ASR for speech recognition
 
-## How it works
+## Views
 
-The intended flow is simple:
+The app has three views:
+
+1. Onboarding: grant microphone and system audio access.
+2. Home: browse saved meetings and create a new one.
+3. Meeting: read the live transcript for the current meeting.
+
+## How to use
 
 1. Open the app.
-2. Grant microphone and system audio access.
-3. Start a session.
-4. Let it listen to your mic and system audio together.
-5. Read the transcript as the meeting happens.
+2. Finish the permission onboarding.
+3. Go to Home.
+4. Use the floating action button to create a meeting.
+5. Watch the transcript in the Meeting view.
+6. Save the meeting as a Markdown file when you need it.
 
 ## Current status
 
-This repo is still at the starting point. The app shell is in place, but the
-actual audio capture and transcription flow are not wired yet.
+This repo is still at the starting point. The app structure is in place, but
+the actual audio capture and transcription flow are not wired yet.
 
 ## Run it
 
