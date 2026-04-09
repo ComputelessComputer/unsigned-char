@@ -489,6 +489,82 @@ h2 {
   padding-bottom: 24px;
 }
 
+.settings-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.settings-row-list,
+.settings-spoken-section,
+.settings-copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-row-list {
+  gap: 24px;
+}
+
+.settings-spoken-section {
+  gap: 10px;
+}
+
+.settings-copy {
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  align-items: center;
+}
+
+.settings-row-label {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-row-control,
+.settings-spoken-select {
+  width: min(100%, 160px);
+}
+
+.settings-row-control {
+  justify-self: end;
+}
+
+.settings-chip-box {
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.settings-chip-box,
+.settings-chip-box .settings-chip-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-chip-box .settings-chip-list {
+  flex-wrap: wrap;
+}
+
+.settings-chip-placeholder,
+.settings-note {
+  color: var(--text-soft);
+}
+
+.settings-note {
+  color: var(--danger);
+}
+
 .model-card {
   padding: 16px;
   gap: 12px;
@@ -1041,5 +1117,16 @@ body[data-meeting-overlay="on"] .screen.meeting {
 
   .permission-item {
     align-items: center;
+  }
+
+  .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .settings-row-control,
+  .settings-spoken-select {
+    width: 100%;
+    justify-self: stretch;
   }
 }

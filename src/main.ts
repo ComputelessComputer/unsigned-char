@@ -194,7 +194,6 @@ const state = {
   diarizationDraft: emptyDiarizationDraft(),
   generalSettings: null as GeneralSettings | null,
   generalDraft: emptyGeneralDraft(),
-  generalSpokenLanguage: "",
   meetings: loadMeetings(),
   activeMeetingId: null as string | null,
   permissionBusy: null as PermissionKind | null,
@@ -312,7 +311,6 @@ function syncGeneralDraft(settings: GeneralSettings) {
     spokenLanguages: normalizeSpokenLanguages(settings.spokenLanguages, mainLanguage),
     timezone: settings.timezone.trim(),
   };
-  state.generalSpokenLanguage = "";
 }
 
 function loadMeetings(): Meeting[] {
@@ -826,16 +824,8 @@ function renderSettingsWindow() {
   if (!state.generalSettings) {
     return `
       <section class="settings-shell">
-        <div class="screen settings-screen">
-          <section class="model-card">
-            <div class="model-card-header">
-              <div>
-                <p class="eyebrow">Settings</p>
-                <h2>Loading</h2>
-              </div>
-            </div>
-            <p class="meta">Loading preferences...</p>
-          </section>
+        <div class="screen settings-screen settings-simple">
+          <p class="meta">Loading preferences...</p>
         </div>
       </section>
     `;
@@ -855,124 +845,115 @@ function renderSettingsWindow() {
       option.value !== draft.mainLanguage &&
       !draft.spokenLanguages.includes(option.value),
   );
-  const spokenLanguageChips =
-    draft.spokenLanguages.length === 0
-      ? '<p class="meta">No additional spoken languages.</p>'
-      : `
-        <div class="settings-chip-list">
-          ${draft.spokenLanguages
-            .map(
-              (language) => `
-                <span class="settings-chip">
-                  ${escapeHtml(formatLanguageLabel(language))}
-                  <button
-                    class="settings-chip-remove"
-                    data-remove-spoken-language="${escapeHtml(language)}"
-                    type="button"
-                    aria-label="Remove ${escapeHtml(formatLanguageLabel(language))}"
-                  >
-                    ×
-                  </button>
-                </span>
-              `,
-            )
-            .join("")}
-        </div>
-      `;
+  const spokenLanguageChips = draft.spokenLanguages
+    .map(
+      (language) => `
+        <span class="settings-chip">
+          ${escapeHtml(formatLanguageLabel(language))}
+          <button
+            class="settings-chip-remove"
+            data-remove-spoken-language="${escapeHtml(language)}"
+            type="button"
+            aria-label="Remove ${escapeHtml(formatLanguageLabel(language))}"
+            ${state.generalBusy ? "disabled" : ""}
+          >
+            ×
+          </button>
+        </span>
+      `,
+    )
+    .join("");
   const note = state.generalNote
-    ? `<p class="meta model-note">${escapeHtml(state.generalNote)}</p>`
+    ? `<p class="meta settings-note">${escapeHtml(state.generalNote)}</p>`
     : "";
 
   return `
     <section class="settings-shell">
-      <div class="screen settings-screen">
-        <section class="model-card">
-          <div class="model-card-header">
-            <div>
-              <p class="eyebrow">Language & region</p>
-              <h2>Preferences</h2>
-            </div>
-          </div>
-
-          <div class="field-row">
-            <label class="field">
-              <span class="meta-label">Main language</span>
-              <select id="main-language" class="composer-input">
-                ${LANGUAGE_OPTIONS.map(
-                  (option) => `
-                    <option value="${escapeHtml(option.value)}" ${
-                      option.value === draft.mainLanguage ? "selected" : ""
-                    }>
-                      ${escapeHtml(option.label)}
-                    </option>
-                  `,
-                ).join("")}
-              </select>
-              <span class="meta">Used for summaries, chats, and AI-generated responses.</span>
-            </label>
-
-            <label class="field">
-              <span class="meta-label">Timezone</span>
-              <select id="timezone" class="composer-input">
-                <option value="">System default (${escapeHtml(systemTimezone)})</option>
-                ${timezoneOptions.map(
-                  (option) => `
-                    <option value="${escapeHtml(option.value)}" ${
-                      option.value === draft.timezone ? "selected" : ""
-                    }>
-                      ${escapeHtml(`${option.label} (${option.detail})`)}
-                    </option>
-                  `,
-                ).join("")}
-              </select>
-              <span class="meta">Overrides how meeting timestamps are shown.</span>
-            </label>
-          </div>
-
-          <div class="field">
-            <span class="meta-label">Spoken languages</span>
-            <span class="meta">Add other languages you speak besides the main language.</span>
-            ${spokenLanguageChips}
-            <div class="field-row settings-inline-row">
-              <label class="field">
-                <select id="spoken-language-select" class="composer-input">
-                  <option value="">Add language</option>
-                  ${availableSpokenLanguages.map(
-                    (option) => `
-                      <option value="${escapeHtml(option.value)}" ${
-                        option.value === state.generalSpokenLanguage ? "selected" : ""
-                      }>
-                        ${escapeHtml(option.label)}
-                      </option>
-                    `,
-                  ).join("")}
-                </select>
-              </label>
-              <button
-                class="button secondary"
-                id="add-spoken-language"
-                type="button"
-                ${state.generalSpokenLanguage ? "" : "disabled"}
-              >
-                Add
-              </button>
-            </div>
-          </div>
-
-          <div class="model-footer">
-            <p class="meta">Transcription model configuration is fixed by the app build, not this screen.</p>
-            <button
-              class="button secondary"
-              id="save-general-settings"
-              type="button"
+      <div class="screen settings-screen settings-simple">
+        <div class="settings-row-list">
+          <label class="settings-row">
+            <span class="settings-copy">
+              <span class="settings-row-label">Main language</span>
+              <span class="meta">Language for summaries, chats, and AI-generated responses</span>
+            </span>
+            <select
+              id="main-language"
+              class="composer-input settings-row-control"
               ${state.generalBusy ? "disabled" : ""}
             >
-              ${state.generalBusy ? "Saving..." : "Save"}
-            </button>
+              ${LANGUAGE_OPTIONS.map(
+                (option) => `
+                  <option value="${escapeHtml(option.value)}" ${
+                    option.value === draft.mainLanguage ? "selected" : ""
+                  }>
+                    ${escapeHtml(option.label)}
+                  </option>
+                `,
+              ).join("")}
+            </select>
+          </label>
+
+          <label class="settings-row">
+            <span class="settings-copy">
+              <span class="settings-row-label">Timezone</span>
+              <span class="meta">Override the timezone used for the sidebar timeline</span>
+            </span>
+            <select
+              id="timezone"
+              class="composer-input settings-row-control"
+              ${state.generalBusy ? "disabled" : ""}
+            >
+              <option value="">System default (${escapeHtml(systemTimezone)})</option>
+              ${timezoneOptions.map(
+                (option) => `
+                  <option value="${escapeHtml(option.value)}" ${
+                    option.value === draft.timezone ? "selected" : ""
+                  }>
+                    ${escapeHtml(`${option.label} (${option.detail})`)}
+                  </option>
+                `,
+              ).join("")}
+            </select>
+          </label>
+        </div>
+
+        <section class="settings-spoken-section">
+          <div class="settings-copy">
+            <span class="settings-row-label">Spoken languages</span>
+            <span class="meta">Add other languages you use other than the main language</span>
           </div>
 
-          ${note}
+          <div class="settings-chip-box">
+            ${
+              spokenLanguageChips
+                ? `<div class="settings-chip-list">${spokenLanguageChips}</div>`
+                : '<span class="settings-chip-placeholder">Add language</span>'
+            }
+          </div>
+
+          <select
+            id="spoken-language-select"
+            class="composer-input settings-spoken-select"
+            ${state.generalBusy || availableSpokenLanguages.length === 0 ? "disabled" : ""}
+          >
+            <option value="">
+              ${
+                availableSpokenLanguages.length === 0
+                  ? "All languages added"
+                  : "Add language"
+              }
+            </option>
+            ${availableSpokenLanguages.map(
+              (option) => `
+                <option value="${escapeHtml(option.value)}">
+                  ${escapeHtml(option.label)}
+                </option>
+              `,
+            ).join("")}
+          </select>
         </section>
+
+        ${note}
       </div>
     </section>
   `;
@@ -1575,13 +1556,8 @@ function bindGeneralSettingsHandlers() {
         state.generalDraft.spokenLanguages,
         nextMainLanguage,
       );
-
-      if (state.generalSpokenLanguage === nextMainLanguage) {
-        state.generalSpokenLanguage = "";
-      }
-
       state.generalNote = "";
-      render();
+      void saveGeneralSettings();
     });
 
   document
@@ -1589,33 +1565,25 @@ function bindGeneralSettingsHandlers() {
     ?.addEventListener("change", (event) => {
       state.generalDraft.timezone = (event.currentTarget as HTMLSelectElement).value.trim();
       state.generalNote = "";
-      render();
+      void saveGeneralSettings();
     });
 
   document
     .querySelector<HTMLSelectElement>("#spoken-language-select")
     ?.addEventListener("change", (event) => {
-      state.generalSpokenLanguage = normalizeLanguageCode(
+      const nextLanguage = normalizeLanguageCode(
         (event.currentTarget as HTMLSelectElement).value,
       );
-      state.generalNote = "";
-      render();
-    });
-
-  document
-    .querySelector<HTMLButtonElement>("#add-spoken-language")
-    ?.addEventListener("click", () => {
-      if (!state.generalSpokenLanguage) {
+      if (!nextLanguage) {
         return;
       }
 
       state.generalDraft.spokenLanguages = normalizeSpokenLanguages(
-        [...state.generalDraft.spokenLanguages, state.generalSpokenLanguage],
+        [...state.generalDraft.spokenLanguages, nextLanguage],
         state.generalDraft.mainLanguage,
       );
-      state.generalSpokenLanguage = "";
       state.generalNote = "";
-      render();
+      void saveGeneralSettings();
     });
 
   document.querySelectorAll<HTMLElement>("[data-remove-spoken-language]").forEach((button) => {
@@ -1629,15 +1597,9 @@ function bindGeneralSettingsHandlers() {
         (language) => language !== value,
       );
       state.generalNote = "";
-      render();
-    });
-  });
-
-  document
-    .querySelector<HTMLButtonElement>("#save-general-settings")
-    ?.addEventListener("click", () => {
       void saveGeneralSettings();
     });
+  });
 }
 
 async function refreshPermissions(silent = false) {
@@ -1874,7 +1836,7 @@ async function saveGeneralSettings() {
 
     state.generalSettings = settings;
     syncGeneralDraft(settings);
-    state.generalNote = "Saved.";
+    state.generalNote = "";
   } catch (error) {
     state.generalNote = `Settings save failed: ${String(error)}`;
   } finally {
