@@ -13,8 +13,6 @@ private let tccHandle: UnsafeMutableRawPointer? = {
 }()
 
 private typealias TCCPreflightFunc = @convention(c) (CFString, CFDictionary?) -> Int
-private typealias TCCRequestCompletion = @convention(block) (Bool) -> Void
-private typealias TCCRequestFunc = @convention(c) (CFString, CFDictionary?, TCCRequestCompletion) -> Void
 
 private func mapMicrophoneStatus(_ status: AVAuthorizationStatus) -> Int {
   switch status {
@@ -69,27 +67,4 @@ public func _audio_capture_permission_status() -> Int {
   }
 
   return preflight("kTCCServiceAudioCapture" as CFString, nil)
-}
-
-@_cdecl("_request_audio_capture_permission")
-public func _request_audio_capture_permission() -> Bool {
-  guard let tccHandle,
-    let functionSymbol = dlsym(tccHandle, "TCCAccessRequest"),
-    let request = unsafeBitCast(functionSymbol, to: TCCRequestFunc.self) as TCCRequestFunc?
-  else {
-    return false
-  }
-
-  let semaphore = DispatchSemaphore(value: 0)
-  var granted = false
-
-  let completion: TCCRequestCompletion = { allowed in
-    granted = allowed
-    semaphore.signal()
-  }
-
-  request("kTCCServiceAudioCapture" as CFString, nil, completion)
-
-  _ = semaphore.wait(timeout: .now() + .seconds(60))
-  return granted
 }
