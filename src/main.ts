@@ -1090,16 +1090,6 @@ function renderMeeting() {
         </button>
       </div>
 
-      <p class="meta meeting-runtime">
-        ${
-          meeting.status === "live"
-            ? state.transcriptionRunning
-              ? "Listening on your microphone and transcribing locally."
-              : "Starting local microphone transcription..."
-            : "Meeting transcription is paused."
-        }
-      </p>
-
       <section class="transcript-panel" id="transcript-panel">
         ${transcript}
       </section>
