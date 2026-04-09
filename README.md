@@ -8,6 +8,7 @@ It is meant to:
 - listen to your microphone and system audio at the same time
 - transcribe the conversation locally
 - use Qwen ASR for speech recognition
+- use pyannoteAI for speaker diarization when diarization is enabled
 
 ## Views
 
@@ -35,6 +36,10 @@ The app now stores model selection and resolves the default Qwen ASR path from
 bundled Tauri resources. The runtime still needs to consume that selection when
 real transcription is wired in.
 
+Speaker diarization is now configured separately through pyannoteAI, but the
+runtime still needs to upload audio and reconcile diarization results with the
+transcript when that pipeline is implemented.
+
 ## Model setup
 
 Bundled builds look for the default model under:
@@ -54,6 +59,18 @@ providing:
 
 Open Settings from the menu bar or use `Cmd+,` on macOS and `Ctrl+,` on other
 platforms.
+
+## Speaker diarization setup
+
+Speaker diarization uses [pyannoteAI](https://docs.pyannote.ai/introduction).
+Per the pyannoteAI docs, the hosted API needs an API key and processes uploaded
+audio or publicly accessible file URLs.
+
+From the Settings window you can:
+
+- enable or disable speaker diarization
+- choose `precision-2` or `community-1`
+- use a saved API key or `PYANNOTE_API_KEY` from your environment
 
 ## Run it
 

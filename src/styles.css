@@ -70,7 +70,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -447,7 +448,8 @@ h2 {
 .model-card-header,
 .model-source-grid,
 .model-footer,
-.field-row {
+.field-row,
+.toggle-row {
   display: flex;
   gap: 12px;
 }
@@ -456,6 +458,35 @@ h2 {
 .model-footer {
   align-items: center;
   justify-content: space-between;
+}
+
+.toggle-row {
+  align-items: flex-start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-muted);
+}
+
+.toggle-row input {
+  margin-top: 2px;
+}
+
+.toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toggle-copy strong {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toggle-copy small {
+  color: var(--text-soft);
+  line-height: 1.4;
 }
 
 .model-source-grid {
@@ -567,6 +598,10 @@ h2 {
   }
 
   .model-source-option {
+    background: #131416;
+  }
+
+  .toggle-row {
     background: #131416;
   }
 

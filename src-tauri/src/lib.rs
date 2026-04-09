@@ -16,8 +16,11 @@ const APP_NAME: &str = "unsigned char";
 const BUNDLED_MODEL_NAME: &str = "Bundled Qwen ASR";
 const BUNDLED_MODEL_RELATIVE_PATH: &str = "models/qwen-asr";
 const MODEL_SETTINGS_FILE: &str = "model-settings.json";
+const DIARIZATION_SETTINGS_FILE: &str = "diarization-settings.json";
 const OPEN_SETTINGS_MENU_ID: &str = "open-settings";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
+const PYANNOTE_PROVIDER_LABEL: &str = "pyannoteAI";
+const PYANNOTE_API_KEY_ENV: &str = "PYANNOTE_API_KEY";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +49,13 @@ enum ModelSource {
     HuggingFace,
 }
 
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+enum PyannoteModel {
+    Precision2,
+    Community1,
+}
+
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveModelSettingsInput {
@@ -53,6 +63,14 @@ struct SaveModelSettingsInput {
     hugging_face_repo: String,
     hugging_face_revision: String,
     hugging_face_local_path: String,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveDiarizationSettingsInput {
+    enabled: bool,
+    pyannote_model: PyannoteModel,
+    pyannote_api_key: String,
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -66,6 +84,17 @@ struct StoredModelSettings {
     hugging_face_revision: String,
     #[serde(default)]
     hugging_face_local_path: String,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredDiarizationSettings {
+    #[serde(default)]
+    enabled: bool,
+    #[serde(default)]
+    pyannote_model: Option<PyannoteModel>,
+    #[serde(default)]
+    pyannote_api_key: String,
 }
 
 #[derive(Serialize)]
@@ -87,9 +116,27 @@ struct ModelSettingsState {
     selected_reference: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiarizationSettingsState {
+    enabled: bool,
+    provider_label: &'static str,
+    pyannote_model: PyannoteModel,
+    pyannote_api_key_present: bool,
+    pyannote_api_key_source_label: Option<&'static str>,
+    ready: bool,
+    status: String,
+}
+
 impl Default for ModelSource {
     fn default() -> Self {
         Self::Bundled
+    }
+}
+
+impl Default for PyannoteModel {
+    fn default() -> Self {
+        Self::Precision2
     }
 }
 
@@ -108,12 +155,19 @@ impl StoredModelSettings {
     }
 }
 
+impl StoredDiarizationSettings {
+    fn pyannote_model(&self) -> PyannoteModel {
+        self.pyannote_model.unwrap_or_default()
+    }
+}
+
 #[tauri::command]
 fn onboarding_state<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<OnboardingState, String> {
     let permissions = permissions::snapshot()?;
     let model_settings = build_model_settings_state(&app, &load_model_settings(&app)?)?;
+    let diarization_settings = build_diarization_settings_state(&load_diarization_settings(&app)?)?;
 
     Ok(OnboardingState {
         product_name: "unsigned char",
@@ -125,7 +179,7 @@ fn onboarding_state<R: tauri::Runtime>(
             .selected_reference
             .clone()
             .unwrap_or_else(|| model_settings.bundled_resolved_path.clone()),
-        ready: permissions.ready() && model_settings.selected_ready,
+        ready: permissions.ready() && model_settings.selected_ready && diarization_settings.ready,
         permissions,
     })
 }
@@ -153,6 +207,13 @@ fn model_settings_state<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn diarization_settings_state<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<DiarizationSettingsState, String> {
+    build_diarization_settings_state(&load_diarization_settings(&app)?)
+}
+
+#[tauri::command]
 fn save_model_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: SaveModelSettingsInput,
@@ -160,6 +221,24 @@ fn save_model_settings<R: tauri::Runtime>(
     let settings = StoredModelSettings::from_input(settings)?;
     persist_model_settings(&app, &settings)?;
     build_model_settings_state(&app, &settings)
+}
+
+#[tauri::command]
+fn save_diarization_settings<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    settings: SaveDiarizationSettingsInput,
+) -> Result<DiarizationSettingsState, String> {
+    let mut stored = load_diarization_settings(&app)?;
+    stored.enabled = settings.enabled;
+    stored.pyannote_model = Some(settings.pyannote_model);
+
+    let api_key = settings.pyannote_api_key.trim();
+    if !api_key.is_empty() {
+        stored.pyannote_api_key = normalize_pyannote_api_key(api_key)?;
+    }
+
+    persist_diarization_settings(&app, &stored)?;
+    build_diarization_settings_state(&stored)
 }
 
 #[tauri::command]
@@ -397,6 +476,32 @@ fn build_model_settings_state<R: tauri::Runtime>(
     })
 }
 
+fn build_diarization_settings_state(
+    settings: &StoredDiarizationSettings,
+) -> Result<DiarizationSettingsState, String> {
+    let enabled = settings.enabled;
+    let pyannote_model = settings.pyannote_model();
+    let (api_key, pyannote_api_key_source_label) = resolve_pyannote_api_key(settings)?;
+    let pyannote_api_key_present = !api_key.is_empty();
+    let ready = !enabled || pyannote_api_key_present;
+    let status = build_pyannote_status(
+        enabled,
+        pyannote_model,
+        pyannote_api_key_present,
+        pyannote_api_key_source_label,
+    );
+
+    Ok(DiarizationSettingsState {
+        enabled,
+        provider_label: PYANNOTE_PROVIDER_LABEL,
+        pyannote_model,
+        pyannote_api_key_present,
+        pyannote_api_key_source_label,
+        ready,
+        status,
+    })
+}
+
 fn load_model_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<StoredModelSettings, String> {
@@ -407,6 +512,19 @@ fn load_model_settings<R: tauri::Runtime>(
 
     let contents = std::fs::read(&path).map_err(|error| error.to_string())?;
     serde_json::from_slice(&contents).map_err(|error| format!("Invalid model settings: {error}"))
+}
+
+fn load_diarization_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<StoredDiarizationSettings, String> {
+    let path = diarization_settings_path(app)?;
+    if !path.exists() {
+        return Ok(StoredDiarizationSettings::default());
+    }
+
+    let contents = std::fs::read(&path).map_err(|error| error.to_string())?;
+    serde_json::from_slice(&contents)
+        .map_err(|error| format!("Invalid diarization settings: {error}"))
 }
 
 fn persist_model_settings<R: tauri::Runtime>(
@@ -423,10 +541,33 @@ fn persist_model_settings<R: tauri::Runtime>(
     std::fs::write(path, contents).map_err(|error| error.to_string())
 }
 
+fn persist_diarization_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &StoredDiarizationSettings,
+) -> Result<(), String> {
+    let path = diarization_settings_path(app)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+
+    let contents = serde_json::to_vec_pretty(settings)
+        .map_err(|error| format!("Failed to encode diarization settings: {error}"))?;
+    std::fs::write(path, contents).map_err(|error| error.to_string())
+}
+
 fn model_settings_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     app.path()
         .app_config_dir()
         .map(|path| path.join(MODEL_SETTINGS_FILE))
+        .map_err(|error| error.to_string())
+}
+
+fn diarization_settings_path<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|path| path.join(DIARIZATION_SETTINGS_FILE))
         .map_err(|error| error.to_string())
 }
 
@@ -543,6 +684,15 @@ fn normalize_hugging_face_repo(input: &str) -> Result<String, String> {
     Ok(value.to_string())
 }
 
+fn normalize_pyannote_api_key(input: &str) -> Result<String, String> {
+    let value = input.trim();
+    if value.chars().any(char::is_whitespace) {
+        return Err("pyannoteAI API keys cannot contain spaces.".to_string());
+    }
+
+    Ok(value.to_string())
+}
+
 fn extract_repo_from_hugging_face_url(path: &str) -> Result<String, String> {
     let segments = path
         .trim_matches('/')
@@ -585,6 +735,63 @@ fn format_hugging_face_reference(repo: &str, revision: &str) -> String {
     } else {
         format!("{}@{}", repo, revision.trim())
     }
+}
+
+fn format_pyannote_model(model: PyannoteModel) -> &'static str {
+    match model {
+        PyannoteModel::Precision2 => "precision-2",
+        PyannoteModel::Community1 => "community-1",
+    }
+}
+
+fn resolve_pyannote_api_key(
+    settings: &StoredDiarizationSettings,
+) -> Result<(String, Option<&'static str>), String> {
+    let stored = settings.pyannote_api_key.trim();
+    if !stored.is_empty() {
+        return Ok((
+            normalize_pyannote_api_key(stored)?,
+            Some("API key saved locally in app config."),
+        ));
+    }
+
+    let env_value = env::var(PYANNOTE_API_KEY_ENV).unwrap_or_default();
+    let env_value = env_value.trim();
+    if env_value.is_empty() {
+        return Ok((String::new(), None));
+    }
+
+    Ok((
+        normalize_pyannote_api_key(env_value)?,
+        Some("Using PYANNOTE_API_KEY from the environment."),
+    ))
+}
+
+fn build_pyannote_status(
+    enabled: bool,
+    model: PyannoteModel,
+    api_key_present: bool,
+    api_key_source_label: Option<&'static str>,
+) -> String {
+    if !enabled {
+        return "Speaker diarization is off.".to_string();
+    }
+
+    if !api_key_present {
+        return "Add a pyannoteAI API key to enable speaker diarization. pyannoteAI uses a hosted API and will need uploaded audio or a signed file URL once the runtime is wired.".to_string();
+    }
+
+    let mut status = format!(
+        "{} {} is configured.",
+        PYANNOTE_PROVIDER_LABEL,
+        format_pyannote_model(model)
+    );
+    if let Some(source_label) = api_key_source_label {
+        status.push(' ');
+        status.push_str(source_label);
+    }
+    status.push_str(" Audio will be uploaded or referenced by URL once diarization is wired.");
+    status
 }
 
 fn build_hugging_face_status(
@@ -697,7 +904,9 @@ pub fn run() {
             open_permission_settings,
             open_settings_window,
             model_settings_state,
+            diarization_settings_state,
             save_model_settings,
+            save_diarization_settings,
             save_meeting_markdown
         ])
         .run(tauri::generate_context!())

@@ -6,6 +6,7 @@ type PermissionStatus = "neverRequested" | "authorized" | "denied";
 type View = "home" | "meeting";
 type MeetingStatus = "live" | "done";
 type ModelSource = "bundled" | "huggingFace";
+type PyannoteModel = "precision-2" | "community-1";
 
 type OnboardingState = {
   productName: string;
@@ -57,6 +58,22 @@ type ModelDraft = {
   huggingFaceLocalPath: string;
 };
 
+type DiarizationSettings = {
+  enabled: boolean;
+  providerLabel: string;
+  pyannoteModel: PyannoteModel;
+  pyannoteApiKeyPresent: boolean;
+  pyannoteApiKeySourceLabel: string | null;
+  ready: boolean;
+  status: string;
+};
+
+type DiarizationDraft = {
+  enabled: boolean;
+  pyannoteModel: PyannoteModel;
+  pyannoteApiKey: string;
+};
+
 const STORE_KEY = "unsigned-char-meetings";
 const isMacLike = /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
 const NEW_MEETING_SHORTCUT = isMacLike ? "⌘N" : "Ctrl+N";
@@ -75,12 +92,16 @@ const state = {
   onboarding: null as OnboardingState | null,
   modelSettings: null as ModelSettings | null,
   modelDraft: emptyModelDraft(),
+  diarizationSettings: null as DiarizationSettings | null,
+  diarizationDraft: emptyDiarizationDraft(),
   meetings: loadMeetings(),
   activeMeetingId: null as string | null,
   permissionBusy: null as PermissionKind | null,
   permissionNote: "",
   modelBusy: false,
   modelNote: "",
+  diarizationBusy: false,
+  diarizationNote: "",
   startMeetingBusy: false,
   saveBusy: false,
   meetingNote: "",
@@ -96,12 +117,28 @@ function emptyModelDraft(): ModelDraft {
   };
 }
 
+function emptyDiarizationDraft(): DiarizationDraft {
+  return {
+    enabled: false,
+    pyannoteModel: "precision-2",
+    pyannoteApiKey: "",
+  };
+}
+
 function syncModelDraft(settings: ModelSettings) {
   state.modelDraft = {
     source: settings.source,
     huggingFaceRepo: settings.huggingFaceRepo,
     huggingFaceRevision: settings.huggingFaceRevision,
     huggingFaceLocalPath: settings.huggingFaceLocalPath,
+  };
+}
+
+function syncDiarizationDraft(settings: DiarizationSettings) {
+  state.diarizationDraft = {
+    enabled: settings.enabled,
+    pyannoteModel: settings.pyannoteModel,
+    pyannoteApiKey: "",
   };
 }
 
@@ -242,7 +279,7 @@ function handleWindowKeydown(event: KeyboardEvent) {
 
   event.preventDefault();
 
-  if (requiresModelSetup()) {
+  if (requiresAppSetup()) {
     void openSettingsWindow();
     return;
   }
@@ -254,12 +291,52 @@ function requiresModelSetup() {
   return Boolean(state.modelSettings && !state.modelSettings.selectedReady);
 }
 
+function requiresDiarizationSetup() {
+  return Boolean(
+    state.diarizationSettings &&
+      state.diarizationSettings.enabled &&
+      !state.diarizationSettings.ready,
+  );
+}
+
+function requiresAppSetup() {
+  return requiresModelSetup() || requiresDiarizationSetup();
+}
+
 function setupBannerCopy(settings: ModelSettings) {
   if (settings.source === "bundled") {
-    return "Bundled Qwen ASR is missing.";
+    return settings.bundledStatus;
   }
 
-  return "Pick a local Hugging Face snapshot.";
+  return settings.huggingFaceStatus;
+}
+
+function currentSetupBannerContent() {
+  const messages: string[] = [];
+
+  if (requiresModelSetup() && state.modelSettings) {
+    messages.push(setupBannerCopy(state.modelSettings));
+  }
+
+  if (requiresDiarizationSetup() && state.diarizationSettings) {
+    messages.push(state.diarizationSettings.status);
+  }
+
+  if (messages.length === 0) {
+    return null;
+  }
+
+  const title =
+    messages.length > 1
+      ? "Finish transcription and diarization setup"
+      : requiresModelSetup()
+        ? "Transcription model unavailable"
+        : "Speaker diarization unavailable";
+
+  return {
+    title,
+    copy: messages.join(" "),
+  };
 }
 
 async function openSettingsWindow() {
@@ -272,15 +349,16 @@ async function openSettingsWindow() {
 }
 
 function renderSetupBanner() {
-  if (!state.modelSettings || state.modelSettings.selectedReady) {
+  const content = currentSetupBannerContent();
+  if (!content) {
     return "";
   }
 
   return `
     <button class="setup-banner" id="open-settings-banner" type="button">
       <span class="setup-banner-kicker">Setup required</span>
-      <strong class="setup-banner-title">Transcription model unavailable</strong>
-      <span class="setup-banner-copy">${escapeHtml(setupBannerCopy(state.modelSettings))}</span>
+      <strong class="setup-banner-title">${escapeHtml(content.title)}</strong>
+      <span class="setup-banner-copy">${escapeHtml(content.copy)}</span>
       <span class="setup-banner-action">Open settings</span>
     </button>
   `;
@@ -289,7 +367,7 @@ function renderSetupBanner() {
 function renderHome() {
   const items = sortedMeetings();
   const setupBanner = renderSetupBanner();
-  const startDisabled = state.startMeetingBusy || requiresModelSetup();
+  const startDisabled = state.startMeetingBusy || requiresAppSetup();
   const note = state.permissionNote
     ? `<p class="meta home-note">${escapeHtml(state.permissionNote)}</p>`
     : "";
@@ -356,11 +434,12 @@ function renderSettingsWindow() {
           <p class="eyebrow">Settings</p>
           <h1>Transcription</h1>
           <p class="body">
-            Choose the bundled Qwen ASR model or point the app at a local Hugging Face snapshot.
+            Choose the bundled Qwen ASR model, point the app at a local Hugging Face snapshot, and configure pyannoteAI speaker diarization.
           </p>
         </header>
 
         ${renderModelSection()}
+        ${renderDiarizationSection()}
       </div>
     </section>
   `;
@@ -473,6 +552,97 @@ function renderModelSection() {
           state.modelBusy ? "disabled" : ""
         }>
           ${state.modelBusy ? "Saving..." : "Save model"}
+        </button>
+      </div>
+
+      ${note}
+    </section>
+  `;
+}
+
+function renderDiarizationSection() {
+  if (!state.diarizationSettings) {
+    return `
+      <section class="model-card">
+        <div class="model-card-header">
+          <div>
+            <p class="eyebrow">Diarization</p>
+            <h2>Speaker diarization</h2>
+          </div>
+        </div>
+        <p class="meta">Loading diarization settings...</p>
+      </section>
+    `;
+  }
+
+  const settings = state.diarizationSettings;
+  const draft = state.diarizationDraft;
+  const note = state.diarizationNote
+    ? `<p class="meta model-note">${escapeHtml(state.diarizationNote)}</p>`
+    : "";
+  const keySource = settings.pyannoteApiKeySourceLabel
+    ? `<p class="meta">${escapeHtml(settings.pyannoteApiKeySourceLabel)} Leave the field blank to keep the current key.</p>`
+    : '<p class="meta">Paste a pyannoteAI API key to enable hosted speaker diarization.</p>';
+  const statusLabel = !settings.enabled ? "off" : settings.ready ? "ready" : "needs setup";
+
+  return `
+    <section class="model-card">
+      <div class="model-card-header">
+        <div>
+          <p class="eyebrow">Diarization</p>
+          <h2>Speaker diarization</h2>
+        </div>
+        <span class="model-status ${settings.ready ? "ready" : "missing"}">
+          ${escapeHtml(statusLabel)}
+        </span>
+      </div>
+
+      <p class="meta">
+        ${escapeHtml(settings.providerLabel)} is a hosted diarization service. When the runtime is wired, the app will need to upload audio or use a signed file URL.
+      </p>
+
+      <label class="toggle-row">
+        <input id="pyannote-enabled" type="checkbox" ${draft.enabled ? "checked" : ""} />
+        <span class="toggle-copy">
+          <strong>Enable speaker diarization</strong>
+          <small>Use pyannoteAI to identify who spoke when.</small>
+        </span>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span class="meta-label">pyannoteAI model</span>
+          <select id="pyannote-model" class="composer-input">
+            <option value="precision-2" ${draft.pyannoteModel === "precision-2" ? "selected" : ""}>
+              precision-2
+            </option>
+            <option value="community-1" ${draft.pyannoteModel === "community-1" ? "selected" : ""}>
+              community-1
+            </option>
+          </select>
+        </label>
+
+        <label class="field field-wide">
+          <span class="meta-label">API key</span>
+          <input
+            id="pyannote-api-key"
+            class="composer-input"
+            type="password"
+            autocomplete="off"
+            placeholder="${settings.pyannoteApiKeyPresent ? "Leave blank to keep current key" : "Paste pyannoteAI API key"}"
+            value="${escapeHtml(draft.pyannoteApiKey)}"
+          />
+        </label>
+      </div>
+
+      ${keySource}
+
+      <div class="model-footer">
+        <p class="meta">${escapeHtml(settings.status)}</p>
+        <button class="button secondary" id="save-diarization-settings" type="button" ${
+          state.diarizationBusy ? "disabled" : ""
+        }>
+          ${state.diarizationBusy ? "Saving..." : "Save diarization"}
         </button>
       </div>
 
@@ -611,6 +781,7 @@ function updateHomeScrollChip() {
 function bindViewHandlers() {
   if (isSettingsWindow) {
     bindModelSettingsHandlers();
+    bindDiarizationSettingsHandlers();
     return;
   }
 
@@ -797,6 +968,39 @@ function bindModelSettingsHandlers() {
     });
 }
 
+function bindDiarizationSettingsHandlers() {
+  document
+    .querySelector<HTMLInputElement>("#pyannote-enabled")
+    ?.addEventListener("change", (event) => {
+      state.diarizationDraft.enabled = (event.currentTarget as HTMLInputElement).checked;
+      state.diarizationNote = "";
+      render();
+    });
+
+  document
+    .querySelector<HTMLSelectElement>("#pyannote-model")
+    ?.addEventListener("change", (event) => {
+      state.diarizationDraft.pyannoteModel =
+        (event.currentTarget as HTMLSelectElement).value === "community-1"
+          ? "community-1"
+          : "precision-2";
+      state.diarizationNote = "";
+    });
+
+  document
+    .querySelector<HTMLInputElement>("#pyannote-api-key")
+    ?.addEventListener("input", (event) => {
+      state.diarizationDraft.pyannoteApiKey = (event.currentTarget as HTMLInputElement).value;
+      state.diarizationNote = "";
+    });
+
+  document
+    .querySelector<HTMLButtonElement>("#save-diarization-settings")
+    ?.addEventListener("click", () => {
+      void saveDiarizationSettings();
+    });
+}
+
 async function refreshPermissions(silent = false) {
   try {
     const onboarding = await invoke<OnboardingState>("onboarding_state");
@@ -818,6 +1022,20 @@ async function refreshModelSettings(silent = false) {
   } catch (error) {
     if (!silent) {
       state.modelNote = `Failed to load model settings: ${String(error)}`;
+    }
+  }
+
+  render();
+}
+
+async function refreshDiarizationSettings(silent = false) {
+  try {
+    const settings = await invoke<DiarizationSettings>("diarization_settings_state");
+    state.diarizationSettings = settings;
+    syncDiarizationDraft(settings);
+  } catch (error) {
+    if (!silent) {
+      state.diarizationNote = `Failed to load diarization settings: ${String(error)}`;
     }
   }
 
@@ -876,6 +1094,7 @@ async function startMeeting() {
 
   try {
     await ensureModelReady();
+    await ensureDiarizationReady();
     await requestPermissionForMeeting("microphone");
     await requestPermissionForMeeting("systemAudio");
     createMeeting();
@@ -906,6 +1125,20 @@ async function ensureModelReady() {
   throw new Error(state.modelSettings.huggingFaceStatus);
 }
 
+async function ensureDiarizationReady() {
+  await refreshDiarizationSettings(true);
+
+  if (!state.diarizationSettings) {
+    throw new Error("Diarization settings are still loading.");
+  }
+
+  if (!state.diarizationSettings.enabled || state.diarizationSettings.ready) {
+    return;
+  }
+
+  throw new Error(state.diarizationSettings.status);
+}
+
 async function saveModelSettings() {
   if (state.modelBusy) {
     return;
@@ -934,6 +1167,37 @@ async function saveModelSettings() {
     state.modelNote = `Model save failed: ${String(error)}`;
   } finally {
     state.modelBusy = false;
+    render();
+  }
+}
+
+async function saveDiarizationSettings() {
+  if (state.diarizationBusy) {
+    return;
+  }
+
+  state.diarizationBusy = true;
+  state.diarizationNote = "";
+  render();
+
+  try {
+    const settings = await invoke<DiarizationSettings>("save_diarization_settings", {
+      settings: {
+        enabled: state.diarizationDraft.enabled,
+        pyannoteModel: state.diarizationDraft.pyannoteModel,
+        pyannoteApiKey: state.diarizationDraft.pyannoteApiKey,
+      },
+    });
+
+    state.diarizationSettings = settings;
+    syncDiarizationDraft(settings);
+    state.diarizationNote = settings.ready
+      ? `Saved. ${settings.providerLabel} is ready when diarization is enabled.`
+      : "Saved, but speaker diarization still needs setup.";
+  } catch (error) {
+    state.diarizationNote = `Diarization save failed: ${String(error)}`;
+  } finally {
+    state.diarizationBusy = false;
     render();
   }
 }
@@ -972,17 +1236,25 @@ function handleAppFocus() {
     return;
   }
 
-  void Promise.all([refreshPermissions(true), refreshModelSettings(true)]);
+  void Promise.all([
+    refreshPermissions(true),
+    refreshModelSettings(true),
+    refreshDiarizationSettings(true),
+  ]);
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
   render();
   if (isSettingsWindow) {
-    await refreshModelSettings(true);
+    await Promise.all([refreshModelSettings(true), refreshDiarizationSettings(true)]);
     return;
   }
 
   window.addEventListener("keydown", handleWindowKeydown);
   window.addEventListener("focus", handleAppFocus);
-  await Promise.all([refreshPermissions(true), refreshModelSettings(true)]);
+  await Promise.all([
+    refreshPermissions(true),
+    refreshModelSettings(true),
+    refreshDiarizationSettings(true),
+  ]);
 });
