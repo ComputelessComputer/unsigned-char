@@ -61,9 +61,10 @@ struct RunLocalDiarizationInput {
     audio_path: String,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum ModelSource {
+    #[default]
     Bundled,
     HuggingFace,
 }
@@ -164,12 +165,6 @@ struct LocalDiarizationResult {
     pipeline_source: String,
     speaker_count: usize,
     segments: Vec<DiarizationSegment>,
-}
-
-impl Default for ModelSource {
-    fn default() -> Self {
-        Self::Bundled
-    }
 }
 
 impl StoredModelSettings {
@@ -287,7 +282,7 @@ fn run_local_diarization<R: tauri::Runtime>(
 
     let (pipeline_source, hugging_face_token) = resolve_pyannote_pipeline_source(&settings)?;
     let python = resolve_python_command()?;
-    let mut command = std::process::Command::new(&python);
+    let mut command = std::process::Command::new(python);
     command
         .arg(&runner_path)
         .arg("--audio-path")
@@ -1216,7 +1211,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
         .setup(|app| {
-            app.set_menu(build_app_menu(&app.handle())?)?;
+            app.set_menu(build_app_menu(app.handle())?)?;
             Ok(())
         })
         .on_menu_event(|app, event| {
