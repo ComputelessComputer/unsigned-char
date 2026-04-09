@@ -299,6 +299,24 @@ function normalizeSpokenLanguages(languages: string[], mainLanguage: string) {
   return normalized;
 }
 
+function filterSpokenLanguageOptions(
+  query: string,
+  mainLanguage: string,
+  spokenLanguages: string[],
+) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return [];
+  }
+
+  return LANGUAGE_OPTIONS.filter(
+    (option) =>
+      option.value !== mainLanguage &&
+      !spokenLanguages.includes(option.value) &&
+      (option.label.toLowerCase().includes(needle) || option.value.includes(needle)),
+  );
+}
+
 function syncModelDraft(settings: ModelSettings) {
   state.modelDraft = {
     source: settings.source,
@@ -963,6 +981,13 @@ function renderSettingsWindow() {
       option.value !== draft.mainLanguage &&
       !draft.spokenLanguages.includes(option.value),
   );
+  const spokenLanguageDisabled = state.generalBusy || availableSpokenLanguages.length === 0;
+  const spokenLanguagePlaceholder =
+    availableSpokenLanguages.length === 0
+      ? "All languages added"
+      : draft.spokenLanguages.length === 0
+        ? "Add language"
+        : "";
   const spokenLanguageChips = draft.spokenLanguages
     .map(
       (language) => `
@@ -1125,34 +1150,35 @@ function renderSettingsWindow() {
             <span class="meta">Add other languages you use other than the main language</span>
           </div>
 
-          <div class="settings-chip-box">
-            ${
-              spokenLanguageChips
-                ? `<div class="settings-chip-list">${spokenLanguageChips}</div>`
-                : '<span class="settings-chip-placeholder">Add language</span>'
-            }
+          <div class="settings-spoken-combobox">
+            <div
+              id="spoken-language-combobox"
+              class="settings-chip-box settings-language-combobox"
+              ${spokenLanguageDisabled ? 'data-disabled="true"' : ""}
+            >
+              ${spokenLanguageChips}
+              <input
+                id="spoken-language-input"
+                class="settings-spoken-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="${escapeHtml(spokenLanguagePlaceholder)}"
+                role="combobox"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="spoken-language-options"
+                aria-label="Add spoken language"
+                ${spokenLanguageDisabled ? "disabled" : ""}
+              />
+            </div>
+            <div
+              id="spoken-language-options"
+              class="settings-spoken-options"
+              role="listbox"
+              hidden
+            ></div>
           </div>
-
-          <select
-            id="spoken-language-select"
-            class="composer-input settings-spoken-select"
-            ${state.generalBusy || availableSpokenLanguages.length === 0 ? "disabled" : ""}
-          >
-            <option value="">
-              ${
-                availableSpokenLanguages.length === 0
-                  ? "All languages added"
-                  : "Add language"
-              }
-            </option>
-            ${availableSpokenLanguages.map(
-              (option) => `
-                <option value="${escapeHtml(option.value)}">
-                  ${escapeHtml(option.label)}
-                </option>
-              `,
-            ).join("")}
-          </select>
         </section>
 
         ${note}
@@ -1753,23 +1779,259 @@ function bindGeneralSettingsHandlers() {
       void saveGeneralSettings();
     });
 
-  document
-    .querySelector<HTMLSelectElement>("#spoken-language-select")
-    ?.addEventListener("change", (event) => {
-      const nextLanguage = normalizeLanguageCode(
-        (event.currentTarget as HTMLSelectElement).value,
+  const spokenLanguageCombobox = document.querySelector<HTMLElement>("#spoken-language-combobox");
+  const spokenLanguageInput = document.querySelector<HTMLInputElement>("#spoken-language-input");
+  const spokenLanguageOptions = document.querySelector<HTMLElement>("#spoken-language-options");
+
+  if (spokenLanguageInput && spokenLanguageOptions) {
+    let activeIndex = -1;
+    let closeOptionsTimer: number | null = null;
+
+    const syncActiveSpokenLanguageOption = () => {
+      const optionButtons = Array.from(
+        spokenLanguageOptions.querySelectorAll<HTMLButtonElement>("[data-spoken-language-option]"),
       );
+      optionButtons.forEach((button, index) => {
+        const isActive = index === activeIndex;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+
+      const activeButton = optionButtons[activeIndex];
+      if (activeButton) {
+        spokenLanguageInput.setAttribute("aria-activedescendant", activeButton.id);
+      } else {
+        spokenLanguageInput.removeAttribute("aria-activedescendant");
+      }
+    };
+
+    const closeSpokenLanguageOptions = (clearQuery = false) => {
+      if (closeOptionsTimer !== null) {
+        window.clearTimeout(closeOptionsTimer);
+        closeOptionsTimer = null;
+      }
+
+      activeIndex = -1;
+      spokenLanguageOptions.hidden = true;
+      spokenLanguageOptions.innerHTML = "";
+      spokenLanguageInput.setAttribute("aria-expanded", "false");
+      spokenLanguageInput.removeAttribute("aria-activedescendant");
+
+      if (clearQuery) {
+        spokenLanguageInput.value = "";
+      }
+    };
+
+    const renderSpokenLanguageOptions = () => {
+      if (spokenLanguageInput.disabled) {
+        closeSpokenLanguageOptions(true);
+        return [];
+      }
+
+      const options = filterSpokenLanguageOptions(
+        spokenLanguageInput.value,
+        state.generalDraft.mainLanguage,
+        state.generalDraft.spokenLanguages,
+      );
+      if (!spokenLanguageInput.value.trim()) {
+        closeSpokenLanguageOptions();
+        return options;
+      }
+
+      if (options.length === 0) {
+        activeIndex = -1;
+        spokenLanguageOptions.hidden = false;
+        spokenLanguageOptions.innerHTML =
+          '<div class="settings-spoken-empty">No matching languages</div>';
+        spokenLanguageInput.setAttribute("aria-expanded", "true");
+        spokenLanguageInput.removeAttribute("aria-activedescendant");
+        return options;
+      }
+
+      if (activeIndex < 0 || activeIndex >= options.length) {
+        activeIndex = 0;
+      }
+
+      spokenLanguageOptions.innerHTML = options
+        .map(
+          (option, index) => `
+            <button
+              id="spoken-language-option-${index}"
+              class="settings-spoken-option${index === activeIndex ? " active" : ""}"
+              data-spoken-language-option="${escapeHtml(option.value)}"
+              type="button"
+              role="option"
+              aria-selected="${index === activeIndex ? "true" : "false"}"
+            >
+              <span>${escapeHtml(option.label)}</span>
+              <span class="settings-spoken-option-code">${escapeHtml(option.value)}</span>
+            </button>
+          `,
+        )
+        .join("");
+      spokenLanguageOptions.hidden = false;
+      spokenLanguageInput.setAttribute("aria-expanded", "true");
+      syncActiveSpokenLanguageOption();
+      return options;
+    };
+
+    const addSpokenLanguage = (value: string) => {
+      const nextLanguage = normalizeLanguageCode(value);
       if (!nextLanguage) {
         return;
       }
 
+      closeSpokenLanguageOptions(true);
       state.generalDraft.spokenLanguages = normalizeSpokenLanguages(
         [...state.generalDraft.spokenLanguages, nextLanguage],
         state.generalDraft.mainLanguage,
       );
       state.generalNote = "";
       void saveGeneralSettings();
+    };
+
+    spokenLanguageCombobox?.addEventListener("click", (event) => {
+      if (spokenLanguageInput.disabled) {
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-remove-spoken-language]")) {
+        return;
+      }
+
+      if (closeOptionsTimer !== null) {
+        window.clearTimeout(closeOptionsTimer);
+        closeOptionsTimer = null;
+      }
+
+      spokenLanguageInput.focus();
     });
+
+    spokenLanguageInput.addEventListener("input", () => {
+      activeIndex = 0;
+      renderSpokenLanguageOptions();
+    });
+
+    spokenLanguageInput.addEventListener("focus", () => {
+      renderSpokenLanguageOptions();
+    });
+
+    spokenLanguageInput.addEventListener("keydown", (event) => {
+      if (
+        event.key === "Backspace" &&
+        !spokenLanguageInput.value &&
+        state.generalDraft.spokenLanguages.length > 0
+      ) {
+        event.preventDefault();
+        state.generalDraft.spokenLanguages = state.generalDraft.spokenLanguages.slice(0, -1);
+        state.generalNote = "";
+        void saveGeneralSettings();
+        return;
+      }
+
+      const options = filterSpokenLanguageOptions(
+        spokenLanguageInput.value,
+        state.generalDraft.mainLanguage,
+        state.generalDraft.spokenLanguages,
+      );
+
+      if (event.key === "ArrowDown") {
+        if (options.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+        activeIndex = activeIndex < 0 ? 0 : Math.min(activeIndex + 1, options.length - 1);
+        renderSpokenLanguageOptions();
+        return;
+      }
+
+      if (event.key === "ArrowUp") {
+        if (options.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+        activeIndex = activeIndex <= 0 ? 0 : activeIndex - 1;
+        renderSpokenLanguageOptions();
+        return;
+      }
+
+      if (event.key === "Enter") {
+        if (options.length === 0) {
+          return;
+        }
+
+        event.preventDefault();
+        addSpokenLanguage(options[Math.max(activeIndex, 0)]?.value ?? "");
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (!spokenLanguageInput.value.trim() && spokenLanguageOptions.hidden) {
+          return;
+        }
+
+        event.preventDefault();
+        closeSpokenLanguageOptions(true);
+        spokenLanguageInput.blur();
+      }
+    });
+
+    spokenLanguageInput.addEventListener("blur", () => {
+      closeOptionsTimer = window.setTimeout(() => {
+        closeSpokenLanguageOptions(true);
+      }, 120);
+    });
+
+    spokenLanguageOptions.addEventListener("mousedown", (event) => {
+      const optionButton = (event.target as HTMLElement | null)?.closest(
+        "[data-spoken-language-option]",
+      );
+      if (!optionButton) {
+        return;
+      }
+
+      event.preventDefault();
+      if (closeOptionsTimer !== null) {
+        window.clearTimeout(closeOptionsTimer);
+        closeOptionsTimer = null;
+      }
+    });
+
+    spokenLanguageOptions.addEventListener("mouseover", (event) => {
+      const optionButton = (event.target as HTMLElement | null)?.closest<HTMLButtonElement>(
+        "[data-spoken-language-option]",
+      );
+      if (!optionButton) {
+        return;
+      }
+
+      const optionButtons = Array.from(
+        spokenLanguageOptions.querySelectorAll<HTMLButtonElement>("[data-spoken-language-option]"),
+      );
+      const nextIndex = optionButtons.indexOf(optionButton);
+      if (nextIndex < 0 || nextIndex === activeIndex) {
+        return;
+      }
+
+      activeIndex = nextIndex;
+      syncActiveSpokenLanguageOption();
+    });
+
+    spokenLanguageOptions.addEventListener("click", (event) => {
+      const optionButton = (event.target as HTMLElement | null)?.closest<HTMLElement>(
+        "[data-spoken-language-option]",
+      );
+      const value = optionButton?.dataset.spokenLanguageOption;
+      if (!value) {
+        return;
+      }
+
+      addSpokenLanguage(value);
+    });
+  }
 
   document.querySelectorAll<HTMLElement>("[data-remove-spoken-language]").forEach((button) => {
     button.addEventListener("click", () => {
