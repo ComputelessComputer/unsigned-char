@@ -75,9 +75,22 @@ body {
   position: relative;
   margin: 0;
   overflow: hidden;
-  background: var(--background);
+  background: transparent;
   color: var(--text);
   transition: background-color 160ms ease;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.78) 0%, transparent 32%),
+    radial-gradient(circle at 88% 86%, rgba(120, 134, 255, 0.16) 0%, transparent 36%),
+    var(--background);
+  backdrop-filter: blur(24px) saturate(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(1.08);
 }
 
 button,
@@ -92,8 +105,11 @@ button {
 
 #app {
   isolation: isolate;
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
+  background: transparent;
 }
 
 .screen {
@@ -225,6 +241,8 @@ h2 {
     background-color 160ms ease,
     border-color 160ms ease,
     box-shadow 160ms ease;
+  backdrop-filter: blur(18px) saturate(1.04);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
 }
 
 .meeting-row-top,
@@ -287,12 +305,14 @@ h2 {
     border-color 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
+  backdrop-filter: blur(14px) saturate(1.04);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
 }
 
 .button:hover,
 .back-button:hover {
   border-color: var(--border-strong);
-  background: #fcfcfa;
+  background: var(--surface-soft);
   transform: translateY(-1px);
 }
 
@@ -476,7 +496,7 @@ h2 {
 
 .scroll-top-chip:hover {
   border-color: var(--border-strong);
-  background: #fcfcfa;
+  background: var(--surface-soft);
 }
 
 .home-note {
@@ -543,6 +563,8 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
+  backdrop-filter: blur(16px) saturate(1.04);
+  -webkit-backdrop-filter: blur(16px) saturate(1.04);
 }
 
 .settings-chip-box,
@@ -593,6 +615,8 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-muted);
+  backdrop-filter: blur(16px) saturate(1.04);
+  -webkit-backdrop-filter: blur(16px) saturate(1.04);
 }
 
 .toggle-row input {
@@ -630,6 +654,8 @@ h2 {
   border-radius: 14px;
   background: var(--surface-muted);
   cursor: pointer;
+  backdrop-filter: blur(16px) saturate(1.04);
+  -webkit-backdrop-filter: blur(16px) saturate(1.04);
 }
 
 .model-source-option.active {
@@ -1034,6 +1060,8 @@ h2 {
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);
+  backdrop-filter: blur(16px) saturate(1.04);
+  -webkit-backdrop-filter: blur(16px) saturate(1.04);
 }
 
 .composer-input::placeholder {
@@ -1060,6 +1088,13 @@ body[data-meeting-overlay="on"] .screen {
 }
 
 @media (prefers-color-scheme: dark) {
+  body::before {
+    background:
+      radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.12) 0%, transparent 32%),
+      radial-gradient(circle at 88% 86%, rgba(113, 128, 255, 0.14) 0%, transparent 36%),
+      var(--background);
+  }
+
   body[data-meeting-overlay="on"] {
     --background: rgba(15, 15, 16, 0.26);
     --surface: rgba(23, 24, 26, 0.78);
