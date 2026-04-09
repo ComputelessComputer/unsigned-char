@@ -716,7 +716,7 @@ function handleWindowKeydown(event: KeyboardEvent) {
     }
 
     event.preventDefault();
-    void currentWindow.close();
+    void currentWindow.hide();
     return;
   }
 
@@ -2387,9 +2387,9 @@ function handleAppFocus() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   render();
-  await ensureWindowAlwaysOnTop();
   window.addEventListener("keydown", handleWindowKeydown);
   if (isSettingsWindow) {
+    await Promise.all([ensureWindowAlwaysOnTop(), currentWindow.show(), currentWindow.setFocus()]);
     await Promise.all([
       refreshGeneralSettings(true),
       refreshManagedModelDownloadState(true),
@@ -2398,6 +2398,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
+  await ensureWindowAlwaysOnTop();
   queueLoadedMeetingMarkdownSync();
   window.addEventListener("focus", handleAppFocus);
   await Promise.all([

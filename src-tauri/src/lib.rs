@@ -727,6 +727,7 @@ fn show_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::
     .title("Settings")
     .inner_size(560.0, 540.0)
     .min_inner_size(460.0, 420.0)
+    .visible(false)
     .transparent(true)
     .always_on_top(true)
     .resizable(true);
