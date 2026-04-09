@@ -268,34 +268,12 @@ h2 {
   background: var(--surface);
 }
 
-.onboarding {
-  align-items: center;
-  justify-content: center;
-  padding-top: 24px;
-  padding-bottom: 24px;
-}
-
-.permission-simple-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  width: min(100%, 280px);
-}
-
-.permission-item {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-}
-
-.onboarding .button {
-  width: 100%;
-  min-height: 48px;
-}
-
 .header-action {
   flex-shrink: 0;
+}
+
+.home-note {
+  margin-top: auto;
 }
 
 .empty-state {

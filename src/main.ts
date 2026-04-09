@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 type PermissionKind = "microphone" | "systemAudio";
 type PermissionStatus = "neverRequested" | "authorized" | "denied";
-type View = "onboarding" | "home" | "meeting";
+type View = "home" | "meeting";
 type MeetingStatus = "live" | "done";
 
 type OnboardingState = {
@@ -41,15 +41,15 @@ const appRoot: HTMLElement = (() => {
 })();
 
 const state = {
-  view: "onboarding" as View,
+  view: "home" as View,
   onboarding: null as OnboardingState | null,
   meetings: loadMeetings(),
   activeMeetingId: null as string | null,
   permissionBusy: null as PermissionKind | null,
   permissionNote: "",
+  startMeetingBusy: false,
   saveBusy: false,
   meetingNote: "",
-  permissionPollId: 0 as number | undefined,
 };
 
 function loadMeetings(): Meeting[] {
@@ -165,55 +165,11 @@ function formatDate(iso: string) {
   });
 }
 
-function permissionActionLabel(permission: PermissionKind, status: PermissionStatus) {
-  const label = permission === "microphone" ? "Mic" : "System audio";
-
-  if (state.permissionBusy === permission) {
-    return `${label} working...`;
-  }
-  if (status === "authorized") {
-    return `${label} granted`;
-  }
-  if (status === "denied") {
-    return `${label} settings`;
-  }
-  return `Allow ${label.toLowerCase()}`;
-}
-
-function renderOnboarding() {
-  const onboarding = state.onboarding;
-  if (!onboarding) {
-    return `<section class="screen onboarding"><p class="body">Loading permissions...</p></section>`;
-  }
-
-  const rows = (["microphone", "systemAudio"] as PermissionKind[])
-    .map((permission) => {
-      const status = onboarding.permissions[permission];
-
-      return `
-        <div class="permission-item">
-          <button
-            class="button secondary"
-            data-permission-action="${permission}"
-            ${status === "authorized" || state.permissionBusy === permission ? "disabled" : ""}
-            type="button"
-          >
-            ${permissionActionLabel(permission, status)}
-          </button>
-        </div>
-      `;
-    })
-    .join("");
-
-  return `
-    <section class="screen onboarding">
-      <div class="permission-simple-list">${rows}</div>
-    </section>
-  `;
-}
-
 function renderHome() {
   const items = sortedMeetings();
+  const note = state.permissionNote
+    ? `<p class="meta home-note">${escapeHtml(state.permissionNote)}</p>`
+    : "";
   const content =
     items.length === 0
       ? `
@@ -257,11 +213,12 @@ function renderHome() {
           <p class="body">Your saved transcripts live here.</p>
         </div>
         <button class="button primary header-action" id="new-meeting" type="button">
-          New meeting
+          ${state.startMeetingBusy ? "Starting..." : "New meeting"}
         </button>
       </header>
 
       ${content}
+      ${note}
     </section>
   `;
 }
@@ -346,12 +303,7 @@ function renderMeeting() {
 }
 
 function render() {
-  const markup =
-    state.view === "onboarding"
-      ? renderOnboarding()
-      : state.view === "home"
-        ? renderHome()
-        : renderMeeting();
+  const markup = state.view === "home" ? renderHome() : renderMeeting();
 
   appRoot.innerHTML = markup;
   bindViewHandlers();
@@ -365,20 +317,9 @@ function render() {
 }
 
 function bindViewHandlers() {
-  if (state.view === "onboarding") {
-    (["microphone", "systemAudio"] as PermissionKind[]).forEach((permission) => {
-      document
-        .querySelector<HTMLButtonElement>(`[data-permission-action="${permission}"]`)
-        ?.addEventListener("click", () => {
-          void handlePermissionAction(permission);
-        });
-    });
-    return;
-  }
-
   if (state.view === "home") {
     document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
-      createMeeting();
+      void startMeeting();
     });
 
     document.querySelectorAll<HTMLElement>("[data-open-meeting]").forEach((button) => {
@@ -447,48 +388,10 @@ function bindViewHandlers() {
     });
 }
 
-async function handlePermissionAction(permission: PermissionKind) {
-  const onboarding = state.onboarding;
-  if (!onboarding) {
-    return;
-  }
-
-  state.permissionBusy = permission;
-  render();
-
-  try {
-    const current = onboarding.permissions[permission];
-    if (current === "denied") {
-      await invoke("open_permission_settings", { permission });
-      state.permissionNote = "System Settings opened. Enable access there, then come back.";
-    } else {
-      await invoke("request_permission", { permission });
-      state.permissionNote = "";
-    }
-
-    await refreshOnboarding(true);
-  } catch (error) {
-    state.permissionNote = `Permission flow failed: ${String(error)}`;
-  } finally {
-    state.permissionBusy = null;
-    render();
-  }
-}
-
-async function refreshOnboarding(silent = false) {
+async function refreshPermissions(silent = false) {
   try {
     const onboarding = await invoke<OnboardingState>("onboarding_state");
     state.onboarding = onboarding;
-
-    if (onboarding.ready) {
-      stopPermissionPolling();
-      if (state.view === "onboarding") {
-        state.view = "home";
-      }
-    } else {
-      state.view = "onboarding";
-      startPermissionPolling();
-    }
   } catch (error) {
     if (!silent) {
       state.permissionNote = `Failed to load permissions: ${String(error)}`;
@@ -498,23 +401,67 @@ async function refreshOnboarding(silent = false) {
   render();
 }
 
-function startPermissionPolling() {
-  if (state.permissionPollId) {
+async function requestPermissionForMeeting(permission: PermissionKind) {
+  await refreshPermissions(true);
+  const status = state.onboarding?.permissions[permission];
+  if (!status || status === "authorized") {
     return;
   }
 
-  state.permissionPollId = window.setInterval(() => {
-    void refreshOnboarding(true);
-  }, 2000);
+  state.permissionBusy = permission;
+  render();
+
+  try {
+    if (status === "denied") {
+      await invoke("open_permission_settings", { permission });
+      throw new Error(
+        `${permission === "microphone" ? "Microphone" : "System audio"} access is off. Enable it in System Settings and try again.`,
+      );
+    }
+
+    await invoke("request_permission", { permission });
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+      await refreshPermissions(true);
+      if (state.onboarding?.permissions[permission] !== "neverRequested") {
+        break;
+      }
+    }
+
+    const nextStatus = state.onboarding?.permissions[permission];
+    if (nextStatus === "denied") {
+      await invoke("open_permission_settings", { permission });
+      throw new Error(
+        `${permission === "microphone" ? "Microphone" : "System audio"} access is required to start a meeting.`,
+      );
+    }
+  } finally {
+    state.permissionBusy = null;
+    render();
+  }
 }
 
-function stopPermissionPolling() {
-  if (!state.permissionPollId) {
+async function startMeeting() {
+  if (state.startMeetingBusy) {
     return;
   }
 
-  window.clearInterval(state.permissionPollId);
-  state.permissionPollId = undefined;
+  state.startMeetingBusy = true;
+  state.permissionNote = "";
+  render();
+
+  try {
+    await requestPermissionForMeeting("microphone");
+    await requestPermissionForMeeting("systemAudio");
+    createMeeting();
+  } catch (error) {
+    state.permissionNote = error instanceof Error ? error.message : String(error);
+    render();
+  } finally {
+    state.startMeetingBusy = false;
+    render();
+  }
 }
 
 async function saveMeetingAsMarkdown(meeting: Meeting) {
@@ -547,5 +494,5 @@ async function saveMeetingAsMarkdown(meeting: Meeting) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  await refreshOnboarding();
+  await refreshPermissions();
 });
