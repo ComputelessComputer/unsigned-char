@@ -536,7 +536,7 @@ function HomeScreen() {
 
       <div
         id="home-content"
-        className="flex-1 overflow-y-auto pr-1"
+        className="-mx-4 flex-1 overflow-y-auto px-4 pr-5"
         ref={(node) => {
           if (node) {
             node.scrollTop = snapshot.homeScrollTop;
