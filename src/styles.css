@@ -1012,9 +1012,15 @@ body[data-meeting-overlay="on"] .screen.meeting {
     width: 100%;
   }
 
+  .meeting-nav {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .meeting-nav .button,
   .meeting-nav .back-button {
-    width: 100%;
+    width: auto;
   }
 
   .scroll-top-chip {
