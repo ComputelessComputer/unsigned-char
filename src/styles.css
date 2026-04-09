@@ -125,6 +125,7 @@ button {
 
 .screen.home {
   overflow-y: auto;
+  padding-top: 0;
   padding-bottom: 96px;
 }
 
@@ -1167,6 +1168,7 @@ body[data-meeting-overlay="on"] .screen {
   }
 
   .screen.home {
+    padding-top: 0;
     padding-bottom: 88px;
   }
 
