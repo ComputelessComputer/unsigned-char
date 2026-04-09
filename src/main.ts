@@ -81,6 +81,7 @@ const state = {
   startMeetingBusy: false,
   saveBusy: false,
   meetingNote: "",
+  homeScrollTop: 0,
 };
 
 function emptyModelDraft(): ModelDraft {
@@ -279,7 +280,7 @@ function renderHome() {
       `;
 
   return `
-    <section class="screen home">
+    <section class="screen home" id="home-screen">
       <header class="screen-header screen-header-row home-header">
         <button class="button primary header-action" id="new-meeting" type="button">
           <span>${state.startMeetingBusy ? "Starting..." : "New meeting"}</span>
@@ -290,6 +291,9 @@ function renderHome() {
       ${renderModelSection()}
       ${content}
       ${note}
+      <button class="scroll-top-chip" id="scroll-home-top" type="button">
+        Go to top
+      </button>
     </section>
   `;
 }
@@ -502,18 +506,53 @@ function render() {
   appRoot.innerHTML = markup;
   bindViewHandlers();
 
-  if (state.view === "meeting") {
-    const panel = document.querySelector<HTMLElement>("#transcript-panel");
-    if (panel) {
-      panel.scrollTop = panel.scrollHeight;
+  if (state.view === "home") {
+    const homeScreen = document.querySelector<HTMLElement>("#home-screen");
+    if (homeScreen) {
+      homeScreen.scrollTop = state.homeScrollTop;
     }
+    updateHomeScrollChip();
+    return;
   }
+
+  const panel = document.querySelector<HTMLElement>("#transcript-panel");
+  if (panel) {
+    panel.scrollTop = panel.scrollHeight;
+  }
+}
+
+function updateHomeScrollChip() {
+  const homeScreen = document.querySelector<HTMLElement>("#home-screen");
+  const newMeetingButton = document.querySelector<HTMLElement>("#new-meeting");
+  const chip = document.querySelector<HTMLButtonElement>("#scroll-home-top");
+  if (!homeScreen || !newMeetingButton || !chip) {
+    return;
+  }
+
+  const threshold = newMeetingButton.offsetTop + newMeetingButton.offsetHeight;
+  chip.classList.toggle("visible", homeScreen.scrollTop > threshold);
 }
 
 function bindViewHandlers() {
   if (state.view === "home") {
+    const homeScreen = document.querySelector<HTMLElement>("#home-screen");
+    const syncHomeScroll = () => {
+      if (!homeScreen) {
+        return;
+      }
+
+      state.homeScrollTop = homeScreen.scrollTop;
+      updateHomeScrollChip();
+    };
+
+    homeScreen?.addEventListener("scroll", syncHomeScroll, { passive: true });
+
     document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
       void startMeeting();
+    });
+
+    document.querySelector<HTMLButtonElement>("#scroll-home-top")?.addEventListener("click", () => {
+      homeScreen?.scrollTo({ top: 0, behavior: "smooth" });
     });
 
     document
