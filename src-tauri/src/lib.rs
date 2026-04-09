@@ -1123,6 +1123,62 @@ fn download_managed_model_snapshot(
 
     let mut bytes_downloaded = 0_u64;
     for file in &file_descriptors {
+        let destination = target_dir.join(file.name);
+        if destination.is_file() {
+            if let Some(expected_size) = file.size {
+                if destination
+                    .metadata()
+                    .map(|metadata| metadata.len() == expected_size)
+                    .unwrap_or(false)
+                {
+                    bytes_downloaded += expected_size;
+                    continue;
+                }
+            }
+        }
+
+        let temporary = target_dir.join(format!("{}.part", file.name));
+        if !temporary.is_file() {
+            continue;
+        }
+
+        let partial_size = temporary
+            .metadata()
+            .map(|metadata| metadata.len())
+            .map_err(|error| {
+                format!(
+                    "Failed to inspect the partial download at {}: {error}",
+                    temporary.display()
+                )
+            })?;
+
+        if partial_size == 0 {
+            let _ = std::fs::remove_file(&temporary);
+            continue;
+        }
+
+        if let Some(expected_size) = file.size {
+            if partial_size == expected_size {
+                std::fs::rename(&temporary, &destination).map_err(|error| {
+                    format!(
+                        "Failed to restore {} from a previous partial download: {error}",
+                        destination.display()
+                    )
+                })?;
+                bytes_downloaded += expected_size;
+                continue;
+            }
+
+            if partial_size > expected_size {
+                let _ = std::fs::remove_file(&temporary);
+                continue;
+            }
+        }
+
+        bytes_downloaded += partial_size;
+    }
+
+    for file in &file_descriptors {
         set_managed_model_download_progress(
             shared,
             target_dir,
@@ -1139,28 +1195,109 @@ fn download_managed_model_snapshot(
                     .map(|metadata| metadata.len() == expected_size)
                     .unwrap_or(false)
                 {
-                    bytes_downloaded += expected_size;
                     continue;
                 }
             }
         }
 
         let temporary = target_dir.join(format!("{}.part", file.name));
-        if temporary.exists() {
-            let _ = std::fs::remove_file(&temporary);
+        let mut resume_from = if temporary.is_file() {
+            temporary
+                .metadata()
+                .map(|metadata| metadata.len())
+                .map_err(|error| {
+                    format!(
+                        "Failed to inspect the partial download at {}: {error}",
+                        temporary.display()
+                    )
+                })?
+        } else {
+            0
+        };
+
+        if let Some(expected_size) = file.size {
+            if resume_from >= expected_size {
+                if resume_from == expected_size {
+                    std::fs::rename(&temporary, &destination).map_err(|error| {
+                        format!(
+                            "Failed to restore {} from a previous partial download: {error}",
+                            destination.display()
+                        )
+                    })?;
+                    continue;
+                }
+
+                let _ = std::fs::remove_file(&temporary);
+                resume_from = 0;
+            }
         }
 
-        let mut response = client
-            .get(managed_model_remote_url(file.name))
-            .send()
-            .and_then(reqwest::blocking::Response::error_for_status)
-            .map_err(|error| format!("Failed to download {}: {error}", file.name))?;
-        let mut output = std::fs::File::create(&temporary).map_err(|error| {
-            format!(
-                "Failed to create {} while downloading the model: {error}",
-                temporary.display()
-            )
-        })?;
+        let url = managed_model_remote_url(file.name);
+        let mut response = if resume_from > 0 {
+            client
+                .get(&url)
+                .header("Range", format!("bytes={resume_from}-"))
+                .send()
+                .map_err(|error| format!("Failed to resume {}: {error}", file.name))?
+        } else {
+            client
+                .get(&url)
+                .send()
+                .map_err(|error| format!("Failed to download {}: {error}", file.name))?
+        };
+
+        if resume_from > 0 && response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+            if !response.status().is_success() {
+                return Err(format!(
+                    "Failed to resume {}: received {}",
+                    file.name,
+                    response.status()
+                ));
+            }
+
+            let _ = std::fs::remove_file(&temporary);
+            bytes_downloaded = bytes_downloaded.saturating_sub(resume_from);
+            resume_from = 0;
+            set_managed_model_download_progress(
+                shared,
+                target_dir,
+                Some(file.name),
+                bytes_downloaded,
+                total_bytes,
+            )?;
+
+            response = client
+                .get(&url)
+                .send()
+                .map_err(|error| format!("Failed to download {}: {error}", file.name))?;
+        }
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "Failed to download {}: received {}",
+                file.name,
+                response.status()
+            ));
+        }
+
+        let mut output = if resume_from > 0 {
+            std::fs::OpenOptions::new()
+                .append(true)
+                .open(&temporary)
+                .map_err(|error| {
+                    format!(
+                        "Failed to reopen {} while resuming the model download: {error}",
+                        temporary.display()
+                    )
+                })?
+        } else {
+            std::fs::File::create(&temporary).map_err(|error| {
+                format!(
+                    "Failed to create {} while downloading the model: {error}",
+                    temporary.display()
+                )
+            })?
+        };
 
         let mut buffer = [0_u8; 64 * 1024];
         loop {
