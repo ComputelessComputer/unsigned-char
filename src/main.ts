@@ -40,29 +40,6 @@ const appRoot: HTMLElement = (() => {
   return node;
 })();
 
-const permissionCopy: Record<
-  PermissionKind,
-  {
-    title: string;
-    body: string;
-    ready: string;
-    denied: string;
-  }
-> = {
-  microphone: {
-    title: "Allow microphone access",
-    body: "unsigned char needs to hear your voice.",
-    ready: "Microphone access is on.",
-    denied: "Microphone access was denied. Open Settings and enable it.",
-  },
-  systemAudio: {
-    title: "Allow system audio access",
-    body: "unsigned char needs to hear the rest of the meeting.",
-    ready: "System audio access is on.",
-    denied: "System audio access was denied. Open Settings and enable it.",
-  },
-};
-
 const state = {
   view: "onboarding" as View,
   onboarding: null as OnboardingState | null,
@@ -188,28 +165,19 @@ function formatDate(iso: string) {
   });
 }
 
-function permissionLabel(status: PermissionStatus) {
-  switch (status) {
-    case "authorized":
-      return "Granted";
-    case "denied":
-      return "Needs settings";
-    default:
-      return "Not requested";
-  }
-}
-
 function permissionActionLabel(permission: PermissionKind, status: PermissionStatus) {
+  const label = permission === "microphone" ? "Mic" : "System audio";
+
   if (state.permissionBusy === permission) {
-    return "Working...";
+    return `${label} working...`;
   }
   if (status === "authorized") {
-    return "Granted";
+    return `${label} granted`;
   }
   if (status === "denied") {
-    return "Open settings";
+    return `${label} settings`;
   }
-  return "Allow access";
+  return `Allow ${label.toLowerCase()}`;
 }
 
 function renderOnboarding() {
@@ -218,63 +186,28 @@ function renderOnboarding() {
     return `<section class="screen onboarding"><p class="body">Loading permissions...</p></section>`;
   }
 
-  const cards = (["microphone", "systemAudio"] as PermissionKind[])
+  const rows = (["microphone", "systemAudio"] as PermissionKind[])
     .map((permission) => {
       const status = onboarding.permissions[permission];
-      const copy = permissionCopy[permission];
-      const body =
-        status === "authorized"
-          ? copy.ready
-          : status === "denied"
-            ? copy.denied
-            : copy.body;
 
       return `
-        <article class="permission-card ${status === "authorized" ? "is-ready" : ""}">
-          <div class="permission-copy">
-            <p class="eyebrow">${permission === "microphone" ? "Mic" : "System"}</p>
-            <h2>${copy.title}</h2>
-            <p class="body">${body}</p>
-          </div>
-          <div class="permission-row">
-            <span class="status-chip">${permissionLabel(status)}</span>
-            <button
-              class="button secondary"
-              data-permission-action="${permission}"
-              ${status === "authorized" || state.permissionBusy === permission ? "disabled" : ""}
-              type="button"
-            >
-              ${permissionActionLabel(permission, status)}
-            </button>
-          </div>
-        </article>
+        <div class="permission-item">
+          <button
+            class="button secondary"
+            data-permission-action="${permission}"
+            ${status === "authorized" || state.permissionBusy === permission ? "disabled" : ""}
+            type="button"
+          >
+            ${permissionActionLabel(permission, status)}
+          </button>
+        </div>
       `;
     })
     .join("");
 
   return `
     <section class="screen onboarding">
-      <header class="screen-header">
-        <p class="eyebrow">Onboarding</p>
-        <h1>Give unsigned char permission first.</h1>
-        <p class="body">
-          Before you use the app, grant microphone and system audio access.
-        </p>
-      </header>
-
-      <div class="permission-list">${cards}</div>
-
-      <footer class="screen-footer">
-        <p class="meta">
-          ${
-            state.permissionNote ||
-            "The app unlocks automatically once both permissions are granted."
-          }
-        </p>
-        <button class="button ghost" id="refresh-permissions" type="button">
-          Refresh
-        </button>
-      </footer>
+      <div class="permission-simple-list">${rows}</div>
     </section>
   `;
 }
@@ -317,17 +250,18 @@ function renderHome() {
 
   return `
     <section class="screen home">
-      <header class="screen-header">
-        <p class="eyebrow">Home</p>
-        <h1>Meetings</h1>
-        <p class="body">Your saved transcripts live here.</p>
+      <header class="screen-header screen-header-row">
+        <div class="screen-header-copy">
+          <p class="eyebrow">Home</p>
+          <h1>Meetings</h1>
+          <p class="body">Your saved transcripts live here.</p>
+        </div>
+        <button class="button primary header-action" id="new-meeting" type="button">
+          New meeting
+        </button>
       </header>
 
       ${content}
-
-      <button class="fab" id="new-meeting" type="button" aria-label="Create new meeting">
-        +
-      </button>
     </section>
   `;
 }
@@ -432,12 +366,6 @@ function render() {
 
 function bindViewHandlers() {
   if (state.view === "onboarding") {
-    document
-      .querySelector<HTMLButtonElement>("#refresh-permissions")
-      ?.addEventListener("click", () => {
-        void refreshOnboarding();
-      });
-
     (["microphone", "systemAudio"] as PermissionKind[]).forEach((permission) => {
       document
         .querySelector<HTMLButtonElement>(`[data-permission-action="${permission}"]`)
