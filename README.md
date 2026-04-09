@@ -17,24 +17,8 @@ npm install
 npm run tauri dev
 ```
 
-## Model
-
-Put the bundled Qwen ASR files in:
-
-```text
-src-tauri/resources/models/qwen-asr/
-```
-
-Or pick a local Hugging Face snapshot in Settings.
-
 ## CLI
 
 ```bash
-npx unsigned-char
-```
-
-Or:
-
-```bash
-uchar
+npx uchar
 ```
