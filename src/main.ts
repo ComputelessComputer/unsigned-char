@@ -47,6 +47,17 @@ type ModelSettings = {
   selectedReference: string | null;
 };
 
+type ManagedModelDownloadStatus = "idle" | "downloading" | "ready" | "error";
+
+type ManagedModelDownloadState = {
+  status: ManagedModelDownloadStatus;
+  localPath: string;
+  currentFile: string | null;
+  bytesDownloaded: number;
+  totalBytes: number | null;
+  error: string | null;
+};
+
 type ModelDraft = {
   source: ModelSource;
   huggingFaceRepo: string;
@@ -122,6 +133,7 @@ const SETTINGS_WINDOW_LABEL = "settings";
 const currentWindow = getCurrentWindow();
 const isSettingsWindow = currentWindow.label === SETTINGS_WINDOW_LABEL;
 const LIVE_TRANSCRIPTION_POLL_MS = 1200;
+const MODEL_DOWNLOAD_POLL_MS = 1000;
 const MEETING_MARKDOWN_SYNC_MS = 250;
 const MARKDOWN_SAVE_ERROR_PREFIX = "Markdown save failed:";
 const COMMON_LANGUAGE_CODES = [
@@ -189,6 +201,7 @@ const state = {
   view: "home" as View,
   onboarding: null as OnboardingState | null,
   modelSettings: null as ModelSettings | null,
+  modelDownload: null as ManagedModelDownloadState | null,
   modelDraft: emptyModelDraft(),
   diarizationSettings: null as DiarizationSettings | null,
   diarizationDraft: emptyDiarizationDraft(),
@@ -215,11 +228,12 @@ const state = {
 };
 
 let liveTranscriptionPollId: number | null = null;
+let modelDownloadPollId: number | null = null;
 const meetingMarkdownSyncTimers = new Map<string, number>();
 
 function emptyModelDraft(): ModelDraft {
   return {
-    source: "bundled",
+    source: "huggingFace",
     huggingFaceRepo: "",
     huggingFaceRevision: "",
     huggingFaceLocalPath: "",
@@ -705,12 +719,34 @@ function requiresAppSetup() {
   return requiresModelSetup();
 }
 
-function setupBannerCopy(settings: ModelSettings) {
-  if (settings.source === "bundled") {
-    return "This build is missing bundled Qwen3-ASR files.";
+function formatByteSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
   }
 
-  return "The selected custom model is missing required files.";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const decimals = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function modelDownloadProgressCopy(download: ManagedModelDownloadState) {
+  if (download.totalBytes && download.totalBytes > 0) {
+    return `${formatByteSize(download.bytesDownloaded)} of ${formatByteSize(download.totalBytes)}`;
+  }
+
+  if (download.bytesDownloaded > 0) {
+    return formatByteSize(download.bytesDownloaded);
+  }
+
+  return "Preparing download";
 }
 
 function currentSetupBannerContent() {
@@ -718,9 +754,45 @@ function currentSetupBannerContent() {
     return null;
   }
 
+  const download = state.modelDownload;
+  const isDownloading = download?.status === "downloading";
+  const isError = download?.status === "error";
+  const localPath = download?.localPath || state.modelSettings.huggingFaceLocalPath;
+
+  if (isDownloading && download) {
+    const progress = download.currentFile
+      ? `${download.currentFile} · ${modelDownloadProgressCopy(download)}`
+      : modelDownloadProgressCopy(download);
+
+    return {
+      kicker: "Downloading model",
+      title: "Transcription model setup in progress",
+      copy: "unsigned char is downloading Qwen3-ASR once and storing it locally on this Mac.",
+      detail: progress,
+      localPath,
+      actionLabel: null,
+    };
+  }
+
+  if (isError && download) {
+    return {
+      kicker: "Setup required",
+      title: "Transcription model setup failed",
+      copy: download.error ?? "The model download did not complete.",
+      detail: "Retry to finish local transcription setup.",
+      localPath,
+      actionLabel: "Retry download",
+    };
+  }
+
   return {
-    title: "Transcription model unavailable",
-    copy: setupBannerCopy(state.modelSettings),
+    kicker: "Setup required",
+    title: "Download transcription model",
+    copy:
+      "Download Qwen3-ASR once to run transcription locally. The model is stored outside the app bundle and stays on this device.",
+    detail: "The download is about 1.8 GB.",
+    localPath,
+    actionLabel: "Download model",
   };
 }
 
@@ -743,9 +815,40 @@ function renderSetupBanner() {
 
   return `
     <div class="setup-banner">
-      <span class="setup-banner-kicker">Setup required</span>
+      <span class="setup-banner-kicker">${escapeHtml(content.kicker)}</span>
       <strong class="setup-banner-title">${escapeHtml(content.title)}</strong>
       <span class="setup-banner-copy">${escapeHtml(content.copy)}</span>
+      ${
+        content.detail
+          ? `<span class="setup-banner-detail">${escapeHtml(content.detail)}</span>`
+          : ""
+      }
+      ${
+        content.localPath
+          ? `
+            <div class="setup-banner-path">
+              <span class="meta-label">Storage</span>
+              <code>${escapeHtml(content.localPath)}</code>
+            </div>
+          `
+          : ""
+      }
+      ${
+        content.actionLabel
+          ? `
+            <div class="setup-banner-actions">
+              <button
+                class="button primary"
+                id="download-model"
+                type="button"
+                ${state.modelBusy ? "disabled" : ""}
+              >
+                ${escapeHtml(state.modelBusy ? "Starting download..." : content.actionLabel)}
+              </button>
+            </div>
+          `
+          : ""
+      }
     </div>
   `;
 }
@@ -1160,6 +1263,7 @@ function render() {
   syncMeetingOverlayAppearance();
   bindViewHandlers();
   syncLiveTranscriptionPolling();
+  syncModelDownloadPolling();
 
   if (!isSettingsWindow && state.view === "home") {
     const homeScreen = document.querySelector<HTMLElement>("#home-screen");
@@ -1351,6 +1455,10 @@ function bindViewHandlers() {
 
     document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
       void startMeeting();
+    });
+
+    document.querySelector<HTMLButtonElement>("#download-model")?.addEventListener("click", () => {
+      void startManagedModelDownload();
     });
 
     document.querySelector<HTMLButtonElement>("#scroll-home-top")?.addEventListener("click", () => {
@@ -1603,6 +1711,25 @@ async function refreshModelSettings(silent = false) {
   render();
 }
 
+async function refreshManagedModelDownloadState(silent = false) {
+  const previousStatus = state.modelDownload?.status ?? null;
+
+  try {
+    const download = await invoke<ManagedModelDownloadState>("managed_model_download_state");
+    state.modelDownload = download;
+
+    if (previousStatus === "downloading" && download.status !== "downloading") {
+      await Promise.all([refreshModelSettings(true), refreshPermissions(true)]);
+    }
+  } catch (error) {
+    if (!silent) {
+      state.permissionNote = `Failed to load model download state: ${String(error)}`;
+    }
+  }
+
+  render();
+}
+
 async function refreshDiarizationSettings(silent = false) {
   try {
     const settings = await invoke<DiarizationSettings>("diarization_settings_state");
@@ -1615,6 +1742,29 @@ async function refreshDiarizationSettings(silent = false) {
   }
 
   render();
+}
+
+function syncModelDownloadPolling() {
+  if (isSettingsWindow) {
+    return;
+  }
+
+  const shouldPoll = state.modelDownload?.status === "downloading";
+  if (!shouldPoll) {
+    if (modelDownloadPollId !== null) {
+      window.clearInterval(modelDownloadPollId);
+      modelDownloadPollId = null;
+    }
+    return;
+  }
+
+  if (modelDownloadPollId !== null) {
+    return;
+  }
+
+  modelDownloadPollId = window.setInterval(() => {
+    void refreshManagedModelDownloadState(true);
+  }, MODEL_DOWNLOAD_POLL_MS);
 }
 
 async function refreshGeneralSettings(silent = false) {
@@ -1672,6 +1822,28 @@ async function requestPermissionForMeeting(permission: PermissionKind) {
   }
 }
 
+async function startManagedModelDownload() {
+  if (state.modelBusy) {
+    return;
+  }
+
+  state.modelBusy = true;
+  state.permissionNote = "";
+  render();
+
+  try {
+    const download = await invoke<ManagedModelDownloadState>("download_managed_model");
+    state.modelDownload = download;
+    await Promise.all([refreshManagedModelDownloadState(true), refreshModelSettings(true)]);
+  } catch (error) {
+    state.permissionNote =
+      error instanceof Error ? error.message : `Model download failed: ${String(error)}`;
+  } finally {
+    state.modelBusy = false;
+    render();
+  }
+}
+
 async function startMeeting() {
   if (state.startMeetingBusy) {
     return;
@@ -1709,6 +1881,14 @@ async function ensureModelReady() {
 
   if (state.modelSettings.selectedReady) {
     return;
+  }
+
+  if (state.modelDownload?.status === "downloading") {
+    throw new Error("The transcription model is still downloading.");
+  }
+
+  if (state.modelDownload?.status === "error" && state.modelDownload.error) {
+    throw new Error(state.modelDownload.error);
   }
 
   if (state.modelSettings.source === "bundled") {
@@ -1829,6 +2009,7 @@ function handleAppFocus() {
   void Promise.all([
     refreshGeneralSettings(true),
     refreshPermissions(true),
+    refreshManagedModelDownloadState(true),
     refreshModelSettings(true),
     refreshDiarizationSettings(true),
   ]);
@@ -1848,6 +2029,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   await Promise.all([
     refreshGeneralSettings(true),
     refreshPermissions(true),
+    refreshManagedModelDownloadState(true),
     refreshModelSettings(true),
     refreshDiarizationSettings(true),
   ]);

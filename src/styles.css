@@ -458,6 +458,38 @@ h2 {
   line-height: 1.5;
 }
 
+.setup-banner-detail {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.setup-banner-actions,
+.setup-banner-path {
+  display: flex;
+  width: 100%;
+}
+
+.setup-banner-actions {
+  padding-top: 4px;
+}
+
+.setup-banner-path {
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setup-banner-path code {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  word-break: break-word;
+}
+
 .scroll-top-chip {
   position: fixed;
   right: 24px;

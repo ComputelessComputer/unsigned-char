@@ -3,13 +3,16 @@ mod permissions;
 
 use std::{
     env,
+    io::{Read, Write},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use asr::{LiveTranscriptionState, TranscriptionManager};
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
+#[cfg(target_os = "macos")]
+use tauri::window::{Effect, EffectsBuilder};
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
     Manager, State, WebviewUrl, WebviewWindowBuilder,
@@ -18,6 +21,19 @@ use tauri::{
 const APP_NAME: &str = "unsigned char";
 const BUNDLED_MODEL_NAME: &str = "Bundled Qwen3-ASR";
 const BUNDLED_MODEL_RELATIVE_PATH: &str = "models/qwen-asr";
+const DEFAULT_MODEL_NAME: &str = "Qwen3-ASR 0.6B";
+const DEFAULT_HUGGING_FACE_MODEL_REPO: &str = "Qwen/Qwen3-ASR-0.6B";
+const DEFAULT_HUGGING_FACE_MODEL_REVISION: &str = "main";
+const MANAGED_MODEL_RELATIVE_PATH: &str = "models/qwen3-asr-0.6b";
+const MANAGED_MODEL_FILES: &[&str] = &[
+    "config.json",
+    "generation_config.json",
+    "merges.txt",
+    "model.safetensors",
+    "preprocessor_config.json",
+    "tokenizer_config.json",
+    "vocab.json",
+];
 const PYANNOTE_RUNNER_RELATIVE_PATH: &str = "scripts/pyannote_diarize.py";
 const GENERAL_SETTINGS_FILE: &str = "general-settings.json";
 const MODEL_SETTINGS_FILE: &str = "model-settings.json";
@@ -28,10 +44,13 @@ const PYANNOTE_PROVIDER_LABEL: &str = "pyannote.audio";
 const PYANNOTE_PIPELINE_REPO: &str = "pyannote/speaker-diarization-community-1";
 const HUGGING_FACE_TOKEN_ENV: &str = "HF_TOKEN";
 const HUGGING_FACE_ALT_TOKEN_ENV: &str = "HUGGINGFACE_TOKEN";
+#[cfg(target_os = "macos")]
+const MACOS_TAHOE_WINDOW_RADIUS: f64 = 20.0;
 
 #[derive(Default)]
 struct AppState {
     transcription: Mutex<TranscriptionManager>,
+    managed_model_download: Arc<Mutex<ManagedModelDownloadState>>,
 }
 
 #[derive(Serialize)]
@@ -160,6 +179,44 @@ struct ModelSettingsState {
     selected_reference: Option<String>,
 }
 
+#[derive(Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum ManagedModelDownloadStatus {
+    #[default]
+    Idle,
+    Downloading,
+    Ready,
+    Error,
+}
+
+#[derive(Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ManagedModelDownloadState {
+    status: ManagedModelDownloadStatus,
+    local_path: String,
+    current_file: Option<String>,
+    bytes_downloaded: u64,
+    total_bytes: Option<u64>,
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct HuggingFaceModelMetadata {
+    #[serde(default)]
+    siblings: Vec<HuggingFaceModelSibling>,
+}
+
+#[derive(Deserialize)]
+struct HuggingFaceModelSibling {
+    rfilename: String,
+    size: Option<u64>,
+}
+
+struct ManagedModelFileDescriptor {
+    name: &'static str,
+    size: Option<u64>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiarizationSettingsState {
@@ -217,7 +274,11 @@ impl StoredModelSettings {
     }
 
     fn source(&self) -> ModelSource {
-        self.source.unwrap_or_default()
+        self.source.unwrap_or(ModelSource::HuggingFace)
+    }
+
+    fn has_custom_hugging_face_selection(&self) -> bool {
+        !self.hugging_face_repo.trim().is_empty() || !self.hugging_face_local_path.trim().is_empty()
     }
 }
 
@@ -257,7 +318,7 @@ fn onboarding_state<R: tauri::Runtime>(
         product_name: "unsigned char",
         engine: match model_settings.source {
             ModelSource::Bundled => BUNDLED_MODEL_NAME.to_string(),
-            ModelSource::HuggingFace => "Hugging Face".to_string(),
+            ModelSource::HuggingFace => DEFAULT_MODEL_NAME.to_string(),
         },
         reference: model_settings
             .selected_reference
@@ -288,6 +349,79 @@ fn model_settings_state<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<ModelSettingsState, String> {
     build_model_settings_state(&app, &load_model_settings(&app)?)
+}
+
+#[tauri::command]
+fn managed_model_download_state<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<ManagedModelDownloadState, String> {
+    snapshot_managed_model_download_state(&app, &state.inner().managed_model_download)
+}
+
+#[tauri::command]
+fn download_managed_model<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<ManagedModelDownloadState, String> {
+    let target_dir = managed_model_path(&app)?;
+    let shared = state.inner().managed_model_download.clone();
+
+    if model_path_is_ready(&target_dir) {
+        let mut download_state = shared
+            .lock()
+            .map_err(|_| "Failed to access model download state.".to_string())?;
+        *download_state = ManagedModelDownloadState {
+            status: ManagedModelDownloadStatus::Ready,
+            local_path: target_dir.display().to_string(),
+            current_file: None,
+            bytes_downloaded: 0,
+            total_bytes: None,
+            error: None,
+        };
+        return Ok(download_state.clone());
+    }
+
+    {
+        let mut download_state = shared
+            .lock()
+            .map_err(|_| "Failed to access model download state.".to_string())?;
+        if matches!(
+            download_state.status,
+            ManagedModelDownloadStatus::Downloading
+        ) {
+            return Ok(download_state.clone());
+        }
+
+        *download_state = ManagedModelDownloadState {
+            status: ManagedModelDownloadStatus::Downloading,
+            local_path: target_dir.display().to_string(),
+            current_file: None,
+            bytes_downloaded: 0,
+            total_bytes: None,
+            error: None,
+        };
+    }
+
+    std::thread::spawn({
+        let shared = shared.clone();
+        move || {
+            if let Err(error) = download_managed_model_snapshot(&target_dir, &shared) {
+                if let Ok(mut download_state) = shared.lock() {
+                    *download_state = ManagedModelDownloadState {
+                        status: ManagedModelDownloadStatus::Error,
+                        local_path: target_dir.display().to_string(),
+                        current_file: None,
+                        bytes_downloaded: 0,
+                        total_bytes: None,
+                        error: Some(error),
+                    };
+                }
+            }
+        }
+    });
+
+    snapshot_managed_model_download_state(&app, &shared)
 }
 
 #[tauri::command]
@@ -589,7 +723,7 @@ fn show_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::
         return Ok(());
     }
 
-    WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app,
         SETTINGS_WINDOW_LABEL,
         WebviewUrl::App("index.html".into()),
@@ -599,16 +733,62 @@ fn show_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::
     .min_inner_size(460.0, 420.0)
     .transparent(true)
     .always_on_top(true)
-    .resizable(true)
-    .build()?;
+    .resizable(true);
+    #[cfg(target_os = "macos")]
+    let builder = builder.effects(macos_tahoe_window_effects());
+    builder.build()?;
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn macos_tahoe_window_effects() -> tauri::utils::config::WindowEffectsConfig {
+    EffectsBuilder::new()
+        .effect(Effect::WindowBackground)
+        .radius(MACOS_TAHOE_WINDOW_RADIUS)
+        .build()
+}
+
+fn default_managed_model_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<StoredModelSettings, String> {
+    Ok(StoredModelSettings {
+        source: Some(ModelSource::HuggingFace),
+        hugging_face_repo: DEFAULT_HUGGING_FACE_MODEL_REPO.to_string(),
+        hugging_face_revision: String::new(),
+        hugging_face_local_path: managed_model_path(app)?.display().to_string(),
+    })
+}
+
+fn effective_model_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &StoredModelSettings,
+) -> Result<StoredModelSettings, String> {
+    let bundled_path = resolve_bundled_model_path(app);
+    if matches!(settings.source(), ModelSource::Bundled) && model_path_is_ready(&bundled_path) {
+        return Ok(settings.clone());
+    }
+
+    if settings.has_custom_hugging_face_selection() {
+        let mut custom = settings.clone();
+        custom.source = Some(ModelSource::HuggingFace);
+        if resolve_custom_model_path(&custom.hugging_face_local_path)
+            .as_ref()
+            .map(|path| model_path_is_ready(path))
+            .unwrap_or(false)
+        {
+            return Ok(custom);
+        }
+    }
+
+    default_managed_model_settings(app)
 }
 
 fn build_model_settings_state<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &StoredModelSettings,
 ) -> Result<ModelSettingsState, String> {
+    let settings = effective_model_settings(app, settings)?;
     let bundled_path = resolve_bundled_model_path(app);
     let bundled_ready = model_path_is_ready(&bundled_path);
     let bundled_status = if bundled_ready {
@@ -627,17 +807,19 @@ fn build_model_settings_state<R: tauri::Runtime>(
     let hugging_face_revision = settings.hugging_face_revision.trim().to_string();
     let hugging_face_local_path = settings.hugging_face_local_path.trim().to_string();
     let hugging_face_resolved_path = resolve_custom_model_path(&hugging_face_local_path);
-    let hugging_face_ready = !hugging_face_repo.is_empty()
-        && hugging_face_resolved_path
-            .as_ref()
-            .map(|path| model_path_is_ready(path))
-            .unwrap_or(false);
+    let hugging_face_ready = hugging_face_resolved_path
+        .as_ref()
+        .map(|path| model_path_is_ready(path))
+        .unwrap_or(false);
+    let managed_model_path = managed_model_path(app)?;
+    let uses_managed_model = hugging_face_local_path == managed_model_path.display().to_string();
     let hugging_face_status = build_hugging_face_status(
         &hugging_face_repo,
         &hugging_face_revision,
         &hugging_face_local_path,
         hugging_face_resolved_path.as_deref(),
         hugging_face_ready,
+        uses_managed_model,
     );
 
     let source = settings.source();
@@ -862,6 +1044,230 @@ fn resolve_bundled_model_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> P
         Some(path) if path.exists() => path,
         _ => dev_candidate,
     }
+}
+
+fn managed_model_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
+    app.path()
+        .app_data_dir()
+        .map(|path| path.join(MANAGED_MODEL_RELATIVE_PATH))
+        .map_err(|error| error.to_string())
+}
+
+fn snapshot_managed_model_download_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    shared: &Arc<Mutex<ManagedModelDownloadState>>,
+) -> Result<ManagedModelDownloadState, String> {
+    let local_path = managed_model_path(app)?;
+    let ready = model_path_is_ready(&local_path);
+    let mut download_state = shared
+        .lock()
+        .map_err(|_| "Failed to access model download state.".to_string())?;
+
+    download_state.local_path = local_path.display().to_string();
+
+    if ready
+        && !matches!(
+            download_state.status,
+            ManagedModelDownloadStatus::Downloading
+        )
+    {
+        download_state.status = ManagedModelDownloadStatus::Ready;
+        download_state.current_file = None;
+        download_state.bytes_downloaded = 0;
+        download_state.total_bytes = None;
+        download_state.error = None;
+    } else if !ready && matches!(download_state.status, ManagedModelDownloadStatus::Ready) {
+        download_state.status = ManagedModelDownloadStatus::Idle;
+        download_state.current_file = None;
+        download_state.bytes_downloaded = 0;
+        download_state.total_bytes = None;
+    }
+
+    Ok(download_state.clone())
+}
+
+fn set_managed_model_download_progress(
+    shared: &Arc<Mutex<ManagedModelDownloadState>>,
+    local_path: &Path,
+    current_file: Option<&str>,
+    bytes_downloaded: u64,
+    total_bytes: Option<u64>,
+) -> Result<(), String> {
+    let mut download_state = shared
+        .lock()
+        .map_err(|_| "Failed to access model download state.".to_string())?;
+    download_state.status = ManagedModelDownloadStatus::Downloading;
+    download_state.local_path = local_path.display().to_string();
+    download_state.current_file = current_file.map(str::to_string);
+    download_state.bytes_downloaded = bytes_downloaded;
+    download_state.total_bytes = total_bytes;
+    download_state.error = None;
+    Ok(())
+}
+
+fn download_managed_model_snapshot(
+    target_dir: &Path,
+    shared: &Arc<Mutex<ManagedModelDownloadState>>,
+) -> Result<(), String> {
+    let client = reqwest::blocking::Client::builder()
+        .user_agent(format!("{APP_NAME}/{}", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| format!("Failed to prepare model download client: {error}"))?;
+    let file_descriptors = fetch_managed_model_manifest(&client)?;
+    let total_bytes = if file_descriptors.iter().all(|file| file.size.is_some()) {
+        Some(file_descriptors.iter().filter_map(|file| file.size).sum())
+    } else {
+        None
+    };
+
+    if let Some(parent) = target_dir.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "Failed to prepare the model directory at {}: {error}",
+                parent.display()
+            )
+        })?;
+    }
+    std::fs::create_dir_all(target_dir).map_err(|error| {
+        format!(
+            "Failed to prepare the model directory at {}: {error}",
+            target_dir.display()
+        )
+    })?;
+
+    let mut bytes_downloaded = 0_u64;
+    for file in &file_descriptors {
+        set_managed_model_download_progress(
+            shared,
+            target_dir,
+            Some(file.name),
+            bytes_downloaded,
+            total_bytes,
+        )?;
+
+        let destination = target_dir.join(file.name);
+        if destination.is_file() {
+            if let Some(expected_size) = file.size {
+                if destination
+                    .metadata()
+                    .map(|metadata| metadata.len() == expected_size)
+                    .unwrap_or(false)
+                {
+                    bytes_downloaded += expected_size;
+                    continue;
+                }
+            }
+        }
+
+        let temporary = target_dir.join(format!("{}.part", file.name));
+        if temporary.exists() {
+            let _ = std::fs::remove_file(&temporary);
+        }
+
+        let mut response = client
+            .get(managed_model_remote_url(file.name))
+            .send()
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .map_err(|error| format!("Failed to download {}: {error}", file.name))?;
+        let mut output = std::fs::File::create(&temporary).map_err(|error| {
+            format!(
+                "Failed to create {} while downloading the model: {error}",
+                temporary.display()
+            )
+        })?;
+
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let read = response
+                .read(&mut buffer)
+                .map_err(|error| format!("Failed to read {}: {error}", file.name))?;
+            if read == 0 {
+                break;
+            }
+
+            output
+                .write_all(&buffer[..read])
+                .map_err(|error| format!("Failed to write {}: {error}", destination.display()))?;
+            bytes_downloaded += read as u64;
+            set_managed_model_download_progress(
+                shared,
+                target_dir,
+                Some(file.name),
+                bytes_downloaded,
+                total_bytes,
+            )?;
+        }
+
+        output.flush().map_err(|error| {
+            format!(
+                "Failed to finish writing {}: {error}",
+                destination.display()
+            )
+        })?;
+        std::fs::rename(&temporary, &destination).map_err(|error| {
+            format!(
+                "Failed to move {} into place: {error}",
+                destination.display()
+            )
+        })?;
+    }
+
+    if !model_path_is_ready(target_dir) {
+        return Err(format!(
+            "The model download finished, but {} is still missing required files.",
+            target_dir.display()
+        ));
+    }
+
+    let mut download_state = shared
+        .lock()
+        .map_err(|_| "Failed to access model download state.".to_string())?;
+    *download_state = ManagedModelDownloadState {
+        status: ManagedModelDownloadStatus::Ready,
+        local_path: target_dir.display().to_string(),
+        current_file: None,
+        bytes_downloaded: 0,
+        total_bytes: None,
+        error: None,
+    };
+
+    Ok(())
+}
+
+fn fetch_managed_model_manifest(
+    client: &reqwest::blocking::Client,
+) -> Result<Vec<ManagedModelFileDescriptor>, String> {
+    let metadata: HuggingFaceModelMetadata = client
+        .get(format!(
+            "https://huggingface.co/api/models/{DEFAULT_HUGGING_FACE_MODEL_REPO}"
+        ))
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| format!("Failed to fetch model metadata: {error}"))?
+        .json()
+        .map_err(|error| format!("Failed to decode model metadata: {error}"))?;
+
+    MANAGED_MODEL_FILES
+        .iter()
+        .map(|file_name| {
+            let sibling = metadata
+                .siblings
+                .iter()
+                .find(|sibling| sibling.rfilename == *file_name)
+                .ok_or_else(|| format!("The upstream model is missing {}.", file_name))?;
+
+            Ok(ManagedModelFileDescriptor {
+                name: file_name,
+                size: sibling.size,
+            })
+        })
+        .collect()
+}
+
+fn managed_model_remote_url(file_name: &str) -> String {
+    format!(
+        "https://huggingface.co/{DEFAULT_HUGGING_FACE_MODEL_REPO}/resolve/{DEFAULT_HUGGING_FACE_MODEL_REVISION}/{file_name}"
+    )
 }
 
 fn resolve_pyannote_runner_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
@@ -1228,16 +1634,29 @@ fn build_hugging_face_status(
     local_path: &str,
     resolved_path: Option<&Path>,
     ready: bool,
+    uses_managed_model: bool,
 ) -> String {
-    if repo.is_empty() {
-        return "Enter a Hugging Face repo or URL to use a custom model.".to_string();
-    }
-
     if local_path.is_empty() {
-        return "Add a local snapshot path for the Hugging Face model.".to_string();
+        return if uses_managed_model {
+            format!(
+                "Download {DEFAULT_MODEL_NAME} once to continue. The files stay on this device."
+            )
+        } else {
+            "Add a local snapshot path for the transcription model.".to_string()
+        };
     }
 
-    let reference = format_hugging_face_reference(repo, revision);
+    if uses_managed_model && resolved_path.is_none() {
+        return format!(
+            "Download {DEFAULT_MODEL_NAME} once to continue. The files will be stored at {local_path}."
+        );
+    }
+
+    let reference = if repo.is_empty() {
+        DEFAULT_MODEL_NAME.to_string()
+    } else {
+        format_hugging_face_reference(repo, revision)
+    };
     match resolved_path {
         Some(path) if ready => format!("Using {reference} from {}.", path.display()),
         Some(path) => format!(
@@ -1252,11 +1671,14 @@ fn resolve_selected_model_path<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &StoredModelSettings,
 ) -> Result<PathBuf, String> {
+    let settings = effective_model_settings(app, settings)?;
     let source = settings.source();
     let selected_path = match source {
         ModelSource::Bundled => resolve_bundled_model_path(app),
         ModelSource::HuggingFace => resolve_custom_model_path(&settings.hugging_face_local_path)
-            .ok_or_else(|| "The selected Hugging Face snapshot path was not found.".to_string())?,
+            .ok_or_else(|| {
+                "The local transcription model has not been downloaded yet.".to_string()
+            })?,
     };
 
     if model_path_is_ready(&selected_path) {
@@ -1350,6 +1772,10 @@ pub fn run() {
         .manage(AppState::default())
         .setup(|app| {
             app.set_menu(build_app_menu(app.handle())?)?;
+            #[cfg(target_os = "macos")]
+            app.get_webview_window("main")
+                .expect("main window should exist")
+                .set_effects(macos_tahoe_window_effects())?;
             Ok(())
         })
         .on_menu_event(|app, event| {
@@ -1363,6 +1789,8 @@ pub fn run() {
             open_permission_settings,
             open_settings_window,
             model_settings_state,
+            managed_model_download_state,
+            download_managed_model,
             diarization_settings_state,
             general_settings_state,
             save_model_settings,
