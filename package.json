@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:debug-app": "tauri build --debug && open 'src-tauri/target/debug/bundle/macos/unsigned char.app'"
   },
   "dependencies": {
     "@tauri-apps/api": "^2"
