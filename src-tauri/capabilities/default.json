@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capability for the desktop windows",
   "windows": ["main", "settings"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-set-always-on-top"]
 }
