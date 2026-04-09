@@ -4,7 +4,7 @@
 
 If you want the real thing, use [Char](https://github.com/fastrepl/char).
 
-Local meeting transcription for your desktop.
+Apple Silicon local meeting transcription desktop app for macOS, with a bundled CLI.
 
 - records from your machine
 - transcribes locally with Qwen ASR
@@ -19,6 +19,14 @@ npm run tauri dev
 
 ## CLI
 
+Bundled app builds include `uchar` inside the app bundle:
+
 ```bash
-npx uchar
+/Applications/unsigned\ char.app/Contents/MacOS/uchar
+```
+
+If you want `uchar` on your `PATH`:
+
+```bash
+ln -sf "/Applications/unsigned char.app/Contents/MacOS/uchar" /opt/homebrew/bin/uchar
 ```

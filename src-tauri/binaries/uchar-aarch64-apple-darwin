@@ -1,0 +1,87 @@
+#!/bin/sh
+
+set -eu
+
+APP_NAME="unsigned char"
+APP_BUNDLE_NAME="${APP_NAME}.app"
+
+resolve_script_path() {
+  script_path=$1
+
+  while [ -L "$script_path" ]; do
+    script_dir=$(cd -P "$(dirname "$script_path")" && pwd)
+    link_target=$(readlink "$script_path")
+    case "$link_target" in
+      /*) script_path=$link_target ;;
+      *) script_path="$script_dir/$link_target" ;;
+    esac
+  done
+
+  cd -P "$(dirname "$script_path")" && pwd
+}
+
+script_dir=$(resolve_script_path "$0")
+contents_dir=$(cd "$script_dir/.." && pwd)
+bundle_path=$(cd "$contents_dir/.." && pwd)
+
+read_version() {
+  /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$contents_dir/Info.plist" 2>/dev/null || printf "0.0.0"
+}
+
+VERSION=$(read_version)
+
+print_help() {
+  cat <<EOF
+uchar ${VERSION}
+
+Open unsigned char on Apple Silicon macOS.
+
+Usage:
+  uchar
+  uchar open
+  uchar desktop
+  uchar --help
+  uchar --version
+EOF
+}
+
+fail() {
+  printf "uchar: %s\n" "$1" >&2
+  exit 1
+}
+
+open_app() {
+  if [ "$(uname -s)" != "Darwin" ]; then
+    fail "unsigned char currently supports only macOS."
+  fi
+
+  if [ "$(uname -m)" != "arm64" ]; then
+    fail "unsigned char currently supports only Apple Silicon Macs."
+  fi
+
+  if [ -d "$bundle_path" ] && [ "$(basename "$bundle_path")" = "$APP_BUNDLE_NAME" ]; then
+    open -a "$bundle_path" >/dev/null 2>&1 && exit 0
+  fi
+
+  open -a "$APP_NAME" >/dev/null 2>&1 && exit 0
+  fail "could not find ${APP_BUNDLE_NAME}."
+}
+
+case "${1:-}" in
+  "")
+    open_app
+    ;;
+  --help|-h|help)
+    print_help
+    ;;
+  --version|-v|version)
+    printf "%s\n" "$VERSION"
+    ;;
+  open|desktop)
+    open_app
+    ;;
+  *)
+    print_help >&2
+    fail "unknown command \"$1\""
+    ;;
+esac

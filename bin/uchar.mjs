@@ -19,7 +19,7 @@ const APP_PATHS = [
 
 const HELP = `uchar ${VERSION}
 
-Open unsigned char on macOS.
+Open unsigned char on Apple Silicon macOS.
 
 Usage:
   uchar
@@ -59,6 +59,10 @@ function main(args) {
 function openDesktopApp() {
   if (process.platform !== "darwin") {
     fail("unsigned char currently supports only macOS.");
+  }
+
+  if (process.arch !== "arm64") {
+    fail("unsigned char currently supports only Apple Silicon Macs.");
   }
 
   if (open(["-a", APP_NAME])) {
