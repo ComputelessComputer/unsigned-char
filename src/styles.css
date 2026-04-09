@@ -231,6 +231,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-inline: -20px;
+  padding-inline: 20px;
   padding-bottom: 76px;
 }
 
@@ -1341,6 +1343,11 @@ body[data-meeting-overlay="on"] .screen {
   .screen.home {
     padding-top: 0;
     padding-bottom: 16px;
+  }
+
+  .home-content {
+    margin-inline: -16px;
+    padding-inline: 16px;
   }
 
   .screen-header-row,
