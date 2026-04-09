@@ -725,7 +725,7 @@ function MeetingScreen() {
     !diarizationEnabled ? "off" : diarizationReady ? "ready" : "needs setup";
 
   return (
-    <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4 overflow-hidden">
+    <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4 overflow-y-auto pr-1">
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
           <GhostButton
