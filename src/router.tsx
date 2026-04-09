@@ -724,20 +724,22 @@ function MeetingScreen() {
 
   return (
     <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4 overflow-hidden">
-      <header className="flex items-start gap-3">
-        <GhostButton
-          className="size-10 px-0"
-          aria-label="Back"
-          onClick={() => {
-            navigate({ to: "/" });
-          }}
-        >
-          <IconBack />
-        </GhostButton>
+      <header className="flex flex-col gap-2">
+        <div className="flex items-center gap-3">
+          <GhostButton
+            className="size-10 shrink-0 px-0"
+            aria-label="Back"
+            onClick={() => {
+              navigate({ to: "/" });
+            }}
+          >
+            <IconBack />
+          </GhostButton>
+          <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
+        </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 pl-[3.25rem]">
           <MeetingTitleField key={meeting.id} meetingId={meeting.id} title={meeting.title} />
-          <p className="mt-1 text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
         </div>
       </header>
 
