@@ -413,7 +413,10 @@ function renderHome() {
         <button class="button primary header-action" id="new-meeting" type="button" ${
           startDisabled ? "disabled" : ""
         }>
-          <span>${state.startMeetingBusy ? "Starting..." : "New meeting"}</span>
+          <span class="header-action-copy">
+            <span class="recording-indicator" aria-hidden="true"></span>
+            <span>${state.startMeetingBusy ? "Starting..." : "New meeting"}</span>
+          </span>
           <kbd class="shortcut-hint" aria-hidden="true">${NEW_MEETING_SHORTCUT}</kbd>
         </button>
       </header>
