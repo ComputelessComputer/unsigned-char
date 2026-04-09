@@ -4,13 +4,36 @@
     ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
     sans-serif;
   color: #18181b;
-  background: #ffffff;
-  --background: #ffffff;
-  --surface: #ffffff;
-  --surface-soft: #f5f5f2;
-  --surface-muted: #fbfbf8;
-  --border: rgba(17, 24, 39, 0.08);
-  --border-strong: rgba(17, 24, 39, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.42) 0%, transparent 34%),
+    radial-gradient(circle at 86% 88%, rgba(125, 141, 255, 0.16) 0%, transparent 38%),
+    rgba(236, 241, 248, 0.18);
+  --background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
+    radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.42) 0%, transparent 34%),
+    radial-gradient(circle at 86% 88%, rgba(125, 141, 255, 0.16) 0%, transparent 38%),
+    rgba(236, 241, 248, 0.18);
+  --surface:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.18) 38%, rgba(255, 255, 255, 0.1) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.18) 26%, rgba(255, 255, 255, 0) 56%),
+    radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.18) 30%, transparent 58%),
+    radial-gradient(circle at 92% 115%, rgba(128, 146, 255, 0.14) 0%, transparent 36%),
+    rgba(255, 255, 255, 0.24);
+  --surface-soft:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.14) 42%, rgba(255, 255, 255, 0.08) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.14) 24%, rgba(255, 255, 255, 0) 52%),
+    radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.14) 26%, transparent 56%),
+    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.12) 0%, transparent 34%),
+    rgba(255, 255, 255, 0.18);
+  --surface-muted:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.12) 44%, rgba(255, 255, 255, 0.07) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.54) 0%, rgba(255, 255, 255, 0.12) 24%, rgba(255, 255, 255, 0) 48%),
+    radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.12) 24%, transparent 52%),
+    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.1) 0%, transparent 34%),
+    rgba(255, 255, 255, 0.14);
+  --border: rgba(255, 255, 255, 0.38);
+  --border-strong: rgba(255, 255, 255, 0.58);
   --text: #18181b;
   --text-soft: #52525b;
   --text-faint: #71717a;
@@ -24,8 +47,8 @@
   --warning-soft: rgba(234, 88, 12, 0.12);
   --warning-border: rgba(234, 88, 12, 0.24);
   --shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 12px 28px rgba(15, 23, 42, 0.04);
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 18px 36px rgba(15, 23, 42, 0.08);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -36,13 +59,36 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f5f5f5;
-    background: #0f0f10;
-    --background: #0f0f10;
-    --surface: #17181a;
-    --surface-soft: #202124;
-    --surface-muted: #131416;
-    --border: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.14);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+      radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.14) 0%, transparent 34%),
+      radial-gradient(circle at 88% 90%, rgba(113, 128, 255, 0.18) 0%, transparent 38%),
+      rgba(14, 15, 19, 0.26);
+    --background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+      radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.14) 0%, transparent 34%),
+      radial-gradient(circle at 88% 90%, rgba(113, 128, 255, 0.18) 0%, transparent 38%),
+      rgba(14, 15, 19, 0.26);
+    --surface:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 36%, rgba(255, 255, 255, 0.03) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 24%, rgba(255, 255, 255, 0) 54%),
+      radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 30%, transparent 58%),
+      radial-gradient(circle at 92% 115%, rgba(118, 133, 255, 0.18) 0%, transparent 36%),
+      rgba(21, 24, 30, 0.34);
+    --surface-soft:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.03) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 24%, rgba(255, 255, 255, 0) 50%),
+      radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 26%, transparent 56%),
+      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.16) 0%, transparent 34%),
+      rgba(24, 27, 34, 0.28);
+    --surface-muted:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.02) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 22%, rgba(255, 255, 255, 0) 48%),
+      radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 24%, transparent 52%),
+      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.14) 0%, transparent 34%),
+      rgba(18, 20, 26, 0.24);
+    --border: rgba(255, 255, 255, 0.12);
+    --border-strong: rgba(255, 255, 255, 0.22);
     --text: #f5f5f5;
     --text-soft: #c4c6cc;
     --text-faint: #8f939c;
@@ -56,8 +102,8 @@
     --warning-soft: rgba(251, 146, 60, 0.18);
     --warning-border: rgba(251, 146, 60, 0.3);
     --shadow:
-      0 1px 2px rgba(0, 0, 0, 0.28),
-      0 16px 36px rgba(0, 0, 0, 0.24);
+      0 1px 2px rgba(0, 0, 0, 0.32),
+      0 20px 40px rgba(0, 0, 0, 0.24);
   }
 }
 
@@ -86,11 +132,25 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.78) 0%, transparent 32%),
-    radial-gradient(circle at 88% 86%, rgba(120, 134, 255, 0.16) 0%, transparent 36%),
+    radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.82) 0%, transparent 28%),
+    radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.22) 0%, transparent 30%),
+    radial-gradient(circle at 88% 86%, rgba(120, 134, 255, 0.18) 0%, transparent 36%),
     var(--background);
-  backdrop-filter: blur(24px) saturate(1.08);
-  -webkit-backdrop-filter: blur(24px) saturate(1.08);
+  backdrop-filter: blur(30px) saturate(1.2);
+  -webkit-backdrop-filter: blur(30px) saturate(1.2);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: -18%;
+  pointer-events: none;
+  background:
+    linear-gradient(118deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.12) 18%, transparent 36%),
+    linear-gradient(308deg, rgba(130, 145, 255, 0.18) 0%, transparent 32%);
+  filter: blur(20px);
+  opacity: 0.92;
+  transform: translate3d(-4%, -2%, 0);
 }
 
 button,
@@ -125,7 +185,6 @@ button {
 
 .screen.home {
   overflow-y: auto;
-  padding-top: 0;
   padding-bottom: 96px;
 }
 
@@ -237,13 +296,16 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.14);
   transition:
-    background-color 160ms ease,
+    background 160ms ease,
     border-color 160ms ease,
     box-shadow 160ms ease;
-  backdrop-filter: blur(18px) saturate(1.04);
-  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
 }
 
 .meeting-row-top,
@@ -300,14 +362,17 @@ h2 {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.14);
   transition:
-    background-color 120ms ease,
+    background 120ms ease,
     border-color 120ms ease,
     box-shadow 120ms ease,
     transform 120ms ease;
-  backdrop-filter: blur(14px) saturate(1.04);
-  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
 }
 
 .button:hover,
@@ -338,14 +403,24 @@ h2 {
 }
 
 .button.primary {
-  background: var(--accent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0.06) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.08) 36%, rgba(255, 255, 255, 0) 58%),
+    rgba(30, 31, 38, 0.74);
   color: var(--accent-foreground);
-  border-color: var(--accent);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 16px 30px rgba(24, 24, 27, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .button.primary:hover {
-  background: #27272a;
-  border-color: #27272a;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.08) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.1) 36%, rgba(255, 255, 255, 0) 58%),
+    rgba(36, 38, 46, 0.8);
+  border-color: rgba(255, 255, 255, 0.24);
 }
 
 .shortcut-hint {
@@ -420,21 +495,24 @@ h2 {
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background:
-    linear-gradient(135deg, rgba(24, 24, 27, 0.06), rgba(24, 24, 27, 0.02)),
-    var(--surface);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08) 42%, rgba(120, 134, 255, 0.08)),
+    var(--surface-soft);
   color: var(--text);
   text-align: left;
-  box-shadow: var(--shadow);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.16);
   transition:
     border-color 120ms ease,
-    background-color 120ms ease,
+    background 120ms ease,
     box-shadow 120ms ease;
 }
 
 .setup-banner:hover {
   border-color: var(--border-strong);
   background:
-    linear-gradient(135deg, rgba(24, 24, 27, 0.08), rgba(24, 24, 27, 0.03)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 42%, rgba(120, 134, 255, 0.1)),
     var(--surface);
 }
 
@@ -502,7 +580,7 @@ h2 {
   padding: 0 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--surface);
   color: var(--text);
   font-size: 12px;
   font-weight: 600;
@@ -516,9 +594,9 @@ h2 {
     opacity 160ms ease,
     transform 160ms ease,
     border-color 120ms ease,
-    background-color 120ms ease;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+    background 120ms ease;
+  backdrop-filter: blur(22px) saturate(1.2);
+  -webkit-backdrop-filter: blur(22px) saturate(1.2);
 }
 
 .scroll-top-chip.visible {
@@ -575,9 +653,12 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(16px) saturate(1.04);
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(28px) saturate(1.2);
+  -webkit-backdrop-filter: blur(28px) saturate(1.2);
 }
 
 .settings-panel-header,
@@ -619,8 +700,11 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
-  backdrop-filter: blur(16px) saturate(1.04);
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(22px) saturate(1.18);
+  -webkit-backdrop-filter: blur(22px) saturate(1.18);
 }
 
 .settings-chip-box,
@@ -671,8 +755,11 @@ h2 {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface-muted);
-  backdrop-filter: blur(16px) saturate(1.04);
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(22px) saturate(1.18);
+  -webkit-backdrop-filter: blur(22px) saturate(1.18);
 }
 
 .toggle-row input {
@@ -710,14 +797,19 @@ h2 {
   border-radius: 14px;
   background: var(--surface-muted);
   cursor: pointer;
-  backdrop-filter: blur(16px) saturate(1.04);
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(22px) saturate(1.18);
+  -webkit-backdrop-filter: blur(22px) saturate(1.18);
 }
 
 .model-source-option.active {
   border-color: var(--border-strong);
   background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
+  box-shadow:
+    inset 0 0 0 1px var(--border-strong),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .model-source-option input {
@@ -859,9 +951,21 @@ h2 {
 }
 
 @media (prefers-color-scheme: dark) {
+  .button.primary {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.1) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.14) 36%, rgba(255, 255, 255, 0) 58%),
+      rgba(248, 248, 252, 0.18);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow:
+      0 16px 30px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.28),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  }
+
   .button:hover,
   .back-button:hover {
-    background: #1d1f22;
+    background: var(--surface-soft);
   }
 
   .button:focus-visible,
@@ -876,36 +980,39 @@ h2 {
   }
 
   .button.primary:hover {
-    background: #ffffff;
-    border-color: #ffffff;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.12) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.16) 38%, rgba(255, 255, 255, 0) 62%),
+      rgba(248, 248, 252, 0.22);
+    border-color: rgba(255, 255, 255, 0.24);
   }
 
   .meeting-row:hover {
-    background: #1b1d20;
+    background: var(--surface-muted);
   }
 
   .model-source-option {
-    background: #131416;
+    background: var(--surface-muted);
   }
 
   .toggle-row {
-    background: #131416;
+    background: var(--surface-muted);
   }
 
   .setup-banner {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03)),
-      var(--surface);
+      linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 42%, rgba(118, 133, 255, 0.1)),
+      var(--surface-soft);
   }
 
   .setup-banner:hover {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.04)),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05) 42%, rgba(118, 133, 255, 0.12)),
       var(--surface);
   }
 
   .scroll-top-chip:hover {
-    background: #1d1f22;
+    background: var(--surface-soft);
   }
 }
 
@@ -1116,8 +1223,11 @@ h2 {
   border-radius: 12px;
   background: var(--surface);
   color: var(--text);
-  backdrop-filter: blur(16px) saturate(1.04);
-  -webkit-backdrop-filter: blur(16px) saturate(1.04);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(22px) saturate(1.18);
+  -webkit-backdrop-filter: blur(22px) saturate(1.18);
 }
 
 .composer-input::placeholder {
@@ -1129,33 +1239,78 @@ h2 {
 }
 
 body[data-meeting-overlay="on"] {
-  --background: rgba(255, 255, 255, 0.28);
-  --surface: rgba(255, 255, 255, 0.82);
-  --surface-soft: rgba(245, 245, 242, 0.74);
-  --surface-muted: rgba(251, 251, 248, 0.68);
+  --background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
+    radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.46) 0%, transparent 34%),
+    radial-gradient(circle at 86% 88%, rgba(125, 141, 255, 0.18) 0%, transparent 38%),
+    rgba(255, 255, 255, 0.12);
+  --surface:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.2) 40%, rgba(255, 255, 255, 0.12) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.22) 28%, rgba(255, 255, 255, 0) 56%),
+    radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.2) 28%, transparent 56%),
+    radial-gradient(circle at 92% 115%, rgba(128, 146, 255, 0.16) 0%, transparent 36%),
+    rgba(255, 255, 255, 0.28);
+  --surface-soft:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.54) 0%, rgba(255, 255, 255, 0.16) 42%, rgba(255, 255, 255, 0.1) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.18) 26%, rgba(255, 255, 255, 0) 54%),
+    radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.18) 24%, transparent 54%),
+    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.14) 0%, transparent 34%),
+    rgba(255, 255, 255, 0.22);
+  --surface-muted:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.14) 44%, rgba(255, 255, 255, 0.08) 100%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.14) 24%, rgba(255, 255, 255, 0) 48%),
+    radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.14) 24%, transparent 52%),
+    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.12) 0%, transparent 34%),
+    rgba(255, 255, 255, 0.18);
   --shadow:
     0 1px 2px rgba(15, 23, 42, 0.08),
     0 20px 44px rgba(15, 23, 42, 0.12);
 }
 
 body[data-meeting-overlay="on"] .screen {
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(24px) saturate(1.16);
+  -webkit-backdrop-filter: blur(24px) saturate(1.16);
 }
 
 @media (prefers-color-scheme: dark) {
   body::before {
     background:
-      radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.12) 0%, transparent 32%),
-      radial-gradient(circle at 88% 86%, rgba(113, 128, 255, 0.14) 0%, transparent 36%),
+      radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.16) 0%, transparent 30%),
+      radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.08) 0%, transparent 28%),
+      radial-gradient(circle at 88% 86%, rgba(113, 128, 255, 0.16) 0%, transparent 36%),
       var(--background);
   }
 
+  body::after {
+    background:
+      linear-gradient(118deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 18%, transparent 36%),
+      linear-gradient(308deg, rgba(118, 133, 255, 0.16) 0%, transparent 32%);
+  }
+
   body[data-meeting-overlay="on"] {
-    --background: rgba(15, 15, 16, 0.26);
-    --surface: rgba(23, 24, 26, 0.78);
-    --surface-soft: rgba(32, 33, 36, 0.74);
-    --surface-muted: rgba(19, 20, 22, 0.68);
+    --background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
+      radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.16) 0%, transparent 34%),
+      radial-gradient(circle at 88% 90%, rgba(113, 128, 255, 0.2) 0%, transparent 38%),
+      rgba(14, 15, 19, 0.18);
+    --surface:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 36%, rgba(255, 255, 255, 0.04) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 26%, rgba(255, 255, 255, 0) 56%),
+      radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 28%, transparent 56%),
+      radial-gradient(circle at 92% 115%, rgba(118, 133, 255, 0.2) 0%, transparent 36%),
+      rgba(21, 24, 30, 0.3);
+    --surface-soft:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 40%, rgba(255, 255, 255, 0.04) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.07) 24%, rgba(255, 255, 255, 0) 50%),
+      radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.07) 24%, transparent 54%),
+      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.18) 0%, transparent 34%),
+      rgba(24, 27, 34, 0.26);
+    --surface-muted:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 42%, rgba(255, 255, 255, 0.03) 100%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 22%, rgba(255, 255, 255, 0) 48%),
+      radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 22%, transparent 50%),
+      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.16) 0%, transparent 34%),
+      rgba(18, 20, 26, 0.22);
     --shadow:
       0 1px 2px rgba(0, 0, 0, 0.3),
       0 20px 44px rgba(0, 0, 0, 0.22);
@@ -1168,7 +1323,6 @@ body[data-meeting-overlay="on"] .screen {
   }
 
   .screen.home {
-    padding-top: 0;
     padding-bottom: 88px;
   }
 
