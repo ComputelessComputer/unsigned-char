@@ -343,7 +343,7 @@ h2 {
   padding-inline: 16px;
 }
 
-.header-action-copy {
+.button-copy-with-indicator {
   display: inline-flex;
   align-items: center;
   gap: 10px;

@@ -413,7 +413,7 @@ function renderHome() {
         <button class="button primary header-action" id="new-meeting" type="button" ${
           startDisabled ? "disabled" : ""
         }>
-          <span class="header-action-copy">
+          <span class="button-copy-with-indicator">
             <span class="recording-indicator" aria-hidden="true"></span>
             <span>${state.startMeetingBusy ? "Starting..." : "New meeting"}</span>
           </span>
@@ -718,7 +718,16 @@ function renderMeeting() {
 
       <div class="meeting-actions">
         <button class="button ghost" id="toggle-meeting-status" type="button">
-          ${meeting.status === "live" ? "End live" : "Resume"}
+          ${
+            meeting.status === "live"
+              ? "End live"
+              : `
+                <span class="button-copy-with-indicator">
+                  <span class="recording-indicator" aria-hidden="true"></span>
+                  <span>Resume listening</span>
+                </span>
+              `
+          }
         </button>
         <button class="button secondary" id="save-markdown" type="button" ${
           state.saveBusy ? "disabled" : ""
