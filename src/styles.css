@@ -231,7 +231,9 @@ button {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: -12px;
   margin-inline: -20px;
+  padding-top: 12px;
   padding-inline: 20px;
   padding-bottom: 76px;
 }
