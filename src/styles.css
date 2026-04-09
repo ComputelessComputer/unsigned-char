@@ -362,7 +362,7 @@ h2 {
 .recording-indicator::after {
   content: "";
   position: absolute;
-  inset: -7px;
+  inset: -4px;
   border: 1px solid var(--danger);
   border-radius: inherit;
   opacity: 0.5;
@@ -621,12 +621,12 @@ h2 {
   }
 
   70% {
-    transform: scale(1.7);
+    transform: scale(1.35);
     opacity: 0;
   }
 
   100% {
-    transform: scale(1.7);
+    transform: scale(1.35);
     opacity: 0;
   }
 }
