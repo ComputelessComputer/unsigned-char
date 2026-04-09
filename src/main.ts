@@ -4,6 +4,7 @@ type PermissionKind = "microphone" | "systemAudio";
 type PermissionStatus = "neverRequested" | "authorized" | "denied";
 type View = "home" | "meeting";
 type MeetingStatus = "live" | "done";
+type ModelSource = "bundled" | "huggingFace";
 
 type OnboardingState = {
   productName: string;
@@ -31,6 +32,30 @@ type MarkdownExport = {
   transcript: string;
 };
 
+type ModelSettings = {
+  source: ModelSource;
+  bundledLabel: string;
+  bundledRelativePath: string;
+  bundledResolvedPath: string;
+  bundledReady: boolean;
+  bundledStatus: string;
+  huggingFaceRepo: string;
+  huggingFaceRevision: string;
+  huggingFaceLocalPath: string;
+  huggingFaceResolvedPath: string | null;
+  huggingFaceReady: boolean;
+  huggingFaceStatus: string;
+  selectedReady: boolean;
+  selectedReference: string | null;
+};
+
+type ModelDraft = {
+  source: ModelSource;
+  huggingFaceRepo: string;
+  huggingFaceRevision: string;
+  huggingFaceLocalPath: string;
+};
+
 const STORE_KEY = "unsigned-char-meetings";
 const isMacLike = /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
 const NEW_MEETING_SHORTCUT = isMacLike ? "⌘N" : "Ctrl+N";
@@ -45,14 +70,36 @@ const appRoot: HTMLElement = (() => {
 const state = {
   view: "home" as View,
   onboarding: null as OnboardingState | null,
+  modelSettings: null as ModelSettings | null,
+  modelDraft: emptyModelDraft(),
   meetings: loadMeetings(),
   activeMeetingId: null as string | null,
   permissionBusy: null as PermissionKind | null,
   permissionNote: "",
+  modelBusy: false,
+  modelNote: "",
   startMeetingBusy: false,
   saveBusy: false,
   meetingNote: "",
 };
+
+function emptyModelDraft(): ModelDraft {
+  return {
+    source: "bundled",
+    huggingFaceRepo: "",
+    huggingFaceRevision: "",
+    huggingFaceLocalPath: "",
+  };
+}
+
+function syncModelDraft(settings: ModelSettings) {
+  state.modelDraft = {
+    source: settings.source,
+    huggingFaceRepo: settings.huggingFaceRepo,
+    huggingFaceRevision: settings.huggingFaceRevision,
+    huggingFaceLocalPath: settings.huggingFaceLocalPath,
+  };
+}
 
 function loadMeetings(): Meeting[] {
   try {
@@ -241,7 +288,123 @@ function renderHome() {
         </button>
       </header>
 
+      ${renderModelSection()}
       ${content}
+      ${note}
+    </section>
+  `;
+}
+
+function renderModelSection() {
+  if (!state.modelSettings) {
+    return `
+      <section class="model-card">
+        <div class="model-card-header">
+          <div>
+            <p class="eyebrow">Model</p>
+            <h2>Transcription model</h2>
+          </div>
+        </div>
+        <p class="meta">Loading model settings...</p>
+      </section>
+    `;
+  }
+
+  const settings = state.modelSettings;
+  const draft = state.modelDraft;
+  const pendingStatus =
+    draft.source === "bundled" ? settings.bundledStatus : settings.huggingFaceStatus;
+  const note = state.modelNote
+    ? `<p class="meta model-note">${escapeHtml(state.modelNote)}</p>`
+    : "";
+
+  return `
+    <section class="model-card">
+      <div class="model-card-header">
+        <div>
+          <p class="eyebrow">Model</p>
+          <h2>Transcription model</h2>
+        </div>
+        <span class="model-status ${settings.selectedReady ? "ready" : "missing"}">
+          ${settings.selectedReady ? "ready" : "needs setup"}
+        </span>
+      </div>
+
+      <p class="meta">
+        Packaged builds resolve the default Qwen ASR model from the app bundle. Save changes to switch the app to a local Hugging Face snapshot.
+      </p>
+
+      <div class="model-source-grid">
+        <label class="model-source-option">
+          <input type="radio" name="model-source" value="bundled" ${
+            draft.source === "bundled" ? "checked" : ""
+          } />
+          <span>
+            <strong>${escapeHtml(settings.bundledLabel)}</strong>
+            <small>${escapeHtml(settings.bundledStatus)}</small>
+          </span>
+        </label>
+
+        <label class="model-source-option">
+          <input type="radio" name="model-source" value="huggingFace" ${
+            draft.source === "huggingFace" ? "checked" : ""
+          } />
+          <span>
+            <strong>Hugging Face</strong>
+            <small>${escapeHtml(settings.huggingFaceStatus)}</small>
+          </span>
+        </label>
+      </div>
+
+      <div class="model-path-row">
+        <span class="meta-label">Bundled path</span>
+        <code>${escapeHtml(settings.bundledResolvedPath)}</code>
+      </div>
+
+      <label class="field">
+        <span class="meta-label">Hugging Face repo or URL</span>
+        <input
+          id="hf-repo"
+          class="composer-input"
+          autocomplete="off"
+          placeholder="Qwen/Qwen2-Audio-7B-Instruct"
+          value="${escapeHtml(draft.huggingFaceRepo)}"
+        />
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span class="meta-label">Revision</span>
+          <input
+            id="hf-revision"
+            class="composer-input"
+            autocomplete="off"
+            placeholder="main"
+            value="${escapeHtml(draft.huggingFaceRevision)}"
+          />
+        </label>
+
+        <label class="field field-wide">
+          <span class="meta-label">Local snapshot path</span>
+          <input
+            id="hf-local-path"
+            class="composer-input"
+            autocomplete="off"
+            placeholder="~/models/qwen-asr"
+            value="${escapeHtml(draft.huggingFaceLocalPath)}"
+          />
+        </label>
+      </div>
+
+      <div class="model-footer">
+        <p class="meta">${escapeHtml(pendingStatus)}</p>
+        <button class="button secondary" id="save-model-settings" type="button" ${
+          state.modelBusy ? "disabled" : ""
+        }>
+          ${state.modelBusy ? "Saving..." : "Save model"}
+        </button>
+      </div>
+
       ${note}
     </section>
   `;
@@ -354,6 +517,41 @@ function bindViewHandlers() {
     document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
       void startMeeting();
     });
+
+    document
+      .querySelectorAll<HTMLInputElement>('input[name="model-source"]')
+      .forEach((input) => {
+        input.addEventListener("change", () => {
+          state.modelDraft.source = input.value === "huggingFace" ? "huggingFace" : "bundled";
+          state.modelNote = "";
+          render();
+        });
+      });
+
+    document.querySelector<HTMLInputElement>("#hf-repo")?.addEventListener("input", (event) => {
+      state.modelDraft.huggingFaceRepo = (event.currentTarget as HTMLInputElement).value;
+      state.modelNote = "";
+    });
+
+    document
+      .querySelector<HTMLInputElement>("#hf-revision")
+      ?.addEventListener("input", (event) => {
+        state.modelDraft.huggingFaceRevision = (event.currentTarget as HTMLInputElement).value;
+        state.modelNote = "";
+      });
+
+    document
+      .querySelector<HTMLInputElement>("#hf-local-path")
+      ?.addEventListener("input", (event) => {
+        state.modelDraft.huggingFaceLocalPath = (event.currentTarget as HTMLInputElement).value;
+        state.modelNote = "";
+      });
+
+    document
+      .querySelector<HTMLButtonElement>("#save-model-settings")
+      ?.addEventListener("click", () => {
+        void saveModelSettings();
+      });
 
     document.querySelectorAll<HTMLElement>("[data-open-meeting]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -487,6 +685,20 @@ async function refreshPermissions(silent = false) {
   render();
 }
 
+async function refreshModelSettings(silent = false) {
+  try {
+    const settings = await invoke<ModelSettings>("model_settings_state");
+    state.modelSettings = settings;
+    syncModelDraft(settings);
+  } catch (error) {
+    if (!silent) {
+      state.modelNote = `Failed to load model settings: ${String(error)}`;
+    }
+  }
+
+  render();
+}
+
 async function requestPermissionForMeeting(permission: PermissionKind) {
   await refreshPermissions(true);
   const status = state.onboarding?.permissions[permission];
@@ -538,6 +750,7 @@ async function startMeeting() {
   render();
 
   try {
+    await ensureModelReady();
     await requestPermissionForMeeting("microphone");
     await requestPermissionForMeeting("systemAudio");
     createMeeting();
@@ -546,6 +759,58 @@ async function startMeeting() {
     render();
   } finally {
     state.startMeetingBusy = false;
+    render();
+  }
+}
+
+async function ensureModelReady() {
+  if (!state.modelSettings) {
+    await refreshModelSettings(true);
+  }
+
+  if (!state.modelSettings) {
+    throw new Error("Model settings are still loading.");
+  }
+
+  if (state.modelSettings.selectedReady) {
+    return;
+  }
+
+  if (state.modelSettings.source === "bundled") {
+    throw new Error(state.modelSettings.bundledStatus);
+  }
+
+  throw new Error(state.modelSettings.huggingFaceStatus);
+}
+
+async function saveModelSettings() {
+  if (state.modelBusy) {
+    return;
+  }
+
+  state.modelBusy = true;
+  state.modelNote = "";
+  render();
+
+  try {
+    const settings = await invoke<ModelSettings>("save_model_settings", {
+      settings: {
+        source: state.modelDraft.source,
+        huggingFaceRepo: state.modelDraft.huggingFaceRepo,
+        huggingFaceRevision: state.modelDraft.huggingFaceRevision,
+        huggingFaceLocalPath: state.modelDraft.huggingFaceLocalPath,
+      },
+    });
+
+    state.modelSettings = settings;
+    syncModelDraft(settings);
+    state.modelNote = settings.selectedReady
+      ? `Saved. Using ${settings.selectedReference ?? "the selected model"}.`
+      : "Saved, but the selected model is not ready yet.";
+  } catch (error) {
+    state.modelNote = `Model save failed: ${String(error)}`;
+  } finally {
+    state.modelBusy = false;
     render();
   }
 }
@@ -581,5 +846,6 @@ async function saveMeetingAsMarkdown(meeting: Meeting) {
 
 window.addEventListener("DOMContentLoaded", async () => {
   window.addEventListener("keydown", handleWindowKeydown);
-  await refreshPermissions();
+  render();
+  await Promise.all([refreshPermissions(true), refreshModelSettings(true)]);
 });

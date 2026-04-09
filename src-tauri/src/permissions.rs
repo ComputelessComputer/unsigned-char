@@ -141,12 +141,12 @@ fn request_system_audio_probe() -> Result<(), String> {
         .create_process_tap()
         .map_err(|error| format!("create_process_tap failed: {error}"))?;
 
-    let tap_uid = tap.uid().map_err(|error| format!("tap uid failed: {error}"))?;
+    let tap_uid = tap
+        .uid()
+        .map_err(|error| format!("tap uid failed: {error}"))?;
 
-    let sub_tap = cf::DictionaryOf::with_keys_values(
-        &[ca::sub_device_keys::uid()],
-        &[tap_uid.as_type_ref()],
-    );
+    let sub_tap =
+        cf::DictionaryOf::with_keys_values(&[ca::sub_device_keys::uid()], &[tap_uid.as_type_ref()]);
 
     let aggregate_desc = cf::DictionaryOf::with_keys_values(
         &[
@@ -183,9 +183,10 @@ fn request_system_audio_probe() -> Result<(), String> {
 #[cfg(target_os = "macos")]
 fn play_silence() -> std::sync::mpsc::Sender<()> {
     use rodio::{
-        Player, nz,
+        nz,
         source::{Source, Zero},
         stream::DeviceSinkBuilder,
+        Player,
     };
 
     let (tx, rx) = std::sync::mpsc::channel();

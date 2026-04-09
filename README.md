@@ -31,6 +31,27 @@ The app has three views:
 This repo is still at the starting point. The app structure is in place, but
 the actual audio capture and transcription flow are not wired yet.
 
+The app now stores model selection and resolves the default Qwen ASR path from
+bundled Tauri resources. The runtime still needs to consume that selection when
+real transcription is wired in.
+
+## Model setup
+
+Bundled builds look for the default model under:
+
+```text
+src-tauri/resources/models/qwen-asr/
+```
+
+That directory is copied into the packaged app bundle automatically.
+
+Users can also switch to a custom Hugging Face model from the home screen by
+providing:
+
+- a repo ID or Hugging Face URL
+- an optional revision
+- a local snapshot path on disk
+
 ## Run it
 
 1. Install dependencies:
