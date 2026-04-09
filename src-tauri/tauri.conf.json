@@ -13,6 +13,7 @@
     "withGlobalTauri": false,
     "windows": [
       {
+        "label": "main",
         "title": "unsigned char",
         "width": 460,
         "height": 640,

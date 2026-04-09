@@ -7,11 +7,17 @@ use std::{
 
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{
+    menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
+    Manager, WebviewUrl, WebviewWindowBuilder,
+};
 
+const APP_NAME: &str = "unsigned char";
 const BUNDLED_MODEL_NAME: &str = "Bundled Qwen ASR";
 const BUNDLED_MODEL_RELATIVE_PATH: &str = "models/qwen-asr";
 const MODEL_SETTINGS_FILE: &str = "model-settings.json";
+const OPEN_SETTINGS_MENU_ID: &str = "open-settings";
+const SETTINGS_WINDOW_LABEL: &str = "settings";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -174,6 +180,134 @@ fn save_meeting_markdown<R: tauri::Runtime>(
     std::fs::write(&file_path, build_markdown(&export)).map_err(|error| error.to_string())?;
 
     Ok(file_path.display().to_string())
+}
+
+fn build_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
+    let about_metadata = AboutMetadata {
+        name: Some(APP_NAME.to_string()),
+        version: Some(app.package_info().version.to_string()),
+        copyright: app.config().bundle.copyright.clone(),
+        authors: app
+            .config()
+            .bundle
+            .publisher
+            .clone()
+            .map(|publisher| vec![publisher]),
+        ..Default::default()
+    };
+
+    let settings_item = MenuItem::with_id(
+        app,
+        OPEN_SETTINGS_MENU_ID,
+        "Settings...",
+        true,
+        Some("CmdOrCtrl+,"),
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        app,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(app, None)?,
+            &PredefinedMenuItem::redo(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::cut(app, None)?,
+            &PredefinedMenuItem::copy(app, None)?,
+            &PredefinedMenuItem::paste(app, None)?,
+            &PredefinedMenuItem::select_all(app, None)?,
+        ],
+    )?;
+
+    let window_menu = Submenu::with_items(
+        app,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            #[cfg(target_os = "macos")]
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+        ],
+    )?;
+
+    let help_menu = Submenu::with_items(
+        app,
+        "Help",
+        true,
+        &[
+            #[cfg(not(target_os = "macos"))]
+            &PredefinedMenuItem::about(app, None, Some(about_metadata.clone()))?,
+        ],
+    )?;
+
+    #[cfg(target_os = "macos")]
+    let app_menu = Submenu::with_items(
+        app,
+        APP_NAME,
+        true,
+        &[
+            &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
+            &PredefinedMenuItem::separator(app)?,
+            &settings_item,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::services(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::hide(app, None)?,
+            &PredefinedMenuItem::hide_others(app, None)?,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    #[cfg(not(target_os = "macos"))]
+    let file_menu = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &settings_item,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::close_window(app, None)?,
+            &PredefinedMenuItem::quit(app, None)?,
+        ],
+    )?;
+
+    Menu::with_items(
+        app,
+        &[
+            #[cfg(target_os = "macos")]
+            &app_menu,
+            #[cfg(not(target_os = "macos"))]
+            &file_menu,
+            &edit_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )
+}
+
+fn open_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+    if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
+        let _ = window.unminimize();
+        window.show()?;
+        window.set_focus()?;
+        return Ok(());
+    }
+
+    WebviewWindowBuilder::new(
+        app,
+        SETTINGS_WINDOW_LABEL,
+        WebviewUrl::App("index.html".into()),
+    )
+    .title("Settings")
+    .inner_size(560.0, 540.0)
+    .min_inner_size(460.0, 420.0)
+    .resizable(true)
+    .build()?;
+
+    Ok(())
 }
 
 fn build_model_settings_state<R: tauri::Runtime>(
@@ -543,6 +677,15 @@ fn unique_path(path: PathBuf) -> PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            app.set_menu(build_app_menu(&app.handle())?)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == OPEN_SETTINGS_MENU_ID {
+                let _ = open_settings_window(app);
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             onboarding_state,
             request_permission,

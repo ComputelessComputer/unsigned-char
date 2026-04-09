@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type PermissionKind = "microphone" | "systemAudio";
 type PermissionStatus = "neverRequested" | "authorized" | "denied";
@@ -59,6 +60,8 @@ type ModelDraft = {
 const STORE_KEY = "unsigned-char-meetings";
 const isMacLike = /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
 const NEW_MEETING_SHORTCUT = isMacLike ? "⌘N" : "Ctrl+N";
+const SETTINGS_WINDOW_LABEL = "settings";
+const isSettingsWindow = getCurrentWindow().label === SETTINGS_WINDOW_LABEL;
 const appRoot: HTMLElement = (() => {
   const node = document.querySelector<HTMLElement>("#app");
   if (!node) {
@@ -81,7 +84,6 @@ const state = {
   startMeetingBusy: false,
   saveBusy: false,
   meetingNote: "",
-  homeScrollTop: 0,
 };
 
 function emptyModelDraft(): ModelDraft {
@@ -280,7 +282,7 @@ function renderHome() {
       `;
 
   return `
-    <section class="screen home" id="home-screen">
+    <section class="screen home">
       <header class="screen-header screen-header-row home-header">
         <button class="button primary header-action" id="new-meeting" type="button">
           <span>${state.startMeetingBusy ? "Starting..." : "New meeting"}</span>
@@ -288,12 +290,24 @@ function renderHome() {
         </button>
       </header>
 
-      ${renderModelSection()}
       ${content}
       ${note}
-      <button class="scroll-top-chip" id="scroll-home-top" type="button">
-        Go to top
-      </button>
+    </section>
+  `;
+}
+
+function renderSettingsWindow() {
+  return `
+    <section class="screen settings-screen">
+      <header class="screen-header screen-header-copy">
+        <p class="eyebrow">Settings</p>
+        <h1>Transcription</h1>
+        <p class="body">
+          Choose the bundled Qwen ASR model or point the app at a local Hugging Face snapshot.
+        </p>
+      </header>
+
+      ${renderModelSection()}
     </section>
   `;
 }
@@ -501,94 +515,33 @@ function renderMeeting() {
 }
 
 function render() {
-  const markup = state.view === "home" ? renderHome() : renderMeeting();
+  const markup = isSettingsWindow
+    ? renderSettingsWindow()
+    : state.view === "home"
+      ? renderHome()
+      : renderMeeting();
 
   appRoot.innerHTML = markup;
   bindViewHandlers();
 
-  if (state.view === "home") {
-    const homeScreen = document.querySelector<HTMLElement>("#home-screen");
-    if (homeScreen) {
-      homeScreen.scrollTop = state.homeScrollTop;
+  if (!isSettingsWindow && state.view === "meeting") {
+    const panel = document.querySelector<HTMLElement>("#transcript-panel");
+    if (panel) {
+      panel.scrollTop = panel.scrollHeight;
     }
-    updateHomeScrollChip();
-    return;
   }
-
-  const panel = document.querySelector<HTMLElement>("#transcript-panel");
-  if (panel) {
-    panel.scrollTop = panel.scrollHeight;
-  }
-}
-
-function updateHomeScrollChip() {
-  const homeScreen = document.querySelector<HTMLElement>("#home-screen");
-  const newMeetingButton = document.querySelector<HTMLElement>("#new-meeting");
-  const chip = document.querySelector<HTMLButtonElement>("#scroll-home-top");
-  if (!homeScreen || !newMeetingButton || !chip) {
-    return;
-  }
-
-  const threshold = newMeetingButton.offsetTop + newMeetingButton.offsetHeight;
-  chip.classList.toggle("visible", homeScreen.scrollTop > threshold);
 }
 
 function bindViewHandlers() {
+  if (isSettingsWindow) {
+    bindModelSettingsHandlers();
+    return;
+  }
+
   if (state.view === "home") {
-    const homeScreen = document.querySelector<HTMLElement>("#home-screen");
-    const syncHomeScroll = () => {
-      if (!homeScreen) {
-        return;
-      }
-
-      state.homeScrollTop = homeScreen.scrollTop;
-      updateHomeScrollChip();
-    };
-
-    homeScreen?.addEventListener("scroll", syncHomeScroll, { passive: true });
-
     document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
       void startMeeting();
     });
-
-    document.querySelector<HTMLButtonElement>("#scroll-home-top")?.addEventListener("click", () => {
-      homeScreen?.scrollTo({ top: 0, behavior: "smooth" });
-    });
-
-    document
-      .querySelectorAll<HTMLInputElement>('input[name="model-source"]')
-      .forEach((input) => {
-        input.addEventListener("change", () => {
-          state.modelDraft.source = input.value === "huggingFace" ? "huggingFace" : "bundled";
-          state.modelNote = "";
-          render();
-        });
-      });
-
-    document.querySelector<HTMLInputElement>("#hf-repo")?.addEventListener("input", (event) => {
-      state.modelDraft.huggingFaceRepo = (event.currentTarget as HTMLInputElement).value;
-      state.modelNote = "";
-    });
-
-    document
-      .querySelector<HTMLInputElement>("#hf-revision")
-      ?.addEventListener("input", (event) => {
-        state.modelDraft.huggingFaceRevision = (event.currentTarget as HTMLInputElement).value;
-        state.modelNote = "";
-      });
-
-    document
-      .querySelector<HTMLInputElement>("#hf-local-path")
-      ?.addEventListener("input", (event) => {
-        state.modelDraft.huggingFaceLocalPath = (event.currentTarget as HTMLInputElement).value;
-        state.modelNote = "";
-      });
-
-    document
-      .querySelector<HTMLButtonElement>("#save-model-settings")
-      ?.addEventListener("click", () => {
-        void saveModelSettings();
-      });
 
     document.querySelectorAll<HTMLElement>("[data-open-meeting]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -709,6 +662,43 @@ function bindViewHandlers() {
   });
 }
 
+function bindModelSettingsHandlers() {
+  document
+    .querySelectorAll<HTMLInputElement>('input[name="model-source"]')
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        state.modelDraft.source = input.value === "huggingFace" ? "huggingFace" : "bundled";
+        state.modelNote = "";
+        render();
+      });
+    });
+
+  document.querySelector<HTMLInputElement>("#hf-repo")?.addEventListener("input", (event) => {
+    state.modelDraft.huggingFaceRepo = (event.currentTarget as HTMLInputElement).value;
+    state.modelNote = "";
+  });
+
+  document
+    .querySelector<HTMLInputElement>("#hf-revision")
+    ?.addEventListener("input", (event) => {
+      state.modelDraft.huggingFaceRevision = (event.currentTarget as HTMLInputElement).value;
+      state.modelNote = "";
+    });
+
+  document
+    .querySelector<HTMLInputElement>("#hf-local-path")
+    ?.addEventListener("input", (event) => {
+      state.modelDraft.huggingFaceLocalPath = (event.currentTarget as HTMLInputElement).value;
+      state.modelNote = "";
+    });
+
+  document
+    .querySelector<HTMLButtonElement>("#save-model-settings")
+    ?.addEventListener("click", () => {
+      void saveModelSettings();
+    });
+}
+
 async function refreshPermissions(silent = false) {
   try {
     const onboarding = await invoke<OnboardingState>("onboarding_state");
@@ -801,9 +791,7 @@ async function startMeeting() {
 }
 
 async function ensureModelReady() {
-  if (!state.modelSettings) {
-    await refreshModelSettings(true);
-  }
+  await refreshModelSettings(true);
 
   if (!state.modelSettings) {
     throw new Error("Model settings are still loading.");
@@ -882,7 +870,13 @@ async function saveMeetingAsMarkdown(meeting: Meeting) {
 }
 
 window.addEventListener("DOMContentLoaded", async () => {
-  window.addEventListener("keydown", handleWindowKeydown);
   render();
+
+  if (isSettingsWindow) {
+    await refreshModelSettings(true);
+    return;
+  }
+
+  window.addEventListener("keydown", handleWindowKeydown);
   await Promise.all([refreshPermissions(true), refreshModelSettings(true)]);
 });

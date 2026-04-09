@@ -45,12 +45,15 @@ src-tauri/resources/models/qwen-asr/
 
 That directory is copied into the packaged app bundle automatically.
 
-Users can also switch to a custom Hugging Face model from the home screen by
+Users can also switch to a custom Hugging Face model from the Settings window by
 providing:
 
 - a repo ID or Hugging Face URL
 - an optional revision
 - a local snapshot path on disk
+
+Open Settings from the menu bar or use `Cmd+,` on macOS and `Ctrl+,` on other
+platforms.
 
 ## Run it
 
