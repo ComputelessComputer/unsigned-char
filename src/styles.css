@@ -77,6 +77,7 @@ body {
   overflow: hidden;
   background: var(--background);
   color: var(--text);
+  transition: background-color 160ms ease;
 }
 
 button,
@@ -220,6 +221,10 @@ h2 {
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .meeting-row-top,
@@ -770,6 +775,24 @@ h2 {
   align-items: flex-start;
 }
 
+.meeting-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.meeting-overlay-toggle.active {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  border-color: var(--accent);
+}
+
+.meeting-overlay-toggle.active:hover {
+  background: #27272a;
+  border-color: #27272a;
+}
+
 .meeting-subtitle {
   flex-wrap: wrap;
   align-items: center;
@@ -893,6 +916,33 @@ h2 {
   word-break: break-word;
 }
 
+body[data-meeting-overlay="on"] {
+  --background: rgba(255, 255, 255, 0.28);
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-soft: rgba(245, 245, 242, 0.74);
+  --surface-muted: rgba(251, 251, 248, 0.68);
+  --shadow:
+    0 1px 2px rgba(15, 23, 42, 0.08),
+    0 20px 44px rgba(15, 23, 42, 0.12);
+}
+
+body[data-meeting-overlay="on"] .screen.meeting {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+@media (prefers-color-scheme: dark) {
+  body[data-meeting-overlay="on"] {
+    --background: rgba(15, 15, 16, 0.26);
+    --surface: rgba(23, 24, 26, 0.78);
+    --surface-soft: rgba(32, 33, 36, 0.74);
+    --surface-muted: rgba(19, 20, 22, 0.68);
+    --shadow:
+      0 1px 2px rgba(0, 0, 0, 0.3),
+      0 20px 44px rgba(0, 0, 0, 0.22);
+  }
+}
+
 @media (max-width: 520px) {
   .screen {
     padding: 18px 16px 16px;
@@ -919,6 +969,11 @@ h2 {
   .header-action,
   .meeting-actions .button,
   .composer .button {
+    width: 100%;
+  }
+
+  .meeting-nav .button,
+  .meeting-nav .back-button {
     width: 100%;
   }
 

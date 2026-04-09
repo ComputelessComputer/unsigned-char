@@ -105,7 +105,8 @@ const STORE_KEY = "unsigned-char-meetings";
 const isMacLike = /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
 const NEW_MEETING_SHORTCUT = isMacLike ? "⌘N" : "Ctrl+N";
 const SETTINGS_WINDOW_LABEL = "settings";
-const isSettingsWindow = getCurrentWindow().label === SETTINGS_WINDOW_LABEL;
+const currentWindow = getCurrentWindow();
+const isSettingsWindow = currentWindow.label === SETTINGS_WINDOW_LABEL;
 const LIVE_TRANSCRIPTION_POLL_MS = 1200;
 const appRoot: HTMLElement = (() => {
   const node = document.querySelector<HTMLElement>("#app");
@@ -138,6 +139,8 @@ const state = {
   diarizationRunBusy: false,
   saveBusy: false,
   meetingNote: "",
+  meetingOverlayBusy: false,
+  meetingOverlayEnabled: false,
   homeScrollTop: 0,
 };
 
@@ -931,7 +934,18 @@ function renderMeeting() {
   return `
     <section class="screen meeting">
       <header class="meeting-header">
-        <button class="back-button" id="back-home" type="button">Back</button>
+        <div class="meeting-nav">
+          <button class="back-button" id="back-home" type="button">Back</button>
+          <button
+            class="button ghost meeting-overlay-toggle ${state.meetingOverlayEnabled ? "active" : ""}"
+            id="toggle-meeting-overlay"
+            type="button"
+            aria-pressed="${state.meetingOverlayEnabled ? "true" : "false"}"
+            ${state.meetingOverlayBusy ? "disabled" : ""}
+          >
+            ${state.meetingOverlayBusy ? "Updating..." : state.meetingOverlayEnabled ? "Overlay on" : "Overlay"}
+          </button>
+        </div>
         <div class="meeting-heading">
           <p class="eyebrow">Meeting</p>
           <h1 class="meeting-title">
@@ -1002,6 +1016,7 @@ function render() {
       : renderMeeting();
 
   appRoot.innerHTML = markup;
+  syncMeetingOverlayAppearance();
   bindViewHandlers();
   syncLiveTranscriptionPolling();
 
@@ -1020,6 +1035,22 @@ function render() {
       panel.scrollTop = panel.scrollHeight;
     }
   }
+}
+
+function syncMeetingOverlayAppearance() {
+  document.body.dataset.meetingOverlay =
+    !isSettingsWindow && state.view === "meeting" && state.meetingOverlayEnabled ? "on" : "off";
+}
+
+async function setMeetingOverlayEnabled(enabled: boolean) {
+  if (isSettingsWindow || state.meetingOverlayEnabled === enabled) {
+    syncMeetingOverlayAppearance();
+    return;
+  }
+
+  await currentWindow.setAlwaysOnTop(enabled);
+  state.meetingOverlayEnabled = enabled;
+  syncMeetingOverlayAppearance();
 }
 
 function syncLiveTranscriptionPolling() {
@@ -1213,11 +1244,48 @@ function bindViewHandlers() {
     return;
   }
 
-  document.querySelector<HTMLButtonElement>("#back-home")?.addEventListener("click", () => {
+  document.querySelector<HTMLButtonElement>("#back-home")?.addEventListener("click", async () => {
+    if (state.meetingOverlayEnabled) {
+      try {
+        await setMeetingOverlayEnabled(false);
+      } catch (error) {
+        state.meetingNote =
+          error instanceof Error
+            ? `Failed to disable overlay: ${error.message}`
+            : `Failed to disable overlay: ${String(error)}`;
+        render();
+        return;
+      }
+    }
+
     state.activeMeetingId = null;
     state.view = "home";
     render();
   });
+
+  document
+    .querySelector<HTMLButtonElement>("#toggle-meeting-overlay")
+    ?.addEventListener("click", async () => {
+      if (state.meetingOverlayBusy) {
+        return;
+      }
+
+      state.meetingOverlayBusy = true;
+      state.meetingNote = "";
+      render();
+
+      try {
+        await setMeetingOverlayEnabled(!state.meetingOverlayEnabled);
+      } catch (error) {
+        state.meetingNote =
+          error instanceof Error
+            ? `Overlay toggle failed: ${error.message}`
+            : `Overlay toggle failed: ${String(error)}`;
+      } finally {
+        state.meetingOverlayBusy = false;
+        render();
+      }
+    });
 
   document
     .querySelector<HTMLButtonElement>("#toggle-meeting-status")
