@@ -5,7 +5,7 @@ machine.
 
 It is meant to:
 
-- listen to your microphone and system audio at the same time
+- listen to your microphone locally
 - transcribe the conversation locally
 - use Qwen ASR for speech recognition
 - use pyannote.audio for speaker diarization when diarization is enabled
@@ -25,21 +25,18 @@ The app has three views:
 3. Go to Home.
 4. Use the floating action button to create a meeting.
 5. Watch the transcript in the Meeting view.
-6. Save the meeting as a Markdown file when you need it.
+6. Add a local audio file path in the Meeting view and run speaker diarization when you need speaker turns.
+7. Save the meeting as a Markdown file when you need it.
 
 ## Current status
 
-This repo is still at the starting point. The app structure is in place, but
-the actual audio capture and transcription flow are not wired yet.
+The app now runs local microphone transcription through Qwen ASR and can export
+meeting notes as Markdown.
 
-The app now stores model selection and resolves the default Qwen ASR path from
-bundled Tauri resources. The runtime still needs to consume that selection when
-real transcription is wired in.
-
-Speaker diarization is now configured separately through local
-`pyannote.audio`, but the runtime still needs a Python worker to run
-diarization and merge those speaker turns into the transcript when that
-pipeline is implemented.
+Speaker diarization also runs locally through a bundled Python runner that
+invokes `pyannote.audio`. Today that path is file-based: add an audio file path
+per meeting, run diarization, and the app will store speaker segments with the
+meeting.
 
 ## Model setup
 
@@ -67,14 +64,21 @@ Speaker diarization uses
 [`pyannote.audio`](https://github.com/pyannote/pyannote-audio) with the local
 `pyannote/speaker-diarization-community-1` pipeline.
 
-Local diarization still needs the runtime work to run Python and `ffmpeg`, but
-the app now stores the settings needed for that path.
-
 From the Settings window you can:
 
 - enable or disable speaker diarization
 - point the app at a local `community-1` snapshot path
 - use a saved Hugging Face token or `HF_TOKEN` / `HUGGINGFACE_TOKEN` from your environment
+
+The local runner expects:
+
+- `python3` or `python`
+- `ffmpeg`
+- `pyannote.audio` and its PyTorch dependencies installed in that Python environment
+
+If you do not provide a local snapshot path, the runner will use your Hugging
+Face token to download `pyannote/speaker-diarization-community-1` into the
+standard Hugging Face cache the first time it runs.
 
 ## Run it
 

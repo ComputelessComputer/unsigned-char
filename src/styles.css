@@ -111,6 +111,11 @@ button {
   padding-bottom: 96px;
 }
 
+.screen.meeting {
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
 .settings-shell {
   width: 100%;
   height: 100%;
@@ -197,7 +202,9 @@ h2 {
 
 .meeting-list,
 .model-card,
-.transcript-list {
+.transcript-list,
+.meeting-panel,
+.diarization-segment-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -206,7 +213,9 @@ h2 {
 .meeting-row,
 .model-card,
 .transcript-panel,
-.empty-state {
+.empty-state,
+.meeting-panel,
+.diarization-segment {
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface);
@@ -485,7 +494,9 @@ h2 {
 .model-source-grid,
 .model-footer,
 .field-row,
-.toggle-row {
+.toggle-row,
+.meeting-panel-header,
+.diarization-segment-top {
   display: flex;
   gap: 12px;
 }
@@ -744,6 +755,16 @@ h2 {
   gap: 14px;
 }
 
+.meeting-panel {
+  padding: 18px;
+}
+
+.meeting-panel-header,
+.diarization-segment-top {
+  align-items: center;
+  justify-content: space-between;
+}
+
 .meeting-header {
   align-items: flex-start;
 }
@@ -796,6 +817,10 @@ h2 {
   flex: 1 1 140px;
 }
 
+.meeting-actions-compact .button {
+  flex: 1 1 180px;
+}
+
 .transcript-panel {
   padding: 12px;
   background: var(--surface-muted);
@@ -828,6 +853,19 @@ h2 {
 .transcript-empty {
   min-height: 100%;
   justify-content: center;
+}
+
+.diarization-segment {
+  padding: 14px;
+}
+
+.diarization-segment strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.diarization-empty {
+  box-shadow: none;
 }
 
 .composer {
@@ -866,6 +904,7 @@ h2 {
   .screen-header-row,
   .meeting-header,
   .model-card-header,
+  .meeting-panel-header,
   .model-footer,
   .field-row {
     flex-direction: column;

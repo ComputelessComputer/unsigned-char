@@ -29,7 +29,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "resources/models"
+      "resources/models",
+      "resources/scripts"
     ],
     "icon": [
       "icons/32x32.png",

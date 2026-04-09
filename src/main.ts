@@ -22,6 +22,11 @@ type Meeting = {
   updatedAt: string;
   status: MeetingStatus;
   transcript: string[];
+  audioPath: string;
+  diarizationSegments: DiarizationSegment[];
+  diarizationSpeakerCount: number;
+  diarizationPipelineSource: string | null;
+  diarizationRanAt: string | null;
   exportPath: string | null;
 };
 
@@ -68,11 +73,40 @@ type DiarizationDraft = {
   huggingFaceToken: string;
 };
 
+type DiarizationSegment = {
+  speaker: string;
+  startSeconds: number;
+  endSeconds: number;
+};
+
+type LocalDiarizationResult = {
+  audioPath: string;
+  pipelineSource: string;
+  speakerCount: number;
+  segments: DiarizationSegment[];
+};
+
+type MarkdownExport = {
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  status: MeetingStatus;
+  transcript: string;
+  speakerTurns: string;
+};
+
+type LiveTranscriptionState = {
+  running: boolean;
+  text: string;
+  error: string | null;
+};
+
 const STORE_KEY = "unsigned-char-meetings";
 const isMacLike = /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
 const NEW_MEETING_SHORTCUT = isMacLike ? "⌘N" : "Ctrl+N";
 const SETTINGS_WINDOW_LABEL = "settings";
 const isSettingsWindow = getCurrentWindow().label === SETTINGS_WINDOW_LABEL;
+const LIVE_TRANSCRIPTION_POLL_MS = 1200;
 const appRoot: HTMLElement = (() => {
   const node = document.querySelector<HTMLElement>("#app");
   if (!node) {
@@ -97,9 +131,17 @@ const state = {
   diarizationBusy: false,
   diarizationNote: "",
   startMeetingBusy: false,
+  transcriptionBusy: false,
+  transcriptionRunning: false,
+  liveTranscriptText: "",
+  recordingMeetingId: null as string | null,
+  diarizationRunBusy: false,
+  saveBusy: false,
   meetingNote: "",
   homeScrollTop: 0,
 };
+
+let liveTranscriptionPollId: number | null = null;
 
 function emptyModelDraft(): ModelDraft {
   return {
@@ -147,27 +189,96 @@ function loadMeetings(): Meeting[] {
       return [];
     }
 
-    return parsed.filter(isMeeting);
+    return parsed
+      .map(normalizeMeeting)
+      .filter((meeting): meeting is Meeting => meeting !== null);
   } catch {
     return [];
   }
 }
 
-function isMeeting(value: unknown): value is Meeting {
+function normalizeMeeting(value: unknown): Meeting | null {
   if (!value || typeof value !== "object") {
-    return false;
+    return null;
   }
 
   const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.title === "string" &&
-    typeof candidate.createdAt === "string" &&
-    typeof candidate.updatedAt === "string" &&
-    (candidate.status === "live" || candidate.status === "done") &&
-    Array.isArray(candidate.transcript) &&
-    (typeof candidate.exportPath === "string" || candidate.exportPath === null)
-  );
+  if (
+    typeof candidate.id !== "string" ||
+    typeof candidate.title !== "string" ||
+    typeof candidate.createdAt !== "string" ||
+    typeof candidate.updatedAt !== "string" ||
+    (candidate.status !== "live" && candidate.status !== "done") ||
+    !Array.isArray(candidate.transcript)
+  ) {
+    return null;
+  }
+
+  const diarizationSegments = normalizeDiarizationSegments(candidate.diarizationSegments);
+
+  return {
+    id: candidate.id,
+    title: candidate.title,
+    createdAt: candidate.createdAt,
+    updatedAt: candidate.updatedAt,
+    status: candidate.status,
+    transcript: candidate.transcript.filter((line): line is string => typeof line === "string"),
+    audioPath: typeof candidate.audioPath === "string" ? candidate.audioPath : "",
+    diarizationSegments,
+    diarizationSpeakerCount:
+      typeof candidate.diarizationSpeakerCount === "number" &&
+      Number.isFinite(candidate.diarizationSpeakerCount)
+        ? candidate.diarizationSpeakerCount
+        : distinctSpeakerCount(diarizationSegments),
+    diarizationPipelineSource:
+      typeof candidate.diarizationPipelineSource === "string" &&
+      candidate.diarizationPipelineSource.length > 0
+        ? candidate.diarizationPipelineSource
+        : null,
+    diarizationRanAt:
+      typeof candidate.diarizationRanAt === "string" && candidate.diarizationRanAt.length > 0
+        ? candidate.diarizationRanAt
+        : null,
+    exportPath:
+      typeof candidate.exportPath === "string" && candidate.exportPath.length > 0
+        ? candidate.exportPath
+        : null,
+  };
+}
+
+function normalizeDiarizationSegments(value: unknown): DiarizationSegment[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((segment) => {
+    if (!segment || typeof segment !== "object") {
+      return [];
+    }
+
+    const candidate = segment as Record<string, unknown>;
+    if (
+      typeof candidate.speaker !== "string" ||
+      typeof candidate.startSeconds !== "number" ||
+      typeof candidate.endSeconds !== "number" ||
+      !Number.isFinite(candidate.startSeconds) ||
+      !Number.isFinite(candidate.endSeconds)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        speaker: candidate.speaker,
+        startSeconds: candidate.startSeconds,
+        endSeconds: candidate.endSeconds,
+      },
+    ];
+  });
+}
+
+function distinctSpeakerCount(segments: DiarizationSegment[]) {
+  return new Set(segments.map((segment) => segment.speaker)).size;
 }
 
 function persistMeetings() {
@@ -183,6 +294,10 @@ function sortedMeetings() {
 
 function getActiveMeeting() {
   return state.meetings.find((meeting) => meeting.id === state.activeMeetingId) ?? null;
+}
+
+function getRecordingMeeting() {
+  return state.meetings.find((meeting) => meeting.id === state.recordingMeetingId) ?? null;
 }
 
 function updateMeeting(id: string, updater: (meeting: Meeting) => Meeting) {
@@ -201,15 +316,21 @@ function createMeeting() {
     updatedAt: createdAt,
     status: "live",
     transcript: [],
+    audioPath: "",
+    diarizationSegments: [],
+    diarizationSpeakerCount: 0,
+    diarizationPipelineSource: null,
+    diarizationRanAt: null,
     exportPath: null,
   };
 
   state.meetings = [meeting, ...state.meetings];
   state.activeMeetingId = meeting.id;
+  state.recordingMeetingId = meeting.id;
   state.view = "meeting";
-  state.meetingNote = "";
   persistMeetings();
   render();
+  return meeting;
 }
 
 function buildMeetingTitle(iso: string) {
@@ -252,6 +373,42 @@ function formatDate(iso: string) {
   });
 }
 
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatClockSeconds(seconds: number) {
+  const totalSeconds = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+
+  return `${minutes.toString().padStart(2, "0")}:${remainder
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+function formatSpeakerTurnsMarkdown(meeting: Meeting) {
+  if (meeting.diarizationSegments.length === 0) {
+    return "";
+  }
+
+  const lines = meeting.diarizationSegments.map((segment) => {
+    const range = `${formatClockSeconds(segment.startSeconds)}-${formatClockSeconds(segment.endSeconds)}`;
+    return `- ${segment.speaker}: ${range}`;
+  });
+
+  if (meeting.diarizationPipelineSource) {
+    lines.unshift(`- Pipeline: ${meeting.diarizationPipelineSource}`);
+  }
+
+  return lines.join("\n");
+}
+
 function handleWindowKeydown(event: KeyboardEvent) {
   if (
     event.defaultPrevented ||
@@ -284,52 +441,38 @@ function requiresModelSetup() {
   return Boolean(state.modelSettings && !state.modelSettings.selectedReady);
 }
 
-function requiresDiarizationSetup() {
-  return Boolean(
-    state.diarizationSettings &&
-      state.diarizationSettings.enabled &&
-      !state.diarizationSettings.ready,
-  );
-}
-
 function requiresAppSetup() {
-  return requiresModelSetup() || requiresDiarizationSetup();
+  return requiresModelSetup();
 }
 
 function setupBannerCopy(settings: ModelSettings) {
   if (settings.source === "bundled") {
-    return settings.bundledStatus;
+    return "Bundled Qwen3-ASR files are missing.";
   }
 
-  return settings.huggingFaceStatus;
+  return "Choose a local Hugging Face snapshot with vocab.json and safetensors files.";
 }
 
 function currentSetupBannerContent() {
-  const messages: string[] = [];
-
-  if (requiresModelSetup() && state.modelSettings) {
-    messages.push(setupBannerCopy(state.modelSettings));
-  }
-
-  if (requiresDiarizationSetup() && state.diarizationSettings) {
-    messages.push(state.diarizationSettings.status);
-  }
-
-  if (messages.length === 0) {
+  if (!requiresModelSetup() || !state.modelSettings) {
     return null;
   }
 
-  const title =
-    messages.length > 1
-      ? "Finish transcription and diarization setup"
-      : requiresModelSetup()
-        ? "Transcription model unavailable"
-        : "Speaker diarization unavailable";
-
   return {
-    title,
-    copy: messages.join(" "),
+    title: "Transcription model unavailable",
+    copy: setupBannerCopy(state.modelSettings),
   };
+}
+
+function meetingTranscriptLines(meeting: Meeting) {
+  const lines = [...meeting.transcript];
+  const liveText =
+    state.recordingMeetingId === meeting.id ? state.liveTranscriptText.trim() : "";
+  if (liveText) {
+    lines.push(liveText);
+  }
+
+  return lines;
 }
 
 async function openSettingsWindow() {
@@ -361,7 +504,7 @@ function renderHome() {
   const items = sortedMeetings();
   const setupBanner = renderSetupBanner();
   const startDisabled = state.startMeetingBusy || requiresAppSetup();
-  const note = state.permissionNote
+  const permissionNote = state.permissionNote
     ? `<p class="meta home-note">${escapeHtml(state.permissionNote)}</p>`
     : "";
   const content =
@@ -378,7 +521,10 @@ function renderHome() {
         <div class="meeting-list">
           ${items
             .map((meeting) => {
-              const preview = meeting.transcript[meeting.transcript.length - 1] ?? "No transcript yet";
+              const livePreview =
+                state.recordingMeetingId === meeting.id ? state.liveTranscriptText.trim() : "";
+              const preview = livePreview || meeting.transcript[meeting.transcript.length - 1] || "No transcript yet";
+              const lineCount = meeting.transcript.length + (livePreview ? 1 : 0);
               return `
                 <button class="meeting-row" data-open-meeting="${meeting.id}" type="button">
                   <div class="meeting-row-copy">
@@ -388,7 +534,7 @@ function renderHome() {
                     </div>
                     <p class="meeting-preview">${escapeHtml(preview)}</p>
                     <p class="meeting-meta">
-                      ${formatDate(meeting.updatedAt)} · ${meeting.transcript.length} lines
+                      ${formatDate(meeting.updatedAt)} · ${lineCount} lines
                     </p>
                   </div>
                 </button>
@@ -414,7 +560,7 @@ function renderHome() {
 
       ${setupBanner}
       ${content}
-      ${note}
+      ${permissionNote}
       <button class="scroll-top-chip" id="scroll-home-top" type="button">
         Go to top
       </button>
@@ -469,7 +615,7 @@ function renderModelSection() {
       </div>
 
       <p class="meta">
-        Packaged builds resolve the default Qwen ASR model from the app bundle. Save changes to switch the app to a local Hugging Face snapshot.
+        Packaged builds resolve the bundled Qwen3-ASR model from the app bundle. Save changes to switch the app to a local Hugging Face snapshot.
       </p>
 
       <div class="model-source-grid">
@@ -505,7 +651,7 @@ function renderModelSection() {
           id="hf-repo"
           class="composer-input"
           autocomplete="off"
-          placeholder="Qwen/Qwen2-Audio-7B-Instruct"
+          placeholder="Qwen/Qwen3-ASR-0.6B"
           value="${escapeHtml(draft.huggingFaceRepo)}"
         />
       </label>
@@ -650,6 +796,105 @@ function renderDiarizationSection() {
   `;
 }
 
+function renderMeetingDiarizationPanel(meeting: Meeting) {
+  const settings = state.diarizationSettings;
+  const diarizationEnabled = Boolean(settings?.enabled);
+  const diarizationReady = Boolean(settings?.enabled && settings.ready);
+  const statusLabel = !diarizationEnabled ? "off" : diarizationReady ? "ready" : "needs setup";
+  const statusClass = !diarizationEnabled ? "off" : diarizationReady ? "ready" : "missing";
+  const note = meeting.diarizationRanAt
+    ? `${meeting.diarizationSpeakerCount} speakers across ${meeting.diarizationSegments.length} segments · ${formatDateTime(meeting.diarizationRanAt)}`
+    : diarizationEnabled
+      ? "Provide an audio file for this meeting and run diarization locally."
+      : "Enable speaker diarization in Settings before running it.";
+  const helperCopy = diarizationReady
+    ? "The app runs pyannote.audio locally against the file path you provide here."
+    : settings?.status ?? "Load diarization settings to see the local runner status.";
+  const pipelineSource = meeting.diarizationPipelineSource
+    ? `
+      <div class="model-path-row">
+        <span class="meta-label">Last pipeline source</span>
+        <code>${escapeHtml(meeting.diarizationPipelineSource)}</code>
+      </div>
+    `
+    : "";
+  const segmentsMarkup =
+    meeting.diarizationSegments.length === 0
+      ? `
+        <div class="empty-state diarization-empty">
+          <p class="empty-title">No speaker turns yet</p>
+          <p class="body">
+            ${escapeHtml(
+              meeting.audioPath
+                ? "Run diarization to label speakers for the current audio file."
+                : "Add an audio file path to run local diarization for this meeting.",
+            )}
+          </p>
+        </div>
+      `
+      : `
+        <div class="diarization-segment-list">
+          ${meeting.diarizationSegments
+            .map(
+              (segment, index) => `
+                <article class="diarization-segment">
+                  <div class="diarization-segment-top">
+                    <strong>${escapeHtml(segment.speaker)}</strong>
+                    <span class="meta">
+                      ${formatClockSeconds(segment.startSeconds)}-${formatClockSeconds(segment.endSeconds)}
+                    </span>
+                  </div>
+                  <p class="meta">Segment ${index + 1}</p>
+                </article>
+              `,
+            )
+            .join("")}
+        </div>
+      `;
+
+  return `
+    <section class="meeting-panel">
+      <div class="meeting-panel-header">
+        <div>
+          <p class="eyebrow">Diarization</p>
+          <h2>Speaker turns</h2>
+        </div>
+        <span class="model-status ${statusClass}">
+          ${escapeHtml(statusLabel)}
+        </span>
+      </div>
+
+      <p class="meta">${escapeHtml(helperCopy)}</p>
+
+      <label class="field">
+        <span class="meta-label">Audio file path</span>
+        <input
+          id="meeting-audio-path"
+          class="composer-input"
+          autocomplete="off"
+          placeholder="~/Recordings/meeting.wav"
+          value="${escapeHtml(meeting.audioPath)}"
+        />
+      </label>
+
+      <div class="meeting-actions meeting-actions-compact">
+        <button class="button secondary" id="run-diarization" type="button" ${
+          state.diarizationRunBusy ? "disabled" : ""
+        }>
+          ${state.diarizationRunBusy ? "Running..." : "Run diarization"}
+        </button>
+        <button class="button ghost" id="open-diarization-settings" type="button">
+          Settings
+        </button>
+      </div>
+
+      <p class="meta">${escapeHtml(note)}</p>
+      ${pipelineSource}
+      ${segmentsMarkup}
+    </section>
+  `;
+}
+
 function renderMeeting() {
   const meeting = getActiveMeeting();
   if (!meeting) {
@@ -657,19 +902,20 @@ function renderMeeting() {
     return renderHome();
   }
 
+  const transcriptLines = meetingTranscriptLines(meeting);
   const transcript =
-    meeting.transcript.length === 0
+    transcriptLines.length === 0
       ? `
         <div class="empty-state transcript-empty">
           <p class="empty-title">Live transcript</p>
           <p class="body">
-            Transcript lines will appear here. For now, use the input below to simulate live text.
+            Start speaking and your microphone transcript will appear here.
           </p>
         </div>
       `
       : `
         <div class="transcript-list">
-          ${meeting.transcript
+          ${transcriptLines
             .map(
               (line, index) => `
                 <article class="transcript-line">
@@ -681,8 +927,6 @@ function renderMeeting() {
             .join("")}
         </div>
       `;
-
-  const note = state.meetingNote || meeting.exportPath || "";
 
   return `
     <section class="screen meeting">
@@ -708,7 +952,9 @@ function renderMeeting() {
       </header>
 
       <div class="meeting-actions">
-        <button class="button ghost" id="toggle-meeting-status" type="button">
+        <button class="button ghost" id="toggle-meeting-status" type="button" ${
+          state.transcriptionBusy ? "disabled" : ""
+        }>
           ${
             meeting.status === "live"
               ? "End live"
@@ -720,24 +966,30 @@ function renderMeeting() {
               `
           }
         </button>
+        <button class="button secondary" id="save-markdown" type="button" ${
+          state.saveBusy ? "disabled" : ""
+        }>
+          ${state.saveBusy ? "Saving..." : "Save .md"}
+        </button>
       </div>
+
+      <p class="meta meeting-runtime">
+        ${
+          meeting.status === "live"
+            ? state.transcriptionRunning
+              ? "Listening on your microphone and transcribing locally."
+              : "Starting local microphone transcription..."
+            : "Meeting transcription is paused."
+        }
+      </p>
 
       <section class="transcript-panel" id="transcript-panel">
         ${transcript}
       </section>
 
-      <form class="composer" id="transcript-form">
-        <input
-          id="transcript-input"
-          class="composer-input"
-          name="line"
-          autocomplete="off"
-          placeholder="Add a transcript line"
-        />
-        <button class="button primary" type="submit">Add</button>
-      </form>
+      ${renderMeetingDiarizationPanel(meeting)}
 
-      <p class="meta meeting-note">${escapeHtml(note)}</p>
+      <p class="meta meeting-note">${escapeHtml(state.meetingNote || meeting.exportPath || "")}</p>
     </section>
   `;
 }
@@ -751,6 +1003,7 @@ function render() {
 
   appRoot.innerHTML = markup;
   bindViewHandlers();
+  syncLiveTranscriptionPolling();
 
   if (!isSettingsWindow && state.view === "home") {
     const homeScreen = document.querySelector<HTMLElement>("#home-screen");
@@ -767,6 +1020,130 @@ function render() {
       panel.scrollTop = panel.scrollHeight;
     }
   }
+}
+
+function syncLiveTranscriptionPolling() {
+  if (isSettingsWindow) {
+    return;
+  }
+
+  const shouldPoll = state.transcriptionRunning || state.transcriptionBusy;
+  if (!shouldPoll) {
+    if (liveTranscriptionPollId !== null) {
+      window.clearInterval(liveTranscriptionPollId);
+      liveTranscriptionPollId = null;
+    }
+    return;
+  }
+
+  if (liveTranscriptionPollId !== null) {
+    return;
+  }
+
+  liveTranscriptionPollId = window.setInterval(() => {
+    void refreshLiveTranscription(true);
+  }, LIVE_TRANSCRIPTION_POLL_MS);
+}
+
+function finalizeLiveTranscript(markDone = false) {
+  const meeting = getRecordingMeeting();
+  const text = state.liveTranscriptText.trim();
+
+  if (!meeting) {
+    state.liveTranscriptText = "";
+    state.recordingMeetingId = null;
+    return;
+  }
+
+  updateMeeting(meeting.id, (current) => {
+    const transcript =
+      text && current.transcript[current.transcript.length - 1] !== text
+        ? [...current.transcript, text]
+        : current.transcript;
+
+    return {
+      ...current,
+      transcript,
+      status: markDone ? "done" : current.status,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+
+  state.liveTranscriptText = "";
+  state.recordingMeetingId = null;
+}
+
+async function refreshLiveTranscription(silent = false) {
+  try {
+    const snapshot = await invoke<LiveTranscriptionState>("live_transcription_state");
+    const wasRunning = state.transcriptionRunning;
+
+    state.transcriptionRunning = snapshot.running;
+    state.liveTranscriptText = snapshot.text.trim();
+
+    if (snapshot.error) {
+      state.meetingNote = snapshot.error;
+    }
+
+    if (wasRunning && !snapshot.running) {
+      finalizeLiveTranscript(true);
+    }
+  } catch (error) {
+    if (!silent) {
+      state.meetingNote = `Live transcription failed: ${String(error)}`;
+    }
+    state.transcriptionRunning = false;
+  } finally {
+    state.transcriptionBusy = false;
+    syncLiveTranscriptionPolling();
+    if (!silent) {
+      render();
+    }
+  }
+}
+
+async function startLiveTranscriptionSession(meetingId: string | null) {
+  const snapshot = await invoke<LiveTranscriptionState>("start_live_transcription");
+  if (snapshot.error) {
+    throw new Error(snapshot.error);
+  }
+
+  if (!snapshot.running) {
+    throw new Error("Failed to start local transcription.");
+  }
+
+  state.recordingMeetingId = meetingId;
+  state.transcriptionRunning = snapshot.running;
+  state.liveTranscriptText = snapshot.text.trim();
+  syncLiveTranscriptionPolling();
+}
+
+async function stopLiveTranscriptionSession() {
+  const snapshot = await invoke<LiveTranscriptionState>("stop_live_transcription");
+
+  state.transcriptionRunning = snapshot.running;
+  state.liveTranscriptText = snapshot.text.trim();
+
+  if (snapshot.error) {
+    state.meetingNote = snapshot.error;
+  }
+
+  finalizeLiveTranscript(true);
+  syncLiveTranscriptionPolling();
+}
+
+async function stopActiveRecordingIfNeeded(nextMeetingId: string | null = null) {
+  const activeMeeting = getRecordingMeeting();
+  if (!activeMeeting || activeMeeting.id === nextMeetingId) {
+    return;
+  }
+
+  await stopLiveTranscriptionSession();
+  updateMeeting(activeMeeting.id, (current) => ({
+    ...current,
+    status: "done",
+    updatedAt: new Date().toISOString(),
+  }));
 }
 
 function updateHomeScrollChip() {
@@ -838,41 +1215,56 @@ function bindViewHandlers() {
 
   document.querySelector<HTMLButtonElement>("#back-home")?.addEventListener("click", () => {
     state.activeMeetingId = null;
-    state.meetingNote = "";
     state.view = "home";
     render();
   });
 
   document
     .querySelector<HTMLButtonElement>("#toggle-meeting-status")
-    ?.addEventListener("click", () => {
-      updateMeeting(meeting.id, (current) => ({
-        ...current,
-        status: current.status === "live" ? "done" : "live",
-        updatedAt: new Date().toISOString(),
-      }));
-      state.meetingNote = "";
-      render();
-    });
-
-  document
-    .querySelector<HTMLFormElement>("#transcript-form")
-    ?.addEventListener("submit", (event) => {
-      event.preventDefault();
-      const input = document.querySelector<HTMLInputElement>("#transcript-input");
-      const line = input?.value.trim() ?? "";
-      if (!line) {
+    ?.addEventListener("click", async () => {
+      if (state.transcriptionBusy) {
         return;
       }
 
-      updateMeeting(meeting.id, (current) => ({
-        ...current,
-        transcript: [...current.transcript, line],
-        updatedAt: new Date().toISOString(),
-      }));
+      state.transcriptionBusy = true;
       state.meetingNote = "";
       render();
+
+      try {
+        if (meeting.status === "live") {
+          await stopLiveTranscriptionSession();
+          updateMeeting(meeting.id, (current) => ({
+            ...current,
+            status: "done",
+            updatedAt: new Date().toISOString(),
+          }));
+        } else {
+          await ensureModelReady();
+          await requestPermissionForMeeting("microphone");
+          await stopActiveRecordingIfNeeded(meeting.id);
+          await startLiveTranscriptionSession(meeting.id);
+          updateMeeting(meeting.id, (current) => ({
+            ...current,
+            status: "live",
+            updatedAt: new Date().toISOString(),
+          }));
+        }
+      } catch (error) {
+        state.meetingNote = error instanceof Error ? error.message : String(error);
+      } finally {
+        state.transcriptionBusy = false;
+        render();
+      }
     });
+
+  document.querySelector<HTMLButtonElement>("#save-markdown")?.addEventListener("click", () => {
+    const currentMeeting = getActiveMeeting();
+    if (!currentMeeting) {
+      return;
+    }
+
+    void saveMeetingAsMarkdown(currentMeeting);
+  });
 
   const titleInput = document.querySelector<HTMLInputElement>("#meeting-title-input");
   const commitTitle = () => {
@@ -921,6 +1313,29 @@ function bindViewHandlers() {
     titleInput.value = currentMeeting.title;
     titleInput.blur();
   });
+
+  document
+    .querySelector<HTMLInputElement>("#meeting-audio-path")
+    ?.addEventListener("input", (event) => {
+      const value = (event.currentTarget as HTMLInputElement).value;
+      updateMeeting(meeting.id, (current) => ({
+        ...current,
+        audioPath: value,
+        updatedAt: current.updatedAt,
+      }));
+    });
+
+  document
+    .querySelector<HTMLButtonElement>("#run-diarization")
+    ?.addEventListener("click", () => {
+      void runMeetingDiarization();
+    });
+
+  document
+    .querySelector<HTMLButtonElement>("#open-diarization-settings")
+    ?.addEventListener("click", () => {
+      void openSettingsWindow();
+    });
 }
 
 function bindModelSettingsHandlers() {
@@ -1083,14 +1498,18 @@ async function startMeeting() {
 
   try {
     await ensureModelReady();
-    await ensureDiarizationReady();
     await requestPermissionForMeeting("microphone");
-    await requestPermissionForMeeting("systemAudio");
-    createMeeting();
+    await stopActiveRecordingIfNeeded();
+    state.transcriptionBusy = true;
+    render();
+    await startLiveTranscriptionSession(null);
+    const meeting = createMeeting();
+    state.recordingMeetingId = meeting.id;
   } catch (error) {
     state.permissionNote = error instanceof Error ? error.message : String(error);
     render();
   } finally {
+    state.transcriptionBusy = false;
     state.startMeetingBusy = false;
     render();
   }
@@ -1121,11 +1540,65 @@ async function ensureDiarizationReady() {
     throw new Error("Diarization settings are still loading.");
   }
 
-  if (!state.diarizationSettings.enabled || state.diarizationSettings.ready) {
+  if (!state.diarizationSettings.enabled) {
+    await openSettingsWindow();
+    throw new Error("Enable speaker diarization in Settings before running it.");
+  }
+
+  if (state.diarizationSettings.ready) {
     return;
   }
 
+  await openSettingsWindow();
   throw new Error(state.diarizationSettings.status);
+}
+
+async function runMeetingDiarization() {
+  const meeting = getActiveMeeting();
+  if (!meeting || state.diarizationRunBusy) {
+    return;
+  }
+
+  const audioPathInput = document.querySelector<HTMLInputElement>("#meeting-audio-path");
+  const audioPath = audioPathInput?.value.trim() ?? meeting.audioPath.trim();
+
+  updateMeeting(meeting.id, (current) => ({
+    ...current,
+    audioPath,
+    updatedAt: current.updatedAt,
+  }));
+
+  state.diarizationRunBusy = true;
+  state.meetingNote = "";
+  render();
+
+  try {
+    await ensureDiarizationReady();
+
+    const result = await invoke<LocalDiarizationResult>("run_local_diarization", {
+      input: { audioPath },
+    });
+
+    updateMeeting(meeting.id, (current) => ({
+      ...current,
+      audioPath: result.audioPath,
+      diarizationSegments: result.segments,
+      diarizationSpeakerCount: result.speakerCount,
+      diarizationPipelineSource: result.pipelineSource,
+      diarizationRanAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+
+    state.meetingNote =
+      result.segments.length === 0
+        ? "Diarization finished, but no speaker turns were detected."
+        : `Detected ${result.speakerCount} speakers across ${result.segments.length} segments.`;
+  } catch (error) {
+    state.meetingNote = error instanceof Error ? error.message : String(error);
+  } finally {
+    state.diarizationRunBusy = false;
+    render();
+  }
 }
 
 async function saveModelSettings() {
@@ -1187,6 +1660,40 @@ async function saveDiarizationSettings() {
     state.diarizationNote = `Diarization save failed: ${String(error)}`;
   } finally {
     state.diarizationBusy = false;
+    render();
+  }
+}
+
+async function saveMeetingAsMarkdown(meeting: Meeting) {
+  if (state.saveBusy) {
+    return;
+  }
+
+  state.saveBusy = true;
+  state.meetingNote = "";
+  render();
+
+  const exportPayload: MarkdownExport = {
+    title: meeting.title,
+    createdAt: meeting.createdAt,
+    updatedAt: meeting.updatedAt,
+    status: meeting.status,
+    transcript: meetingTranscriptLines(meeting).join("\n\n"),
+    speakerTurns: formatSpeakerTurnsMarkdown(meeting),
+  };
+
+  try {
+    const path = await invoke<string>("save_meeting_markdown", { export: exportPayload });
+    updateMeeting(meeting.id, (current) => ({
+      ...current,
+      exportPath: path,
+      updatedAt: new Date().toISOString(),
+    }));
+    state.meetingNote = `Saved to ${path}`;
+  } catch (error) {
+    state.meetingNote = `Save failed: ${String(error)}`;
+  } finally {
+    state.saveBusy = false;
     render();
   }
 }
