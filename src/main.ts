@@ -211,8 +211,6 @@ const state = {
   recordingMeetingId: null as string | null,
   diarizationRunBusy: false,
   meetingNote: "",
-  meetingOverlayBusy: false,
-  meetingOverlayEnabled: false,
   homeScrollTop: 0,
 };
 
@@ -1160,7 +1158,6 @@ function render() {
 
   appRoot.innerHTML = markup;
   syncMeetingOverlayAppearance();
-  syncMeetingAlwaysOnTop();
   bindViewHandlers();
   syncLiveTranscriptionPolling();
 
@@ -1182,42 +1179,19 @@ function render() {
 }
 
 function syncMeetingOverlayAppearance() {
-  document.body.dataset.meetingOverlay = !isSettingsWindow && state.view === "meeting" ? "on" : "off";
+  document.body.dataset.meetingOverlay = "on";
 }
 
-function syncMeetingAlwaysOnTop() {
-  if (isSettingsWindow || state.meetingOverlayBusy) {
-    return;
-  }
-
-  const enabled = state.view === "meeting";
-  if (state.meetingOverlayEnabled === enabled) {
-    return;
-  }
-
-  state.meetingOverlayBusy = true;
-  void setMeetingOverlayEnabled(enabled)
-    .catch((error) => {
+async function ensureWindowAlwaysOnTop() {
+  try {
+    await currentWindow.setAlwaysOnTop(true);
+  } catch (error) {
+    if (!isSettingsWindow) {
       state.meetingNote =
         error instanceof Error ? `Always on top failed: ${error.message}` : `Always on top failed: ${String(error)}`;
-    })
-    .finally(() => {
-      state.meetingOverlayBusy = false;
-      if (enabled !== (state.view === "meeting")) {
-        syncMeetingAlwaysOnTop();
-      }
-    });
-}
-
-async function setMeetingOverlayEnabled(enabled: boolean) {
-  if (isSettingsWindow || state.meetingOverlayEnabled === enabled) {
-    syncMeetingOverlayAppearance();
-    return;
+      render();
+    }
   }
-
-  await currentWindow.setAlwaysOnTop(enabled);
-  state.meetingOverlayEnabled = enabled;
-  syncMeetingOverlayAppearance();
 }
 
 function syncLiveTranscriptionPolling() {
@@ -1846,6 +1820,8 @@ async function saveGeneralSettings() {
 }
 
 function handleAppFocus() {
+  void ensureWindowAlwaysOnTop();
+
   if (isSettingsWindow) {
     return;
   }
@@ -1860,6 +1836,7 @@ function handleAppFocus() {
 
 window.addEventListener("DOMContentLoaded", async () => {
   render();
+  await ensureWindowAlwaysOnTop();
   if (isSettingsWindow) {
     await refreshGeneralSettings(true);
     return;

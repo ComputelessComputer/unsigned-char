@@ -1054,7 +1054,7 @@ body[data-meeting-overlay="on"] {
     0 20px 44px rgba(15, 23, 42, 0.12);
 }
 
-body[data-meeting-overlay="on"] .screen.meeting {
+body[data-meeting-overlay="on"] .screen {
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
 }
