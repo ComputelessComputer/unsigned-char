@@ -578,6 +578,7 @@ function renderDiarizationSection() {
     ? `<p class="meta">${escapeHtml(settings.huggingFaceTokenSourceLabel)} Leave the field blank to keep the current token.</p>`
     : '<p class="meta">Paste a Hugging Face access token if pyannote.audio should download the community-1 pipeline locally.</p>';
   const statusLabel = !settings.enabled ? "off" : settings.ready ? "ready" : "needs setup";
+  const statusClass = !settings.enabled ? "off" : settings.ready ? "ready" : "missing";
   const resolvedPath = settings.resolvedLocalPath ?? "No local pipeline path configured.";
 
   return `
@@ -587,7 +588,7 @@ function renderDiarizationSection() {
           <p class="eyebrow">Diarization</p>
           <h2>Speaker diarization</h2>
         </div>
-        <span class="model-status ${settings.ready ? "ready" : "missing"}">
+        <span class="model-status ${statusClass}">
           ${escapeHtml(statusLabel)}
         </span>
       </div>
