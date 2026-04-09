@@ -7,30 +7,30 @@
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
     radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.42) 0%, transparent 34%),
-    radial-gradient(circle at 86% 88%, rgba(125, 141, 255, 0.16) 0%, transparent 38%),
+    radial-gradient(circle at 86% 88%, rgba(224, 226, 232, 0.16) 0%, transparent 38%),
     rgba(236, 241, 248, 0.18);
   --background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04)),
     radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.42) 0%, transparent 34%),
-    radial-gradient(circle at 86% 88%, rgba(125, 141, 255, 0.16) 0%, transparent 38%),
+    radial-gradient(circle at 86% 88%, rgba(224, 226, 232, 0.16) 0%, transparent 38%),
     rgba(236, 241, 248, 0.18);
   --surface:
     linear-gradient(180deg, rgba(255, 255, 255, 0.58) 0%, rgba(255, 255, 255, 0.18) 38%, rgba(255, 255, 255, 0.1) 100%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.72) 0%, rgba(255, 255, 255, 0.18) 26%, rgba(255, 255, 255, 0) 56%),
     radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.18) 30%, transparent 58%),
-    radial-gradient(circle at 92% 115%, rgba(128, 146, 255, 0.14) 0%, transparent 36%),
+    radial-gradient(circle at 92% 115%, rgba(224, 226, 232, 0.14) 0%, transparent 36%),
     rgba(255, 255, 255, 0.24);
   --surface-soft:
     linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.14) 42%, rgba(255, 255, 255, 0.08) 100%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.14) 24%, rgba(255, 255, 255, 0) 52%),
     radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.82) 0%, rgba(255, 255, 255, 0.14) 26%, transparent 56%),
-    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.12) 0%, transparent 34%),
+    radial-gradient(circle at 92% 112%, rgba(224, 226, 232, 0.12) 0%, transparent 34%),
     rgba(255, 255, 255, 0.18);
   --surface-muted:
     linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0.12) 44%, rgba(255, 255, 255, 0.07) 100%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.54) 0%, rgba(255, 255, 255, 0.12) 24%, rgba(255, 255, 255, 0) 48%),
     radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0.12) 24%, transparent 52%),
-    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.1) 0%, transparent 34%),
+    radial-gradient(circle at 92% 112%, rgba(224, 226, 232, 0.1) 0%, transparent 34%),
     rgba(255, 255, 255, 0.14);
   --border: rgba(255, 255, 255, 0.38);
   --border-strong: rgba(255, 255, 255, 0.58);
@@ -62,30 +62,30 @@
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
       radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.14) 0%, transparent 34%),
-      radial-gradient(circle at 88% 90%, rgba(113, 128, 255, 0.18) 0%, transparent 38%),
+      radial-gradient(circle at 88% 90%, rgba(118, 121, 130, 0.18) 0%, transparent 38%),
       rgba(14, 15, 19, 0.26);
     --background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
       radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.14) 0%, transparent 34%),
-      radial-gradient(circle at 88% 90%, rgba(113, 128, 255, 0.18) 0%, transparent 38%),
+      radial-gradient(circle at 88% 90%, rgba(118, 121, 130, 0.18) 0%, transparent 38%),
       rgba(14, 15, 19, 0.26);
     --surface:
       linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 36%, rgba(255, 255, 255, 0.03) 100%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 24%, rgba(255, 255, 255, 0) 54%),
       radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.06) 30%, transparent 58%),
-      radial-gradient(circle at 92% 115%, rgba(118, 133, 255, 0.18) 0%, transparent 36%),
+      radial-gradient(circle at 92% 115%, rgba(118, 121, 130, 0.18) 0%, transparent 36%),
       rgba(21, 24, 30, 0.34);
     --surface-soft:
       linear-gradient(180deg, rgba(255, 255, 255, 0.11) 0%, rgba(255, 255, 255, 0.04) 40%, rgba(255, 255, 255, 0.03) 100%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 24%, rgba(255, 255, 255, 0) 50%),
       radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 26%, transparent 56%),
-      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.16) 0%, transparent 34%),
+      radial-gradient(circle at 92% 112%, rgba(118, 121, 130, 0.16) 0%, transparent 34%),
       rgba(24, 27, 34, 0.28);
     --surface-muted:
       linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 42%, rgba(255, 255, 255, 0.02) 100%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 22%, rgba(255, 255, 255, 0) 48%),
       radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.04) 24%, transparent 52%),
-      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.14) 0%, transparent 34%),
+      radial-gradient(circle at 92% 112%, rgba(118, 121, 130, 0.14) 0%, transparent 34%),
       rgba(18, 20, 26, 0.24);
     --border: rgba(255, 255, 255, 0.12);
     --border-strong: rgba(255, 255, 255, 0.22);
@@ -134,7 +134,7 @@ body::before {
   background:
     radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.82) 0%, transparent 28%),
     radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.22) 0%, transparent 30%),
-    radial-gradient(circle at 88% 86%, rgba(120, 134, 255, 0.18) 0%, transparent 36%),
+    radial-gradient(circle at 88% 86%, rgba(224, 226, 232, 0.18) 0%, transparent 36%),
     var(--background);
   backdrop-filter: blur(30px) saturate(1.2);
   -webkit-backdrop-filter: blur(30px) saturate(1.2);
@@ -147,7 +147,7 @@ body::after {
   pointer-events: none;
   background:
     linear-gradient(118deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.12) 18%, transparent 36%),
-    linear-gradient(308deg, rgba(130, 145, 255, 0.18) 0%, transparent 32%);
+    linear-gradient(308deg, rgba(224, 226, 232, 0.18) 0%, transparent 32%);
   filter: blur(20px);
   opacity: 0.92;
   transform: translate3d(-4%, -2%, 0);
@@ -506,7 +506,7 @@ h2 {
   border: 1px solid var(--border-strong);
   border-radius: 18px;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08) 42%, rgba(120, 134, 255, 0.08)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.08) 42%, rgba(224, 226, 232, 0.08)),
     var(--surface-soft);
   color: var(--text);
   text-align: left;
@@ -523,7 +523,7 @@ h2 {
 .setup-banner:hover {
   border-color: var(--border-strong);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 42%, rgba(120, 134, 255, 0.1)),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.1) 42%, rgba(224, 226, 232, 0.1)),
     var(--surface);
 }
 
@@ -1012,13 +1012,13 @@ h2 {
 
   .setup-banner {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 42%, rgba(118, 133, 255, 0.1)),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04) 42%, rgba(118, 121, 130, 0.1)),
       var(--surface-soft);
   }
 
   .setup-banner:hover {
     background:
-      linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05) 42%, rgba(118, 133, 255, 0.12)),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05) 42%, rgba(118, 121, 130, 0.12)),
       var(--surface);
   }
 
@@ -1253,25 +1253,25 @@ body[data-meeting-overlay="on"] {
   --background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05)),
     radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.46) 0%, transparent 34%),
-    radial-gradient(circle at 86% 88%, rgba(125, 141, 255, 0.18) 0%, transparent 38%),
+    radial-gradient(circle at 86% 88%, rgba(224, 226, 232, 0.18) 0%, transparent 38%),
     rgba(255, 255, 255, 0.12);
   --surface:
     linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.2) 40%, rgba(255, 255, 255, 0.12) 100%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.76) 0%, rgba(255, 255, 255, 0.22) 28%, rgba(255, 255, 255, 0) 56%),
     radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.2) 28%, transparent 56%),
-    radial-gradient(circle at 92% 115%, rgba(128, 146, 255, 0.16) 0%, transparent 36%),
+    radial-gradient(circle at 92% 115%, rgba(224, 226, 232, 0.16) 0%, transparent 36%),
     rgba(255, 255, 255, 0.28);
   --surface-soft:
     linear-gradient(180deg, rgba(255, 255, 255, 0.54) 0%, rgba(255, 255, 255, 0.16) 42%, rgba(255, 255, 255, 0.1) 100%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.68) 0%, rgba(255, 255, 255, 0.18) 26%, rgba(255, 255, 255, 0) 54%),
     radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.86) 0%, rgba(255, 255, 255, 0.18) 24%, transparent 54%),
-    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.14) 0%, transparent 34%),
+    radial-gradient(circle at 92% 112%, rgba(224, 226, 232, 0.14) 0%, transparent 34%),
     rgba(255, 255, 255, 0.22);
   --surface-muted:
     linear-gradient(180deg, rgba(255, 255, 255, 0.46) 0%, rgba(255, 255, 255, 0.14) 44%, rgba(255, 255, 255, 0.08) 100%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.14) 24%, rgba(255, 255, 255, 0) 48%),
     radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0.14) 24%, transparent 52%),
-    radial-gradient(circle at 92% 112%, rgba(128, 146, 255, 0.12) 0%, transparent 34%),
+    radial-gradient(circle at 92% 112%, rgba(224, 226, 232, 0.12) 0%, transparent 34%),
     rgba(255, 255, 255, 0.18);
   --shadow:
     0 1px 2px rgba(15, 23, 42, 0.08),
@@ -1288,39 +1288,39 @@ body[data-meeting-overlay="on"] .screen {
     background:
       radial-gradient(circle at 10% 12%, rgba(255, 255, 255, 0.16) 0%, transparent 30%),
       radial-gradient(circle at 82% 14%, rgba(255, 255, 255, 0.08) 0%, transparent 28%),
-      radial-gradient(circle at 88% 86%, rgba(113, 128, 255, 0.16) 0%, transparent 36%),
+      radial-gradient(circle at 88% 86%, rgba(118, 121, 130, 0.16) 0%, transparent 36%),
       var(--background);
   }
 
   body::after {
     background:
       linear-gradient(118deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 18%, transparent 36%),
-      linear-gradient(308deg, rgba(118, 133, 255, 0.16) 0%, transparent 32%);
+      linear-gradient(308deg, rgba(118, 121, 130, 0.16) 0%, transparent 32%);
   }
 
   body[data-meeting-overlay="on"] {
     --background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
       radial-gradient(circle at 12% 10%, rgba(255, 255, 255, 0.16) 0%, transparent 34%),
-      radial-gradient(circle at 88% 90%, rgba(113, 128, 255, 0.2) 0%, transparent 38%),
+      radial-gradient(circle at 88% 90%, rgba(118, 121, 130, 0.2) 0%, transparent 38%),
       rgba(14, 15, 19, 0.18);
     --surface:
       linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.06) 36%, rgba(255, 255, 255, 0.04) 100%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 26%, rgba(255, 255, 255, 0) 56%),
       radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.08) 28%, transparent 56%),
-      radial-gradient(circle at 92% 115%, rgba(118, 133, 255, 0.2) 0%, transparent 36%),
+      radial-gradient(circle at 92% 115%, rgba(118, 121, 130, 0.2) 0%, transparent 36%),
       rgba(21, 24, 30, 0.3);
     --surface-soft:
       linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 40%, rgba(255, 255, 255, 0.04) 100%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.07) 24%, rgba(255, 255, 255, 0) 50%),
       radial-gradient(circle at 8% 0%, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.07) 24%, transparent 54%),
-      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.18) 0%, transparent 34%),
+      radial-gradient(circle at 92% 112%, rgba(118, 121, 130, 0.18) 0%, transparent 34%),
       rgba(24, 27, 34, 0.26);
     --surface-muted:
       linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.04) 42%, rgba(255, 255, 255, 0.03) 100%),
       linear-gradient(135deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 22%, rgba(255, 255, 255, 0) 48%),
       radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.05) 22%, transparent 50%),
-      radial-gradient(circle at 92% 112%, rgba(118, 133, 255, 0.16) 0%, transparent 34%),
+      radial-gradient(circle at 92% 112%, rgba(118, 121, 130, 0.16) 0%, transparent 34%),
       rgba(18, 20, 26, 0.22);
     --shadow:
       0 1px 2px rgba(0, 0, 0, 0.3),
