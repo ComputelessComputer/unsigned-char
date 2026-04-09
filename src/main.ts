@@ -84,6 +84,7 @@ const state = {
   startMeetingBusy: false,
   saveBusy: false,
   meetingNote: "",
+  homeScrollTop: 0,
 };
 
 function emptyModelDraft(): ModelDraft {
@@ -268,6 +269,7 @@ function renderHome() {
                   <div class="meeting-row-copy">
                     <div class="meeting-row-top">
                       <h2>${escapeHtml(meeting.title)}</h2>
+                      <span class="status-badge ${meeting.status}">${meeting.status}</span>
                     </div>
                     <p class="meeting-preview">${escapeHtml(preview)}</p>
                     <p class="meeting-meta">
@@ -282,7 +284,7 @@ function renderHome() {
       `;
 
   return `
-    <section class="screen home">
+    <section class="screen home" id="home-screen">
       <header class="screen-header screen-header-row home-header">
         <button class="button primary header-action" id="new-meeting" type="button">
           <span>${state.startMeetingBusy ? "Starting..." : "New meeting"}</span>
@@ -292,22 +294,27 @@ function renderHome() {
 
       ${content}
       ${note}
+      <button class="scroll-top-chip" id="scroll-home-top" type="button">
+        Go to top
+      </button>
     </section>
   `;
 }
 
 function renderSettingsWindow() {
   return `
-    <section class="screen settings-screen">
-      <header class="screen-header screen-header-copy">
-        <p class="eyebrow">Settings</p>
-        <h1>Transcription</h1>
-        <p class="body">
-          Choose the bundled Qwen ASR model or point the app at a local Hugging Face snapshot.
-        </p>
-      </header>
+    <section class="settings-shell">
+      <div class="screen settings-screen">
+        <header class="screen-header screen-header-copy">
+          <p class="eyebrow">Settings</p>
+          <h1>Transcription</h1>
+          <p class="body">
+            Choose the bundled Qwen ASR model or point the app at a local Hugging Face snapshot.
+          </p>
+        </header>
 
-      ${renderModelSection()}
+        ${renderModelSection()}
+      </div>
     </section>
   `;
 }
@@ -478,6 +485,7 @@ function renderMeeting() {
             />
           </h1>
           <p class="meeting-subtitle">
+            <span class="status-badge ${meeting.status}">${meeting.status}</span>
             <span>${formatTime(meeting.createdAt)}</span>
           </p>
         </div>
@@ -524,12 +532,33 @@ function render() {
   appRoot.innerHTML = markup;
   bindViewHandlers();
 
+  if (!isSettingsWindow && state.view === "home") {
+    const homeScreen = document.querySelector<HTMLElement>("#home-screen");
+    if (homeScreen) {
+      homeScreen.scrollTop = state.homeScrollTop;
+    }
+    updateHomeScrollChip();
+    return;
+  }
+
   if (!isSettingsWindow && state.view === "meeting") {
     const panel = document.querySelector<HTMLElement>("#transcript-panel");
     if (panel) {
       panel.scrollTop = panel.scrollHeight;
     }
   }
+}
+
+function updateHomeScrollChip() {
+  const homeScreen = document.querySelector<HTMLElement>("#home-screen");
+  const newMeetingButton = document.querySelector<HTMLElement>("#new-meeting");
+  const chip = document.querySelector<HTMLButtonElement>("#scroll-home-top");
+  if (!homeScreen || !newMeetingButton || !chip) {
+    return;
+  }
+
+  const threshold = newMeetingButton.offsetTop + newMeetingButton.offsetHeight;
+  chip.classList.toggle("visible", homeScreen.scrollTop > threshold);
 }
 
 function bindViewHandlers() {
@@ -539,8 +568,24 @@ function bindViewHandlers() {
   }
 
   if (state.view === "home") {
+    const homeScreen = document.querySelector<HTMLElement>("#home-screen");
+    const syncHomeScroll = () => {
+      if (!homeScreen) {
+        return;
+      }
+
+      state.homeScrollTop = homeScreen.scrollTop;
+      updateHomeScrollChip();
+    };
+
+    homeScreen?.addEventListener("scroll", syncHomeScroll, { passive: true });
+
     document.querySelector<HTMLButtonElement>("#new-meeting")?.addEventListener("click", () => {
       void startMeeting();
+    });
+
+    document.querySelector<HTMLButtonElement>("#scroll-home-top")?.addEventListener("click", () => {
+      homeScreen?.scrollTo({ top: 0, behavior: "smooth" });
     });
 
     document.querySelectorAll<HTMLElement>("[data-open-meeting]").forEach((button) => {
@@ -871,7 +916,6 @@ async function saveMeetingAsMarkdown(meeting: Meeting) {
 
 window.addEventListener("DOMContentLoaded", async () => {
   render();
-
   if (isSettingsWindow) {
     await refreshModelSettings(true);
     return;

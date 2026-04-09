@@ -95,6 +95,17 @@ button {
   padding: 24px 20px 20px;
 }
 
+.screen.home {
+  overflow-y: auto;
+  padding-bottom: 96px;
+}
+
+.settings-shell {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
 .screen-header,
 .screen-header-copy,
 .meeting-heading,
@@ -167,7 +178,6 @@ h2 {
   font-size: 13px;
 }
 
-.meeting-list,
 .transcript-panel {
   flex: 1;
   min-height: 0;
@@ -202,6 +212,35 @@ h2 {
 
 .meeting-row-top {
   align-items: center;
+  justify-content: space-between;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: capitalize;
+}
+
+.status-badge.live {
+  color: var(--accent-foreground);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.status-badge.done {
+  color: var(--success);
+  background: var(--success-soft);
+  border-color: rgba(4, 120, 87, 0.12);
 }
 
 .button,
@@ -235,7 +274,8 @@ h2 {
 .button:focus-visible,
 .back-button:focus-visible,
 .composer-input:focus-visible,
-.meeting-row:focus-visible {
+.meeting-row:focus-visible,
+.scroll-top-chip:focus-visible {
   outline: none;
   border-color: var(--border-strong);
   box-shadow:
@@ -291,12 +331,54 @@ h2 {
   padding-inline: 16px;
 }
 
+.scroll-top-chip {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(8px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.scroll-top-chip.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.scroll-top-chip:hover {
+  border-color: var(--border-strong);
+  background: #fcfcfa;
+}
+
 .home-note {
   margin-top: auto;
 }
 
 .settings-screen {
-  overflow: auto;
+  height: auto;
+  min-height: 100%;
 }
 
 .model-card {
@@ -409,7 +491,8 @@ h2 {
   .button:focus-visible,
   .back-button:focus-visible,
   .composer-input:focus-visible,
-  .meeting-row:focus-visible {
+  .meeting-row:focus-visible,
+  .scroll-top-chip:focus-visible {
     box-shadow:
       0 0 0 3px rgba(255, 255, 255, 0.08),
       0 1px 2px rgba(0, 0, 0, 0.24);
@@ -426,6 +509,10 @@ h2 {
 
   .model-source-option {
     background: #131416;
+  }
+
+  .scroll-top-chip:hover {
+    background: #1d1f22;
   }
 }
 
@@ -599,6 +686,10 @@ h2 {
     padding: 18px 16px 16px;
   }
 
+  .screen.home {
+    padding-bottom: 88px;
+  }
+
   .screen-header-row,
   .meeting-header,
   .model-card-header,
@@ -616,6 +707,11 @@ h2 {
   .meeting-actions .button,
   .composer .button {
     width: 100%;
+  }
+
+  .scroll-top-chip {
+    right: 16px;
+    bottom: 16px;
   }
 
   .meeting-row-top {
