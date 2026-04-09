@@ -11,8 +11,6 @@ use std::{
 use asr::{LiveTranscriptionState, TranscriptionManager};
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "macos")]
-use tauri::window::{Effect, EffectsBuilder};
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
     Manager, State, WebviewUrl, WebviewWindowBuilder,
@@ -44,8 +42,6 @@ const PYANNOTE_PROVIDER_LABEL: &str = "pyannote.audio";
 const PYANNOTE_PIPELINE_REPO: &str = "pyannote/speaker-diarization-community-1";
 const HUGGING_FACE_TOKEN_ENV: &str = "HF_TOKEN";
 const HUGGING_FACE_ALT_TOKEN_ENV: &str = "HUGGINGFACE_TOKEN";
-#[cfg(target_os = "macos")]
-const MACOS_TAHOE_WINDOW_RADIUS: f64 = 38.0;
 
 #[derive(Default)]
 struct AppState {
@@ -734,19 +730,9 @@ fn show_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::
     .transparent(true)
     .always_on_top(true)
     .resizable(true);
-    #[cfg(target_os = "macos")]
-    let builder = builder.effects(macos_tahoe_window_effects());
     builder.build()?;
 
     Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn macos_tahoe_window_effects() -> tauri::utils::config::WindowEffectsConfig {
-    EffectsBuilder::new()
-        .effect(Effect::WindowBackground)
-        .radius(MACOS_TAHOE_WINDOW_RADIUS)
-        .build()
 }
 
 fn default_managed_model_settings<R: tauri::Runtime>(
@@ -1772,10 +1758,6 @@ pub fn run() {
         .manage(AppState::default())
         .setup(|app| {
             app.set_menu(build_app_menu(app.handle())?)?;
-            #[cfg(target_os = "macos")]
-            app.get_webview_window("main")
-                .expect("main window should exist")
-                .set_effects(macos_tahoe_window_effects())?;
             Ok(())
         })
         .on_menu_event(|app, event| {
