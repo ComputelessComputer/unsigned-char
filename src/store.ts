@@ -154,6 +154,7 @@ const LIVE_TRANSCRIPTION_POLL_MS = 1200;
 const MODEL_DOWNLOAD_POLL_MS = 1000;
 const MEETING_MARKDOWN_SYNC_MS = 250;
 const MARKDOWN_SAVE_ERROR_PREFIX = "Markdown save failed:";
+const liveTranscriptionPermissionKinds: PermissionKind[] = ["microphone", "systemAudio"];
 const pendingAutoDiarizationMeetingIds: string[] = [];
 let autoDiarizationDrainRunning = false;
 
@@ -1034,6 +1035,10 @@ async function ensureDiarizationReady() {
   throw new Error(state.diarizationSettings.status);
 }
 
+function permissionLabel(permission: PermissionKind) {
+  return permission === "microphone" ? "Microphone" : "System audio";
+}
+
 async function requestPermissionForMeeting(permission: PermissionKind) {
   await refreshPermissions(true);
   const status = state.onboarding?.permissions[permission];
@@ -1043,9 +1048,7 @@ async function requestPermissionForMeeting(permission: PermissionKind) {
 
   if (status === "denied") {
     await invoke("open_permission_settings", { permission });
-    throw new Error(
-      `${permission === "microphone" ? "Microphone" : "System audio"} access is off. Enable it in System Settings and try again.`,
-    );
+    throw new Error(`${permissionLabel(permission)} access is off. Enable it in System Settings and try again.`);
   }
 
   await invoke("request_permission", { permission });
@@ -1061,9 +1064,36 @@ async function requestPermissionForMeeting(permission: PermissionKind) {
   const nextStatus = state.onboarding?.permissions[permission];
   if (nextStatus === "denied") {
     await invoke("open_permission_settings", { permission });
-    throw new Error(
-      `${permission === "microphone" ? "Microphone" : "System audio"} access is required to start a meeting.`,
-    );
+    throw new Error(`${permissionLabel(permission)} access is required to start a meeting.`);
+  }
+}
+
+async function prepareMeetingPermissions() {
+  await requestPermissionForMeeting(liveTranscriptionPermissionKinds[0]);
+
+  try {
+    await requestPermissionForMeeting(liveTranscriptionPermissionKinds[1]);
+  } catch (error) {
+    patch({
+      meetingNote: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function requestMeetingPermission(permission: PermissionKind) {
+  patch({
+    permissionNote: "",
+    meetingNote: "",
+  });
+
+  try {
+    await requestPermissionForMeeting(permission);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    patch({
+      permissionNote: message,
+      meetingNote: message,
+    });
   }
 }
 
@@ -1194,11 +1224,12 @@ async function startMeeting() {
   patch({
     startMeetingBusy: true,
     permissionNote: "",
+    meetingNote: "",
   });
 
   try {
     await ensureModelReady();
-    await requestPermissionForMeeting("microphone");
+    await prepareMeetingPermissions();
     await stopActiveRecordingIfNeeded();
     patch({ transcriptionBusy: true });
     await startLiveTranscriptionSession(null);
@@ -1235,7 +1266,7 @@ async function toggleMeetingStatus(meetingId: string) {
     }
 
     await ensureModelReady();
-    await requestPermissionForMeeting("microphone");
+    await prepareMeetingPermissions();
     await stopActiveRecordingIfNeeded(meeting.id);
     await startLiveTranscriptionSession(meeting.id);
     updateMeeting(meeting.id, (current) => ({
@@ -1651,6 +1682,7 @@ export const appStore = {
   start,
   startMeeting,
   toggleMeetingStatus,
+  requestMeetingPermission,
   runMeetingDiarization,
   revealMeetingExportInFinder,
   deleteMeeting,
