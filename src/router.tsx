@@ -8,8 +8,9 @@ import {
   useNavigate,
   useParams,
 } from "@tanstack/react-router";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ChevronDown, ChevronLeft } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useMemo, useState } from "react";
 
 import brandWordmark from "./assets/brand-wordmark.svg";
 import {
@@ -92,12 +93,39 @@ const insetPanelClass =
 const emptyStateClass =
   "rounded-[var(--radius)] border border-dashed border-[color:var(--border-strong)] bg-[color:var(--secondary)] px-6 py-8 text-center";
 const windowShellHeightClass = "h-[calc(100vh-4.75rem)]";
+const appWindow = getCurrentWindow();
 
 type SearchableOption = {
   value: string;
   label: string;
   detail?: string;
 };
+
+function shouldSkipWindowDrag(target: EventTarget | null) {
+  return target instanceof Element && target.closest('[data-window-drag="false"]') !== null;
+}
+
+function WindowDragRegion({
+  className,
+  children,
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
+  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || shouldSkipWindowDrag(event.target)) {
+      return;
+    }
+
+    void appWindow.startDragging();
+  };
+
+  return (
+    <div className={className} onMouseDown={handleMouseDown}>
+      {children}
+    </div>
+  );
+}
 
 function SearchableSelect({
   ariaLabel,
@@ -425,7 +453,7 @@ function SpokenLanguagesCombobox({
 function RootLayout() {
   return (
     <div className="isolate min-h-screen w-full text-zinc-900">
-      <div data-tauri-drag-region className="h-14 w-full" />
+      <WindowDragRegion className="h-14 w-full" />
       <div className="px-4 pb-5">
         <Outlet />
       </div>
@@ -441,28 +469,30 @@ function HomeScreen() {
 
   return (
     <section className={cn("mx-auto flex max-w-[780px] flex-col gap-4", windowShellHeightClass)}>
-      <header className="flex items-center justify-between gap-4">
+      <WindowDragRegion className="flex items-center justify-between gap-4">
         <BrandWordmark className="shrink-0" />
-        <Button
-          size="lg"
-          className="gap-3 px-5"
-          disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
-          onClick={async () => {
-            const meeting = await appStore.startMeeting();
-            if (meeting) {
-              navigate({
-                to: "/meeting/$meetingId",
-                params: { meetingId: meeting.id },
-              });
-            }
-          }}
-        >
-          <span className="inline-flex items-center gap-2">
-            <span className="inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
-            <span className="text-white">{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
-          </span>
-        </Button>
-      </header>
+        <div data-window-drag="false">
+          <Button
+            size="lg"
+            className="gap-3 px-5"
+            disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
+            onClick={async () => {
+              const meeting = await appStore.startMeeting();
+              if (meeting) {
+                navigate({
+                  to: "/meeting/$meetingId",
+                  params: { meetingId: meeting.id },
+                });
+              }
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <span className="inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
+              <span className="text-white">{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
+            </span>
+          </Button>
+        </div>
+      </WindowDragRegion>
 
       <div
         id="home-content"
@@ -684,26 +714,28 @@ function MeetingScreen() {
     <section
       className={cn("mx-auto flex max-w-[760px] flex-col gap-4 overflow-y-auto pr-1", windowShellHeightClass)}
     >
-      <header className="flex flex-col gap-2">
+      <WindowDragRegion className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0"
-            aria-label="Back"
-            onClick={() => {
-              navigate({ to: "/" });
-            }}
-          >
-            <IconBack />
-          </Button>
+          <div data-window-drag="false">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              aria-label="Back"
+              onClick={() => {
+                navigate({ to: "/" });
+              }}
+            >
+              <IconBack />
+            </Button>
+          </div>
           <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
         </div>
 
-        <div className="min-w-0 pl-[3.25rem]">
+        <div className="min-w-0 pl-[3.25rem]" data-window-drag="false">
           <MeetingTitleField key={meeting.id} meetingId={meeting.id} title={meeting.title} />
         </div>
-      </header>
+      </WindowDragRegion>
 
       <div className="flex items-center justify-start">
         <Button
