@@ -37,7 +37,6 @@ import {
   LANGUAGE_OPTIONS,
   appStore,
   currentSetupBannerContent,
-  formatClockSeconds,
   formatDateTime,
   getMeetingTranscriptLines,
   getTimezoneOptions,
@@ -734,11 +733,6 @@ function MeetingScreen() {
   }
 
   const transcriptLines = getMeetingTranscriptLines(meeting);
-  const diarizationEnabled = Boolean(snapshot.diarizationSettings?.enabled);
-  const diarizationReady = Boolean(snapshot.diarizationSettings?.enabled && snapshot.diarizationSettings.ready);
-  const diarizationStatusTone = !diarizationEnabled ? "off" : diarizationReady ? "ready" : "missing";
-  const diarizationStatusLabel =
-    !diarizationEnabled ? "off" : diarizationReady ? "ready" : "needs setup";
   const transcriptPermissionRows = (
     [
       {
@@ -785,7 +779,7 @@ function MeetingScreen() {
         </div>
       </WindowDragRegion>
 
-      <div className="flex items-center justify-start">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <Button
           variant={meeting.status === "live" ? "destructive" : "outline"}
           disabled={snapshot.transcriptionBusy}
@@ -802,6 +796,30 @@ function MeetingScreen() {
             </>
           )}
         </Button>
+
+        <label className="block w-full max-w-[176px]">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+            Speaker count
+          </span>
+          <NumberField
+            className="mt-2"
+            min={1}
+            step={1}
+            value={meeting.requestedSpeakerCount}
+            onValueChange={(value) => {
+              appStore.updateMeetingRequestedSpeakerCount(
+                meeting.id,
+                value === null ? "" : String(value),
+              );
+            }}
+          >
+            <NumberFieldGroup>
+              <NumberFieldDecrement />
+              <NumberFieldInput placeholder="Auto" aria-label="Speaker count" />
+              <NumberFieldIncrement />
+            </NumberFieldGroup>
+          </NumberField>
+        </label>
       </div>
 
       <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4 pb-4 pr-5">
@@ -883,132 +901,6 @@ function MeetingScreen() {
                 </div>
               )}
             </section>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex-row items-start justify-between gap-4">
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                  Diarization
-                </p>
-                <CardTitle className="text-xl">Speaker turns</CardTitle>
-              </div>
-              <CardAction>
-                <StatusBadge tone={diarizationStatusTone}>{diarizationStatusLabel}</StatusBadge>
-              </CardAction>
-            </CardHeader>
-
-            <CardPanel className="pt-0">
-              <p className="text-sm leading-6 text-zinc-600">
-                {diarizationReady
-                  ? "The app runs pyannote.audio locally against the file path below after the meeting ends. Add a speaker count if you want to lock the diarization pass to a specific number of speakers."
-                  : snapshot.diarizationSettings?.status ?? "Speaker diarization is not ready yet."}
-              </p>
-
-              <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_160px]">
-                <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                    Audio file path
-                  </span>
-                  <Input
-                    uiSize="lg"
-                    className="mt-2"
-                    value={meeting.audioPath}
-                    onChange={(event) => {
-                      appStore.updateMeetingAudioPath(meeting.id, event.target.value);
-                    }}
-                    placeholder="~/Recordings/meeting.wav"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                    Speaker count
-                  </span>
-                  <NumberField
-                    className="mt-2"
-                    min={1}
-                    step={1}
-                    value={meeting.requestedSpeakerCount}
-                    onValueChange={(value) => {
-                      appStore.updateMeetingRequestedSpeakerCount(
-                        meeting.id,
-                        value === null ? "" : String(value),
-                      );
-                    }}
-                  >
-                    <NumberFieldGroup>
-                      <NumberFieldDecrement />
-                      <NumberFieldInput placeholder="Auto" aria-label="Speaker count" />
-                      <NumberFieldIncrement />
-                    </NumberFieldGroup>
-                  </NumberField>
-                </label>
-              </div>
-
-              <div className="mt-4">
-                <Button
-                  variant="secondary"
-                  disabled={snapshot.diarizationRunBusy}
-                  onClick={() => {
-                    void appStore.runMeetingDiarization(meeting.id);
-                  }}
-                >
-                  {snapshot.diarizationRunBusy ? "Running..." : "Run diarization"}
-                </Button>
-              </div>
-
-              <p className="mt-4 text-sm leading-6 text-zinc-600">
-                {meeting.diarizationRanAt
-                  ? `${meeting.diarizationSpeakerCount} speakers across ${meeting.diarizationSegments.length} segments · ${formatDateTime(meeting.diarizationRanAt)}`
-                  : diarizationEnabled
-                    ? "Add an audio file path and the app will run diarization automatically after the meeting ends."
-                    : "Speaker diarization is not available in this build yet."}
-              </p>
-
-              {meeting.diarizationPipelineSource ? (
-                <div className={cn("mt-4", insetPanelClass)}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                    Last pipeline source
-                  </p>
-                  <code className="mt-1 block break-all text-xs text-zinc-700">
-                    {meeting.diarizationPipelineSource}
-                  </code>
-                </div>
-              ) : null}
-
-              <div className="mt-4">
-                {meeting.diarizationSegments.length === 0 ? (
-                  <div className={emptyStateClass}>
-                    <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">No speaker turns yet</p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-600">
-                      {meeting.audioPath
-                        ? "Finish the meeting to run diarization automatically, or run it manually now."
-                        : "Add an audio file path to run local diarization for this meeting."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {meeting.diarizationSegments.map((segment, index) => (
-                      <article
-                        key={`${segment.speaker}-${segment.startSeconds}-${segment.endSeconds}`}
-                        className="rounded-[var(--radius)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <strong className="text-sm font-semibold text-zinc-950">{segment.speaker}</strong>
-                          <span className="text-xs uppercase tracking-[0.12em] text-zinc-500">
-                            {formatClockSeconds(segment.startSeconds)}-{formatClockSeconds(segment.endSeconds)}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs uppercase tracking-[0.12em] text-zinc-500">
-                          Segment {index + 1}
-                        </p>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </CardPanel>
           </Card>
 
           {snapshot.meetingNote ? (
