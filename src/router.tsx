@@ -11,6 +11,7 @@ import {
 import { ChevronDown, ChevronLeft } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 
+import brandWordmark from "./assets/brand-wordmark.svg";
 import {
   LANGUAGE_OPTIONS,
   NEW_MEETING_SHORTCUT,
@@ -50,6 +51,10 @@ function IconClose() {
       />
     </svg>
   );
+}
+
+function BrandWordmark({ className }: { className?: string }) {
+  return <img src={brandWordmark} alt="unsigned char" className={cn("block h-7 w-auto", className)} />;
 }
 
 function Surface({
@@ -493,7 +498,8 @@ function HomeScreen() {
 
   return (
     <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4">
-      <header className="flex items-center justify-end">
+      <header className="flex items-center justify-between gap-4">
+        <BrandWordmark className="shrink-0" />
         <PrimaryButton
           className="gap-3 px-5"
           disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
@@ -509,7 +515,7 @@ function HomeScreen() {
         >
           <span className="inline-flex items-center gap-2">
             <span className="inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
-            <span>{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
+            <span className="text-white">{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
           </span>
           <span className="text-xs text-white/70">{NEW_MEETING_SHORTCUT}</span>
         </PrimaryButton>
