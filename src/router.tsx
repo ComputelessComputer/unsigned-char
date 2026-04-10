@@ -80,7 +80,7 @@ function PrimaryButton({
     <button
       {...props}
       className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/20 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_100%),linear-gradient(135deg,rgba(255,255,255,0.34)_0%,rgba(255,255,255,0.08)_36%,rgba(255,255,255,0)_58%),rgba(30,31,38,0.74)] px-4 text-sm font-medium text-white shadow-[0_16px_30px_rgba(24,24,27,0.18)] transition hover:-translate-y-px hover:border-white/25 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0",
+        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-950/90 bg-zinc-950 px-4 text-sm font-medium text-white shadow-[0_16px_30px_rgba(24,24,27,0.18)] transition hover:-translate-y-px hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0",
         className,
       )}
     >
