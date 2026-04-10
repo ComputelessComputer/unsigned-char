@@ -13,14 +13,16 @@ type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructiv
 type ButtonSize = "default" | "sm" | "lg" | "icon";
 
 const buttonVariants = {
-  default: "border border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-800",
+  default:
+    "border border-zinc-950 bg-zinc-950 text-white hover:bg-zinc-800 disabled:border-zinc-900 disabled:bg-zinc-900 disabled:text-white/70",
   secondary:
-    "border border-[color:var(--border-strong)] bg-[color:var(--secondary)] text-[color:var(--foreground)] hover:bg-zinc-100",
+    "border border-[color:var(--border-strong)] bg-[color:var(--secondary)] text-[color:var(--foreground)] hover:bg-zinc-100 disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400",
   outline:
-    "border border-[color:var(--border-strong)] bg-[color:var(--card)] text-[color:var(--foreground)] hover:bg-[color:var(--muted)]",
+    "border border-[color:var(--border-strong)] bg-[color:var(--card)] text-[color:var(--foreground)] hover:bg-[color:var(--muted)] disabled:border-zinc-200 disabled:bg-zinc-50 disabled:text-zinc-400",
   ghost:
-    "border border-transparent bg-transparent text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)]",
-  destructive: "border border-rose-600 bg-rose-600 text-white hover:bg-rose-700",
+    "border border-transparent bg-transparent text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)] disabled:text-zinc-400",
+  destructive:
+    "border border-rose-600 bg-rose-600 text-white hover:bg-rose-700 disabled:border-rose-300 disabled:bg-rose-300 disabled:text-white/80",
 } satisfies Record<ButtonVariant, string>;
 
 const buttonSizes = {
@@ -50,7 +52,7 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[calc(var(--radius)-6px)] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[calc(var(--radius)-6px)] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:pointer-events-none",
         buttonVariants[variant],
         buttonSizes[size],
         className,
