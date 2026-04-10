@@ -17,6 +17,7 @@ use tauri::{
 };
 
 const APP_NAME: &str = "unsigned char";
+const APP_DISPLAY_NAME: &str = "unsigned {char}";
 const BUNDLED_MODEL_NAME: &str = "Bundled Qwen3-ASR";
 const BUNDLED_MODEL_RELATIVE_PATH: &str = "models/qwen-asr";
 const DEFAULT_MODEL_NAME: &str = "Qwen3-ASR 0.6B";
@@ -712,7 +713,7 @@ fn stop_live_transcription(state: State<'_, AppState>) -> Result<LiveTranscripti
 
 fn build_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
     let about_metadata = AboutMetadata {
-        name: Some(APP_NAME.to_string()),
+        name: Some(APP_DISPLAY_NAME.to_string()),
         version: Some(app.package_info().version.to_string()),
         copyright: app.config().bundle.copyright.clone(),
         authors: app
@@ -723,6 +724,7 @@ fn build_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result
             .map(|publisher| vec![publisher]),
         ..Default::default()
     };
+    let about_label = format!("About {APP_DISPLAY_NAME}");
 
     let settings_item = MenuItem::with_id(
         app,
@@ -766,7 +768,7 @@ fn build_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result
         true,
         &[
             #[cfg(not(target_os = "macos"))]
-            &PredefinedMenuItem::about(app, None, Some(about_metadata.clone()))?,
+            &PredefinedMenuItem::about(app, Some(&about_label), Some(about_metadata.clone()))?,
         ],
     )?;
 
@@ -776,7 +778,7 @@ fn build_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result
         APP_NAME,
         true,
         &[
-            &PredefinedMenuItem::about(app, None, Some(about_metadata))?,
+            &PredefinedMenuItem::about(app, Some(&about_label), Some(about_metadata))?,
             &PredefinedMenuItem::separator(app)?,
             &settings_item,
             &PredefinedMenuItem::separator(app)?,
