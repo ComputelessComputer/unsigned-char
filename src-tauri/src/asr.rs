@@ -2,7 +2,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc, Arc, Condvar, Mutex,
     },
     thread,
     time::Duration,
@@ -25,10 +25,12 @@ const SESSION_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 type SharedText = Arc<Mutex<String>>;
 type SharedError = Arc<Mutex<Option<String>>>;
+type SharedPreload = Arc<(Mutex<Option<Result<QwenCtx, String>>>, Condvar)>;
 
 #[derive(Default)]
 pub struct TranscriptionManager {
     active: Option<SessionHandle>,
+    preloaded: Option<PreloadedModel>,
 }
 
 #[derive(Clone, Default, Serialize)]
@@ -49,6 +51,7 @@ enum SessionCommand {
 }
 
 struct SessionHandle {
+    model_path: PathBuf,
     transcript: SharedText,
     error: SharedError,
     running: Arc<AtomicBool>,
@@ -56,13 +59,62 @@ struct SessionHandle {
     join: Option<thread::JoinHandle<()>>,
 }
 
+struct PreloadedModel {
+    model_path: PathBuf,
+    shared: SharedPreload,
+}
+
 impl TranscriptionManager {
     pub fn start(&mut self, model_path: &Path) -> Result<LiveTranscriptionState, String> {
         let _ = self.stop();
-        let session = SessionHandle::start(model_path)?;
+        let preloaded_ctx = self.take_preloaded(model_path).transpose()?;
+        let session = SessionHandle::start(model_path, preloaded_ctx)?;
         let snapshot = session.snapshot();
         self.active = Some(session);
         Ok(snapshot)
+    }
+
+    pub fn preload(&mut self, model_path: &Path) {
+        if self
+            .active
+            .as_ref()
+            .is_some_and(|session| session.model_path == model_path)
+        {
+            return;
+        }
+
+        if let Some(preloaded) = self.preloaded.as_ref() {
+            if preloaded.model_path == model_path {
+                if let Ok(result) = preloaded.shared.0.lock() {
+                    if result
+                        .as_ref()
+                        .is_none_or(|state| state.as_ref().is_ok())
+                    {
+                        return;
+                    }
+                }
+            }
+        }
+
+        let model_path = model_path.to_path_buf();
+        let shared = Arc::new((Mutex::new(None), Condvar::new()));
+        let background_shared = shared.clone();
+        let background_model_path = model_path.clone();
+
+        thread::spawn(move || {
+            let result = load_model_context(&background_model_path);
+            let (state, wake) = &*background_shared;
+            if let Ok(mut slot) = state.lock() {
+                *slot = Some(result);
+                wake.notify_all();
+            }
+        });
+
+        self.preloaded = Some(PreloadedModel { model_path, shared });
+    }
+
+    pub fn clear_preload(&mut self) {
+        self.preloaded = None;
     }
 
     pub fn state(&self) -> LiveTranscriptionState {
@@ -79,31 +131,55 @@ impl TranscriptionManager {
 
         session.stop()
     }
+
+    fn take_preloaded(&mut self, model_path: &Path) -> Option<Result<QwenCtx, String>> {
+        let preloaded = self.preloaded.take()?;
+        if preloaded.model_path != model_path {
+            self.preloaded = Some(preloaded);
+            return None;
+        }
+
+        let (state, wake) = &*preloaded.shared;
+        let mut slot = state.lock().ok()?;
+        while slot.is_none() {
+            slot = wake.wait(slot).ok()?;
+        }
+
+        slot.take()
+    }
 }
 
 impl SessionHandle {
-    fn start(model_path: &Path) -> Result<Self, String> {
+    fn start(model_path: &Path, preloaded_ctx: Option<QwenCtx>) -> Result<Self, String> {
         let transcript = Arc::new(Mutex::new(String::new()));
         let error = Arc::new(Mutex::new(None));
         let running = Arc::new(AtomicBool::new(false));
         let (command_tx, command_rx) = mpsc::channel();
         let (startup_tx, startup_rx) = mpsc::channel();
+        let session_model_path = model_path.to_path_buf();
 
         let join = thread::spawn({
             let transcript = transcript.clone();
             let error = error.clone();
             let running = running.clone();
-            let model_path = model_path.to_path_buf();
+            let model_path = session_model_path.clone();
 
             move || {
                 run_session(
-                    model_path, command_rx, startup_tx, transcript, error, running,
+                    model_path,
+                    preloaded_ctx,
+                    command_rx,
+                    startup_tx,
+                    transcript,
+                    error,
+                    running,
                 )
             }
         });
 
         match startup_rx.recv() {
             Ok(Ok(())) => Ok(Self {
+                model_path: session_model_path,
                 transcript,
                 error,
                 running,
@@ -147,6 +223,7 @@ impl SessionHandle {
 
 fn run_session(
     model_path: PathBuf,
+    preloaded_ctx: Option<QwenCtx>,
     command_rx: mpsc::Receiver<SessionCommand>,
     startup_tx: mpsc::Sender<Result<(), String>>,
     transcript: SharedText,
@@ -176,6 +253,7 @@ fn run_session(
     let (worker_ready_tx, worker_ready_rx) = mpsc::channel();
     let worker_join = spawn_worker(
         model_path,
+        preloaded_ctx,
         sample_rate,
         audio_rx,
         transcript,
@@ -301,6 +379,7 @@ fn build_capture_stream(
 
 fn spawn_worker(
     model_path: PathBuf,
+    preloaded_ctx: Option<QwenCtx>,
     sample_rate: u32,
     audio_rx: mpsc::Receiver<AudioMessage>,
     transcript: SharedText,
@@ -309,11 +388,16 @@ fn spawn_worker(
     startup_tx: mpsc::Sender<Result<(), String>>,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
-        let Some(mut ctx) = QwenCtx::load(model_path.to_string_lossy().as_ref()) else {
-            let message = "Failed to load the bundled ASR model. The model directory must include vocab.json and model safetensors shards.".to_string();
-            set_error(&error, &message);
-            let _ = startup_tx.send(Err(message));
-            return;
+        let mut ctx = match preloaded_ctx {
+            Some(ctx) => ctx,
+            None => match load_model_context(&model_path) {
+                Ok(ctx) => ctx,
+                Err(message) => {
+                    set_error(&error, &message);
+                    let _ = startup_tx.send(Err(message));
+                    return;
+                }
+            },
         };
 
         ctx.stream_chunk_sec = 2.0;
@@ -370,6 +454,15 @@ fn spawn_worker(
         }
 
         running.store(false, Ordering::SeqCst);
+    })
+}
+
+fn load_model_context(model_path: &Path) -> Result<QwenCtx, String> {
+    QwenCtx::load(model_path.to_string_lossy().as_ref()).ok_or_else(|| {
+        format!(
+            "Failed to load the local ASR model at {}. The directory must include vocab.json and model safetensors files.",
+            model_path.display()
+        )
     })
 }
 

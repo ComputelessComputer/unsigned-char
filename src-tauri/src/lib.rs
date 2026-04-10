@@ -46,7 +46,7 @@ const HUGGING_FACE_ALT_TOKEN_ENV: &str = "HUGGINGFACE_TOKEN";
 
 #[derive(Default)]
 struct AppState {
-    transcription: Mutex<TranscriptionManager>,
+    transcription: Arc<Mutex<TranscriptionManager>>,
     managed_model_download: Arc<Mutex<ManagedModelDownloadState>>,
 }
 
@@ -366,6 +366,7 @@ fn download_managed_model<R: tauri::Runtime>(
 ) -> Result<ManagedModelDownloadState, String> {
     let target_dir = managed_model_path(&app)?;
     let shared = state.inner().managed_model_download.clone();
+    let transcription = state.inner().transcription.clone();
 
     if model_path_is_ready(&target_dir) {
         let mut download_state = shared
@@ -405,6 +406,7 @@ fn download_managed_model<R: tauri::Runtime>(
 
     std::thread::spawn({
         let shared = shared.clone();
+        let app = app.clone();
         move || {
             if let Err(error) = download_managed_model_snapshot(&target_dir, &shared) {
                 if let Ok(mut download_state) = shared.lock() {
@@ -417,7 +419,10 @@ fn download_managed_model<R: tauri::Runtime>(
                         error: Some(error),
                     };
                 }
+                return;
             }
+
+            refresh_selected_model_preload(&app, &transcription);
         }
     });
 
@@ -479,6 +484,7 @@ fn delete_managed_model<R: tauri::Runtime>(
         };
     }
 
+    refresh_selected_model_preload(&app, &state.inner().transcription);
     snapshot_managed_model_download_state(&app, &shared)
 }
 
@@ -503,6 +509,7 @@ fn save_model_settings<R: tauri::Runtime>(
 ) -> Result<ModelSettingsState, String> {
     let settings = StoredModelSettings::from_input(settings)?;
     persist_model_settings(&app, &settings)?;
+    refresh_selected_model_preload(&app, &app.state::<AppState>().transcription);
     build_model_settings_state(&app, &settings)
 }
 
@@ -677,18 +684,21 @@ fn delete_meeting_export<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-fn start_live_transcription<R: tauri::Runtime>(
+async fn start_live_transcription<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<LiveTranscriptionState, String> {
-    let settings = load_model_settings(&app)?;
-    let model_path = resolve_selected_model_path(&app, &settings)?;
-    state
-        .inner()
-        .transcription
-        .lock()
-        .map_err(|_| "Failed to access transcription state.".to_string())?
-        .start(&model_path)
+    let transcription = state.inner().transcription.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let settings = load_model_settings(&app)?;
+        let model_path = resolve_selected_model_path(&app, &settings)?;
+        transcription
+            .lock()
+            .map_err(|_| "Failed to access transcription state.".to_string())?
+            .start(&model_path)
+    })
+    .await
+    .map_err(|error| format!("Failed to join transcription startup task: {error}"))?
 }
 
 #[tauri::command]
@@ -702,13 +712,33 @@ fn live_transcription_state(state: State<'_, AppState>) -> Result<LiveTranscript
 }
 
 #[tauri::command]
-fn stop_live_transcription(state: State<'_, AppState>) -> Result<LiveTranscriptionState, String> {
-    state
+fn stop_live_transcription<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: State<'_, AppState>,
+) -> Result<LiveTranscriptionState, String> {
+    let snapshot = state
         .inner()
         .transcription
         .lock()
         .map_err(|_| "Failed to access transcription state.".to_string())?
-        .stop()
+        .stop()?;
+    refresh_selected_model_preload(&app, &state.inner().transcription);
+    Ok(snapshot)
+}
+
+fn refresh_selected_model_preload<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    transcription: &Arc<Mutex<TranscriptionManager>>,
+) {
+    let selected_model_path =
+        load_model_settings(app).and_then(|settings| resolve_selected_model_path(app, &settings));
+
+    if let Ok(mut manager) = transcription.lock() {
+        match selected_model_path {
+            Ok(model_path) => manager.preload(&model_path),
+            Err(_) => manager.clear_preload(),
+        }
+    }
 }
 
 fn build_app_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
@@ -2125,6 +2155,7 @@ pub fn run() {
         .manage(AppState::default())
         .setup(|app| {
             app.set_menu(build_app_menu(app.handle())?)?;
+            refresh_selected_model_preload(app.handle(), &app.state::<AppState>().transcription);
             Ok(())
         })
         .on_menu_event(|app, event| {
