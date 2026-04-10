@@ -54,7 +54,7 @@ function IconClose() {
 }
 
 function BrandWordmark({ className }: { className?: string }) {
-  return <img src={brandWordmark} alt="unsigned {char}" className={cn("block h-7 w-auto", className)} />;
+  return <img src={brandWordmark} alt="unsigned {char}" className={cn("block h-9 w-auto", className)} />;
 }
 
 function Surface({
@@ -499,7 +499,7 @@ function HomeScreen() {
   return (
     <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4">
       <header className="flex items-center justify-between gap-4">
-        <BrandWordmark className="shrink-0" />
+        <BrandWordmark className="relative -top-2 shrink-0" />
         <PrimaryButton
           className="gap-3 px-5"
           disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
