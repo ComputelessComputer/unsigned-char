@@ -803,6 +803,7 @@ function MeetingScreen() {
           </span>
           <NumberField
             className="mt-2"
+            disabled={meeting.status !== "live"}
             min={1}
             step={1}
             value={meeting.requestedSpeakerCount}

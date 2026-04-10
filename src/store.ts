@@ -155,7 +155,12 @@ const MODEL_DOWNLOAD_POLL_MS = 1000;
 const MEETING_MARKDOWN_SYNC_MS = 250;
 const MARKDOWN_SAVE_ERROR_PREFIX = "Markdown save failed:";
 const liveTranscriptionPermissionKinds: PermissionKind[] = ["microphone", "systemAudio"];
-const pendingAutoDiarizationMeetingIds: string[] = [];
+type PendingAutoDiarization = {
+  meetingId: string;
+  speakerCount: number | null;
+};
+
+const pendingAutoDiarizationRuns: PendingAutoDiarization[] = [];
 let autoDiarizationDrainRunning = false;
 
 export const currentWindow = getCurrentWindow();
@@ -744,11 +749,14 @@ function queueMeetingAutoDiarization(meetingId: string) {
     return;
   }
 
-  if (pendingAutoDiarizationMeetingIds.includes(meetingId)) {
+  if (pendingAutoDiarizationRuns.some((candidate) => candidate.meetingId === meetingId)) {
     return;
   }
 
-  pendingAutoDiarizationMeetingIds.push(meetingId);
+  pendingAutoDiarizationRuns.push({
+    meetingId,
+    speakerCount: meeting.requestedSpeakerCount,
+  });
   void drainAutoDiarizationQueue();
 }
 
@@ -761,16 +769,19 @@ async function drainAutoDiarizationQueue() {
 
   try {
     while (!state.diarizationRunBusy) {
-      const meetingId = pendingAutoDiarizationMeetingIds.shift();
-      if (!meetingId) {
+      const pendingRun = pendingAutoDiarizationRuns.shift();
+      if (!pendingRun) {
         break;
       }
 
-      await runMeetingDiarization(meetingId, { automatic: true });
+      await runMeetingDiarization(pendingRun.meetingId, {
+        automatic: true,
+        speakerCount: pendingRun.speakerCount,
+      });
     }
   } finally {
     autoDiarizationDrainRunning = false;
-    if (pendingAutoDiarizationMeetingIds.length > 0 && !state.diarizationRunBusy) {
+    if (pendingAutoDiarizationRuns.length > 0 && !state.diarizationRunBusy) {
       void drainAutoDiarizationQueue();
     }
   }
@@ -1270,7 +1281,7 @@ async function toggleMeetingStatus(meetingId: string) {
 
 async function runMeetingDiarization(
   meetingId: string,
-  options: { automatic?: boolean } = {},
+  options: { automatic?: boolean; speakerCount?: number | null } = {},
 ) {
   const meeting = getMeeting(meetingId);
   if (!meeting || state.diarizationRunBusy) {
@@ -1284,11 +1295,13 @@ async function runMeetingDiarization(
 
   try {
     await ensureDiarizationReady();
+    const speakerCount =
+      options.speakerCount !== undefined ? options.speakerCount : meeting.requestedSpeakerCount;
 
     const result = await invoke<LocalDiarizationResult>("run_local_diarization", {
       input: {
         audioPath: meeting.audioPath.trim(),
-        speakerCount: meeting.requestedSpeakerCount,
+        speakerCount,
       },
     });
 
