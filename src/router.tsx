@@ -470,11 +470,10 @@ function HomeScreen() {
   return (
     <section className={cn("mx-auto flex max-w-[780px] flex-col gap-4", windowShellHeightClass)}>
       <WindowDragRegion className="flex items-center justify-between gap-4">
-        <BrandWordmark className="shrink-0" />
+        <BrandWordmark className="relative -top-1 shrink-0" />
         <div data-window-drag="false">
           <Button
-            size="lg"
-            className="gap-3 px-5"
+            className="gap-2.5"
             disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
             onClick={async () => {
               const meeting = await appStore.startMeeting();
