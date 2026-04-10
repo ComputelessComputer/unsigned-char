@@ -13,6 +13,20 @@ import { type KeyboardEvent, type ReactNode, useMemo, useState } from "react";
 
 import brandWordmark from "./assets/brand-wordmark.svg";
 import {
+  Badge,
+  Button,
+  Card,
+  CardAction,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardPanel,
+  CardTitle,
+  Input,
+  Kbd,
+  cn,
+} from "./components/ui";
+import {
   LANGUAGE_OPTIONS,
   NEW_MEETING_SHORTCUT,
   appStore,
@@ -27,10 +41,6 @@ import {
   useAppState,
 } from "./store";
 import { showNativeContextMenu } from "./hooks/useNativeContextMenu";
-
-function cn(...values: Array<string | false | null | undefined>) {
-  return values.filter(Boolean).join(" ");
-}
 
 function IconChevronDown() {
   return <ChevronDown className="size-4 opacity-60" strokeWidth={1.5} aria-hidden="true" />;
@@ -57,79 +67,6 @@ function BrandWordmark({ className }: { className?: string }) {
   return <img src={brandWordmark} alt="unsigned {char}" className={cn("block h-9 w-auto", className)} />;
 }
 
-function Surface({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-[20px] border border-white/45 bg-[linear-gradient(180deg,rgba(255,255,255,0.62)_0%,rgba(255,255,255,0.2)_40%,rgba(255,255,255,0.12)_100%),linear-gradient(135deg,rgba(255,255,255,0.76)_0%,rgba(255,255,255,0.22)_28%,rgba(255,255,255,0)_56%)] shadow-[0_28px_60px_rgba(15,23,42,0.08)] backdrop-blur-[24px]",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function PrimaryButton({
-  children,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-950/90 bg-zinc-950 px-4 text-sm font-medium text-white shadow-[0_16px_30px_rgba(24,24,27,0.18)] transition hover:-translate-y-px hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0",
-        className,
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SecondaryButton({
-  children,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-900/10 bg-white/65 px-4 text-sm font-medium text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] backdrop-blur-[22px] transition hover:-translate-y-px hover:border-zinc-900/20 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0",
-        className,
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function GhostButton({
-  children,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={cn(
-        "inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-zinc-900/10 bg-white/45 px-4 text-sm font-medium text-zinc-900 backdrop-blur-[22px] transition hover:-translate-y-px hover:border-zinc-900/20 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0",
-        className,
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function StatusBadge({
   tone,
   children,
@@ -137,25 +74,25 @@ function StatusBadge({
   tone: "ready" | "missing" | "off" | "live" | "done";
   children: ReactNode;
 }) {
-  const styles = {
-    ready: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700",
-    missing: "border-amber-500/20 bg-amber-500/12 text-amber-700",
-    off: "border-zinc-900/10 bg-white/55 text-zinc-600",
-    live: "border-rose-500/20 bg-rose-500/10 text-rose-700",
-    done: "border-zinc-900/10 bg-white/55 text-zinc-700",
-  } satisfies Record<string, string>;
+  const variants = {
+    ready: "success",
+    missing: "warning",
+    off: "secondary",
+    live: "destructive",
+    done: "outline",
+  } as const;
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]",
-        styles[tone],
-      )}
-    >
+    <Badge variant={variants[tone]}>
       {children}
-    </span>
+    </Badge>
   );
 }
+
+const insetPanelClass =
+  "rounded-[calc(var(--radius)-4px)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3";
+const emptyStateClass =
+  "rounded-[var(--radius)] border border-dashed border-[color:var(--border-strong)] bg-[color:var(--secondary)] px-6 py-8 text-center";
 
 type SearchableOption = {
   value: string;
@@ -247,13 +184,15 @@ function SearchableSelect({
         close();
       }}
     >
-      <button
+      <Button
         type="button"
         role="combobox"
+        variant="outline"
+        size="lg"
         aria-expanded={open}
         aria-label={ariaLabel}
         disabled={disabled}
-        className="inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border border-zinc-900/10 bg-white/70 px-4 text-left text-sm text-zinc-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-[22px] disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-11 w-full justify-between px-4 text-left font-normal"
         onClick={() => {
           if (disabled) {
             return;
@@ -264,7 +203,7 @@ function SearchableSelect({
           setActiveIndex(0);
         }}
       >
-        <span className="truncate">
+        <span className={cn("truncate", !selectedOption && "text-zinc-500")}>
           {selectedOption
             ? selectedOption.detail
               ? `${selectedOption.label} (${selectedOption.detail})`
@@ -272,12 +211,13 @@ function SearchableSelect({
             : placeholder}
         </span>
         <IconChevronDown />
-      </button>
+      </Button>
 
       {open ? (
-        <Surface className="absolute inset-x-0 top-[calc(100%+8px)] z-20 p-2">
-          <input
+        <Card className="absolute inset-x-0 top-[calc(100%+8px)] z-20 p-2">
+          <Input
             autoFocus
+            uiSize="sm"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -285,7 +225,7 @@ function SearchableSelect({
             }}
             onKeyDown={handleKeyDown}
             placeholder={searchPlaceholder}
-            className="mb-2 min-h-10 w-full rounded-xl border border-zinc-900/8 bg-white/75 px-3 text-sm text-zinc-900 outline-none placeholder:text-zinc-500"
+            className="mb-2"
           />
           <div className="max-h-60 overflow-y-auto">
             {filteredOptions.length > 0 ? (
@@ -294,8 +234,8 @@ function SearchableSelect({
                   key={option.value}
                   type="button"
                   className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-900 transition",
-                    index === activeIndex ? "bg-zinc-900/8" : "hover:bg-zinc-900/5",
+                    "flex w-full items-center justify-between gap-3 rounded-[calc(var(--radius)-8px)] px-3 py-2 text-left text-sm text-zinc-900 transition",
+                    index === activeIndex ? "bg-zinc-100" : "hover:bg-zinc-50",
                   )}
                   onMouseEnter={() => setActiveIndex(index)}
                   onMouseDown={(event) => event.preventDefault()}
@@ -316,7 +256,7 @@ function SearchableSelect({
               <div className="px-3 py-2 text-sm text-zinc-500">No results found.</div>
             )}
           </div>
-        </Surface>
+        </Card>
       ) : null}
     </div>
   );
@@ -384,14 +324,15 @@ function SpokenLanguagesCombobox({
     >
       <div
         className={cn(
-          "flex min-h-12 flex-wrap items-center gap-2 rounded-2xl border border-zinc-900/10 bg-white/70 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] backdrop-blur-[22px]",
+          "flex min-h-12 flex-wrap items-center gap-2 rounded-[var(--radius)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.85)]",
           disabled && "cursor-not-allowed opacity-60",
         )}
       >
         {value.map((language) => (
-          <span
+          <Badge
             key={language}
-            className="inline-flex items-center gap-2 rounded-full border border-zinc-900/10 bg-white/75 px-3 py-1 text-xs font-medium text-zinc-900"
+            variant="secondary"
+            className="gap-2 px-3 py-1 text-xs font-medium normal-case tracking-normal"
           >
             {LANGUAGE_OPTIONS.find((option) => option.value === language)?.label ?? language}
             <button
@@ -402,7 +343,7 @@ function SpokenLanguagesCombobox({
             >
               <IconClose />
             </button>
-          </span>
+          </Badge>
         ))}
         <input
           value={query}
@@ -455,15 +396,15 @@ function SpokenLanguagesCombobox({
       </div>
 
       {open && filteredOptions.length > 0 ? (
-        <Surface className="absolute inset-x-0 top-[calc(100%+8px)] z-20 p-2">
+        <Card className="absolute inset-x-0 top-[calc(100%+8px)] z-20 p-2">
           <div className="max-h-60 overflow-y-auto">
             {filteredOptions.map((option, index) => (
               <button
                 key={option.value}
                 type="button"
                 className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm text-zinc-900 transition",
-                  index === activeIndex ? "bg-zinc-900/8" : "hover:bg-zinc-900/5",
+                  "flex w-full items-center justify-between gap-3 rounded-[calc(var(--radius)-8px)] px-3 py-2 text-left text-sm text-zinc-900 transition",
+                  index === activeIndex ? "bg-zinc-100" : "hover:bg-zinc-50",
                 )}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => event.preventDefault()}
@@ -476,7 +417,7 @@ function SpokenLanguagesCombobox({
               </button>
             ))}
           </div>
-        </Surface>
+        </Card>
       ) : null}
     </div>
   );
@@ -484,7 +425,7 @@ function SpokenLanguagesCombobox({
 
 function RootLayout() {
   return (
-    <div className="min-h-screen w-full px-4 py-5 text-zinc-900">
+    <div className="relative isolate min-h-screen w-full px-4 py-5 text-zinc-900">
       <Outlet />
     </div>
   );
@@ -497,10 +438,11 @@ function HomeScreen() {
   const setupBanner = currentSetupBannerContent(snapshot);
 
   return (
-    <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4">
+    <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[780px] flex-col gap-4">
       <header className="flex items-center justify-between gap-4">
-        <BrandWordmark className="relative -top-2 shrink-0" />
-        <PrimaryButton
+        <BrandWordmark className="shrink-0" />
+        <Button
+          size="lg"
           className="gap-3 px-5"
           disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
           onClick={async () => {
@@ -515,10 +457,10 @@ function HomeScreen() {
         >
           <span className="inline-flex items-center gap-2">
             <span className="inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
-            <span className="text-white">{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
+            <span>{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
           </span>
-          <span className="text-xs text-white/70">{NEW_MEETING_SHORTCUT}</span>
-        </PrimaryButton>
+          <Kbd className="border-white/10 bg-white/10 text-white/80">{NEW_MEETING_SHORTCUT}</Kbd>
+        </Button>
       </header>
 
       <div
@@ -538,45 +480,49 @@ function HomeScreen() {
         ) : null}
 
         {setupBanner ? (
-          <Surface className="mb-4 p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              {setupBanner.kicker}
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-zinc-950">
-              {setupBanner.title}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-600">{setupBanner.copy}</p>
-            <p className="mt-3 text-sm text-zinc-500">{setupBanner.detail}</p>
-            {setupBanner.localPath ? (
-              <div className="mt-4 rounded-2xl border border-zinc-900/8 bg-white/55 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                  Storage
-                </p>
-                <code className="mt-1 block break-all text-xs text-zinc-700">
-                  {setupBanner.localPath}
-                </code>
-              </div>
-            ) : null}
+          <Card className="mb-4">
+            <CardHeader className="gap-1.5">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                {setupBanner.kicker}
+              </p>
+              <CardTitle className="text-2xl">{setupBanner.title}</CardTitle>
+              <CardDescription>{setupBanner.copy}</CardDescription>
+            </CardHeader>
+            <CardPanel className="pt-4">
+              <p className="text-sm text-zinc-500">{setupBanner.detail}</p>
+              {setupBanner.localPath ? (
+                <div className={cn("mt-4", insetPanelClass)}>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                    Storage
+                  </p>
+                  <code className="mt-1 block break-all text-xs text-zinc-700">
+                    {setupBanner.localPath}
+                  </code>
+                </div>
+              ) : null}
+            </CardPanel>
             {setupBanner.actionLabel ? (
-              <div className="mt-5">
-                <PrimaryButton
+              <CardFooter className="border-t-0 pt-0">
+                <Button
                   disabled={snapshot.modelBusy}
                   onClick={() => {
                     void appStore.startManagedModelDownload();
                   }}
                 >
                   {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
-                </PrimaryButton>
-              </div>
+                </Button>
+              </CardFooter>
             ) : null}
-          </Surface>
+          </Card>
         ) : meetings.length === 0 ? (
-          <Surface className="p-8 text-center">
-            <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">No meetings yet</p>
-            <p className="mt-2 text-sm leading-6 text-zinc-600">
-              Create a meeting from the button above and transcripts will show up here.
-            </p>
-          </Surface>
+          <Card>
+            <CardHeader className="items-center px-8 py-8 text-center">
+              <CardTitle>No meetings yet</CardTitle>
+              <CardDescription>
+                Create a meeting from the button above and transcripts will show up here.
+              </CardDescription>
+            </CardHeader>
+          </Card>
         ) : (
           <div className="space-y-3">
             {meetings.map((meeting) => {
@@ -628,16 +574,16 @@ function HomeScreen() {
                     );
                   }}
                 >
-                  <Surface className="p-4 transition hover:-translate-y-px">
-                    <div className="min-w-0">
+                  <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
+                    <CardPanel className="p-4">
                       <div className="flex min-w-0 flex-col gap-1.5">
                         <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
                         <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
                           {meeting.title}
                         </h2>
                       </div>
-                    </div>
-                  </Surface>
+                    </CardPanel>
+                  </Card>
                 </button>
               );
             })}
@@ -645,7 +591,9 @@ function HomeScreen() {
         )}
       </div>
 
-      <GhostButton
+      <Button
+        variant="ghost"
+        size="sm"
         className={cn("self-center", snapshot.homeScrollTop > 40 ? "opacity-100" : "opacity-0")}
         onClick={() => {
           const scroller = document.querySelector<HTMLElement>("#home-content");
@@ -653,7 +601,7 @@ function HomeScreen() {
         }}
       >
         Go to top
-      </GhostButton>
+      </Button>
     </section>
   );
 }
@@ -704,21 +652,22 @@ function MeetingScreen() {
   if (!meeting) {
     return (
       <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] items-center justify-center">
-        <Surface className="p-8 text-center">
-          <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Meeting not found</p>
-          <p className="mt-2 text-sm text-zinc-600">
-            The meeting may have been removed from local storage.
-          </p>
-          <div className="mt-5">
-            <SecondaryButton
+        <Card>
+          <CardHeader className="items-center px-8 py-8 text-center">
+            <CardTitle>Meeting not found</CardTitle>
+            <CardDescription>
+              The meeting may have been removed from local storage.
+            </CardDescription>
+            <Button
+              variant="secondary"
               onClick={() => {
                 navigate({ to: "/" });
               }}
             >
               Back home
-            </SecondaryButton>
-          </div>
-        </Surface>
+            </Button>
+          </CardHeader>
+        </Card>
       </section>
     );
   }
@@ -734,15 +683,17 @@ function MeetingScreen() {
     <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] flex-col gap-4 overflow-y-auto pr-1">
       <header className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <GhostButton
-            className="size-10 shrink-0 px-0"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
             aria-label="Back"
             onClick={() => {
               navigate({ to: "/" });
             }}
           >
             <IconBack />
-          </GhostButton>
+          </Button>
           <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
         </div>
 
@@ -752,7 +703,8 @@ function MeetingScreen() {
       </header>
 
       <div className="flex items-center justify-start">
-        <GhostButton
+        <Button
+          variant={meeting.status === "live" ? "destructive" : "outline"}
           disabled={snapshot.transcriptionBusy}
           onClick={() => {
             void appStore.toggleMeetingStatus(meeting.id);
@@ -766,10 +718,10 @@ function MeetingScreen() {
               <span>Resume listening</span>
             </>
           )}
-        </GhostButton>
+        </Button>
       </div>
 
-      <Surface className="min-h-0 flex-1 overflow-hidden">
+      <Card className="min-h-0 flex-1 overflow-hidden">
         <section
           className="h-full overflow-y-auto p-4"
           ref={(node) => {
@@ -783,7 +735,7 @@ function MeetingScreen() {
           }}
         >
           {transcriptLines.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-900/10 bg-white/35 px-6 py-8 text-center">
+            <div className={emptyStateClass}>
               <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Live transcript</p>
               <p className="mt-2 text-sm leading-6 text-zinc-600">
                 Start speaking and your microphone transcript will appear here.
@@ -794,7 +746,7 @@ function MeetingScreen() {
               {transcriptLines.map((line, index) => (
                 <article
                   key={`${meeting.id}-${index}-${line.slice(0, 12)}`}
-                  className="grid grid-cols-[auto,minmax(0,1fr)] gap-3 rounded-2xl border border-zinc-900/8 bg-white/35 px-4 py-3"
+                  className="grid grid-cols-[auto,minmax(0,1fr)] gap-3 rounded-[var(--radius)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3"
                 >
                   <span className="pt-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
                     {index + 1}
@@ -805,123 +757,128 @@ function MeetingScreen() {
             </div>
           )}
         </section>
-      </Surface>
+      </Card>
 
-      <Surface className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div className="space-y-2">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
               Diarization
             </p>
-            <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-zinc-950">
-              Speaker turns
-            </h2>
+            <CardTitle className="text-xl">Speaker turns</CardTitle>
           </div>
-          <StatusBadge tone={diarizationStatusTone}>{diarizationStatusLabel}</StatusBadge>
-        </div>
+          <CardAction>
+            <StatusBadge tone={diarizationStatusTone}>{diarizationStatusLabel}</StatusBadge>
+          </CardAction>
+        </CardHeader>
 
-        <p className="mt-3 text-sm leading-6 text-zinc-600">
-          {diarizationReady
-            ? "The app runs pyannote.audio locally against the file path below after the meeting ends. Add a speaker count if you want to lock the diarization pass to a specific number of speakers."
-            : snapshot.diarizationSettings?.status ?? "Speaker diarization is not ready yet."}
-        </p>
+        <CardPanel className="pt-0">
+          <p className="text-sm leading-6 text-zinc-600">
+            {diarizationReady
+              ? "The app runs pyannote.audio locally against the file path below after the meeting ends. Add a speaker count if you want to lock the diarization pass to a specific number of speakers."
+              : snapshot.diarizationSettings?.status ?? "Speaker diarization is not ready yet."}
+          </p>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_160px]">
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              Audio file path
-            </span>
-            <input
-              value={meeting.audioPath}
-              onChange={(event) => {
-                appStore.updateMeetingAudioPath(meeting.id, event.target.value);
-              }}
-              placeholder="~/Recordings/meeting.wav"
-              className="mt-2 min-h-11 w-full rounded-xl border border-zinc-900/10 bg-white/70 px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-500"
-            />
-          </label>
+          <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_160px]">
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Audio file path
+              </span>
+              <Input
+                uiSize="lg"
+                className="mt-2"
+                value={meeting.audioPath}
+                onChange={(event) => {
+                  appStore.updateMeetingAudioPath(meeting.id, event.target.value);
+                }}
+                placeholder="~/Recordings/meeting.wav"
+              />
+            </label>
 
-          <label className="block">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              Speaker count
-            </span>
-            <input
-              type="number"
-              min={1}
-              step={1}
-              inputMode="numeric"
-              value={meeting.requestedSpeakerCount ?? ""}
-              onChange={(event) => {
-                appStore.updateMeetingRequestedSpeakerCount(meeting.id, event.target.value);
-              }}
-              placeholder="Auto"
-              className="mt-2 min-h-11 w-full rounded-xl border border-zinc-900/10 bg-white/70 px-4 text-sm text-zinc-900 outline-none placeholder:text-zinc-500"
-            />
-          </label>
-        </div>
-
-        <div className="mt-4">
-          <SecondaryButton
-            disabled={snapshot.diarizationRunBusy}
-            onClick={() => {
-              void appStore.runMeetingDiarization(meeting.id);
-            }}
-          >
-            {snapshot.diarizationRunBusy ? "Running..." : "Run diarization"}
-          </SecondaryButton>
-        </div>
-
-        <p className="mt-4 text-sm leading-6 text-zinc-600">
-          {meeting.diarizationRanAt
-            ? `${meeting.diarizationSpeakerCount} speakers across ${meeting.diarizationSegments.length} segments · ${formatDateTime(meeting.diarizationRanAt)}`
-            : diarizationEnabled
-              ? "Add an audio file path and the app will run diarization automatically after the meeting ends."
-              : "Speaker diarization is not available in this build yet."}
-        </p>
-
-        {meeting.diarizationPipelineSource ? (
-          <div className="mt-4 rounded-2xl border border-zinc-900/8 bg-white/55 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              Last pipeline source
-            </p>
-            <code className="mt-1 block break-all text-xs text-zinc-700">
-              {meeting.diarizationPipelineSource}
-            </code>
+            <label className="block">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Speaker count
+              </span>
+              <Input
+                type="number"
+                uiSize="lg"
+                min={1}
+                step={1}
+                inputMode="numeric"
+                value={meeting.requestedSpeakerCount ?? ""}
+                onChange={(event) => {
+                  appStore.updateMeetingRequestedSpeakerCount(meeting.id, event.target.value);
+                }}
+                placeholder="Auto"
+                className="mt-2"
+              />
+            </label>
           </div>
-        ) : null}
 
-        <div className="mt-4">
-          {meeting.diarizationSegments.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-900/10 bg-white/35 px-6 py-8 text-center">
-              <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">No speaker turns yet</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">
-                {meeting.audioPath
-                  ? "Finish the meeting to run diarization automatically, or run it manually now."
-                  : "Add an audio file path to run local diarization for this meeting."}
+          <div className="mt-4">
+            <Button
+              variant="secondary"
+              disabled={snapshot.diarizationRunBusy}
+              onClick={() => {
+                void appStore.runMeetingDiarization(meeting.id);
+              }}
+            >
+              {snapshot.diarizationRunBusy ? "Running..." : "Run diarization"}
+            </Button>
+          </div>
+
+          <p className="mt-4 text-sm leading-6 text-zinc-600">
+            {meeting.diarizationRanAt
+              ? `${meeting.diarizationSpeakerCount} speakers across ${meeting.diarizationSegments.length} segments · ${formatDateTime(meeting.diarizationRanAt)}`
+              : diarizationEnabled
+                ? "Add an audio file path and the app will run diarization automatically after the meeting ends."
+                : "Speaker diarization is not available in this build yet."}
+          </p>
+
+          {meeting.diarizationPipelineSource ? (
+            <div className={cn("mt-4", insetPanelClass)}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Last pipeline source
               </p>
+              <code className="mt-1 block break-all text-xs text-zinc-700">
+                {meeting.diarizationPipelineSource}
+              </code>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {meeting.diarizationSegments.map((segment, index) => (
-                <article
-                  key={`${segment.speaker}-${segment.startSeconds}-${segment.endSeconds}`}
-                  className="rounded-2xl border border-zinc-900/8 bg-white/35 px-4 py-3"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <strong className="text-sm font-semibold text-zinc-950">{segment.speaker}</strong>
-                    <span className="text-xs uppercase tracking-[0.12em] text-zinc-500">
-                      {formatClockSeconds(segment.startSeconds)}-{formatClockSeconds(segment.endSeconds)}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs uppercase tracking-[0.12em] text-zinc-500">
-                    Segment {index + 1}
-                  </p>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-      </Surface>
+          ) : null}
+
+          <div className="mt-4">
+            {meeting.diarizationSegments.length === 0 ? (
+              <div className={emptyStateClass}>
+                <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">No speaker turns yet</p>
+                <p className="mt-2 text-sm leading-6 text-zinc-600">
+                  {meeting.audioPath
+                    ? "Finish the meeting to run diarization automatically, or run it manually now."
+                    : "Add an audio file path to run local diarization for this meeting."}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {meeting.diarizationSegments.map((segment, index) => (
+                  <article
+                    key={`${segment.speaker}-${segment.startSeconds}-${segment.endSeconds}`}
+                    className="rounded-[var(--radius)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <strong className="text-sm font-semibold text-zinc-950">{segment.speaker}</strong>
+                      <span className="text-xs uppercase tracking-[0.12em] text-zinc-500">
+                        {formatClockSeconds(segment.startSeconds)}-{formatClockSeconds(segment.endSeconds)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs uppercase tracking-[0.12em] text-zinc-500">
+                      Segment {index + 1}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardPanel>
+      </Card>
 
       {snapshot.meetingNote ? (
         <p className="text-sm text-rose-700">{snapshot.meetingNote}</p>
@@ -936,9 +893,11 @@ function SettingsScreen() {
   if (!snapshot.generalSettings) {
     return (
       <section className="mx-auto flex h-[calc(100vh-2.5rem)] max-w-[760px] items-center">
-        <Surface className="w-full p-8">
-          <p className="text-sm text-zinc-600">Loading preferences...</p>
-        </Surface>
+        <Card className="w-full">
+          <CardHeader className="px-8 py-8">
+            <CardDescription>Loading preferences...</CardDescription>
+          </CardHeader>
+        </Card>
       </section>
     );
   }
@@ -963,41 +922,43 @@ function SettingsScreen() {
         isSettingsWindow ? "max-w-[640px]" : "max-w-[760px]",
       )}
     >
-      <Surface className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm font-semibold text-zinc-950">Transcription model</p>
-            <p className="mt-1 text-sm leading-6 text-zinc-600">
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle>Transcription model</CardTitle>
+            <CardDescription>
               Download Qwen3-ASR once and keep it local to this Mac for offline transcription.
-            </p>
+            </CardDescription>
           </div>
-          <StatusBadge tone={modelStatusTone}>{modelStatusLabel}</StatusBadge>
-        </div>
+          <CardAction>
+            <StatusBadge tone={modelStatusTone}>{modelStatusLabel}</StatusBadge>
+          </CardAction>
+        </CardHeader>
+        <CardPanel className="pt-0">
+          <p className="text-sm leading-6 text-zinc-600">
+            {modelReady
+              ? snapshot.modelSettings?.huggingFaceStatus ?? "Local transcription model is ready."
+              : setupBanner?.copy ?? "Download the local transcription model to continue."}
+          </p>
 
-        <p className="mt-4 text-sm leading-6 text-zinc-600">
-          {modelReady
-            ? snapshot.modelSettings?.huggingFaceStatus ?? "Local transcription model is ready."
-            : setupBanner?.copy ?? "Download the local transcription model to continue."}
-        </p>
+          {setupBanner?.detail ? (
+            <p className="mt-3 text-sm text-zinc-500">{setupBanner.detail}</p>
+          ) : null}
 
-        {setupBanner?.detail ? (
-          <p className="mt-3 text-sm text-zinc-500">{setupBanner.detail}</p>
-        ) : null}
-
-        {(snapshot.modelDownload?.localPath || snapshot.modelSettings?.huggingFaceLocalPath) ? (
-          <div className="mt-4 rounded-2xl border border-zinc-900/8 bg-white/55 px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-              Storage
-            </p>
-            <code className="mt-1 block break-all text-xs text-zinc-700">
-              {snapshot.modelDownload?.localPath || snapshot.modelSettings?.huggingFaceLocalPath}
-            </code>
-          </div>
-        ) : null}
-
+          {(snapshot.modelDownload?.localPath || snapshot.modelSettings?.huggingFaceLocalPath) ? (
+            <div className={cn("mt-4", insetPanelClass)}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Storage
+              </p>
+              <code className="mt-1 block break-all text-xs text-zinc-700">
+                {snapshot.modelDownload?.localPath || snapshot.modelSettings?.huggingFaceLocalPath}
+              </code>
+            </div>
+          ) : null}
+        </CardPanel>
         {!modelReady ? (
-          <div className="mt-5">
-            <PrimaryButton
+          <CardFooter className="border-t-0 pt-0">
+            <Button
               disabled={snapshot.modelBusy || downloadStatus === "downloading"}
               onClick={() => {
                 void appStore.startManagedModelDownload();
@@ -1006,68 +967,74 @@ function SettingsScreen() {
               {snapshot.modelBusy || downloadStatus === "downloading"
                 ? "Starting download..."
                 : "Download model"}
-            </PrimaryButton>
-          </div>
+            </Button>
+          </CardFooter>
         ) : null}
-      </Surface>
+      </Card>
 
-      <div className="grid gap-6">
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),180px] md:items-center">
-          <div>
-            <p className="text-sm font-semibold text-zinc-950">Main language</p>
-            <p className="mt-1 text-sm leading-6 text-zinc-600">
-              Language for summaries, chats, and AI-generated responses
-            </p>
+      <Card>
+        <CardHeader>
+          <CardTitle>Preferences</CardTitle>
+          <CardDescription>Language and timeline defaults for the local app.</CardDescription>
+        </CardHeader>
+        <CardPanel className="grid gap-6 pt-0">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),180px] md:items-center">
+            <div>
+              <p className="text-sm font-semibold text-zinc-950">Main language</p>
+              <p className="mt-1 text-sm leading-6 text-zinc-600">
+                Language for summaries, chats, and AI-generated responses
+              </p>
+            </div>
+            <SearchableSelect
+              ariaLabel="Main language"
+              value={snapshot.generalDraft.mainLanguage}
+              onChange={appStore.setMainLanguage}
+              options={LANGUAGE_OPTIONS}
+              placeholder="Select language"
+              searchPlaceholder="Search language..."
+              disabled={snapshot.generalBusy}
+            />
           </div>
-          <SearchableSelect
-            ariaLabel="Main language"
-            value={snapshot.generalDraft.mainLanguage}
-            onChange={appStore.setMainLanguage}
-            options={LANGUAGE_OPTIONS}
-            placeholder="Select language"
-            searchPlaceholder="Search language..."
-            disabled={snapshot.generalBusy}
-          />
-        </div>
 
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),220px] md:items-center">
-          <div>
-            <p className="text-sm font-semibold text-zinc-950">Timezone</p>
-            <p className="mt-1 text-sm leading-6 text-zinc-600">
-              Override the timezone used for the sidebar timeline
-            </p>
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),220px] md:items-center">
+            <div>
+              <p className="text-sm font-semibold text-zinc-950">Timezone</p>
+              <p className="mt-1 text-sm leading-6 text-zinc-600">
+                Override the timezone used for the sidebar timeline
+              </p>
+            </div>
+            <SearchableSelect
+              ariaLabel="Timezone"
+              value={snapshot.generalDraft.timezone || systemTimezone}
+              onChange={(nextValue) => {
+                appStore.setTimezone(nextValue === systemTimezone ? "" : nextValue);
+              }}
+              options={timezoneOptions}
+              placeholder={`System default (${systemTimezone})`}
+              searchPlaceholder="Search timezone..."
+              disabled={snapshot.generalBusy}
+            />
           </div>
-          <SearchableSelect
-            ariaLabel="Timezone"
-            value={snapshot.generalDraft.timezone || systemTimezone}
-            onChange={(nextValue) => {
-              appStore.setTimezone(nextValue === systemTimezone ? "" : nextValue);
-            }}
-            options={timezoneOptions}
-            placeholder={`System default (${systemTimezone})`}
-            searchPlaceholder="Search timezone..."
-            disabled={snapshot.generalBusy}
-          />
-        </div>
-      </div>
 
-      <div>
-        <div>
-          <p className="text-sm font-semibold text-zinc-950">Spoken languages</p>
-          <p className="mt-1 text-sm leading-6 text-zinc-600">
-            Add other languages you use other than the main language
-          </p>
-        </div>
-        <div className="mt-4">
-          <SpokenLanguagesCombobox
-            mainLanguage={snapshot.generalDraft.mainLanguage}
-            value={snapshot.generalDraft.spokenLanguages}
-            disabled={snapshot.generalBusy}
-            onAdd={appStore.addSpokenLanguage}
-            onRemove={appStore.removeSpokenLanguage}
-          />
-        </div>
-      </div>
+          <div>
+            <div>
+              <p className="text-sm font-semibold text-zinc-950">Spoken languages</p>
+              <p className="mt-1 text-sm leading-6 text-zinc-600">
+                Add other languages you use other than the main language
+              </p>
+            </div>
+            <div className="mt-4">
+              <SpokenLanguagesCombobox
+                mainLanguage={snapshot.generalDraft.mainLanguage}
+                value={snapshot.generalDraft.spokenLanguages}
+                disabled={snapshot.generalBusy}
+                onAdd={appStore.addSpokenLanguage}
+                onRemove={appStore.removeSpokenLanguage}
+              />
+            </div>
+          </div>
+        </CardPanel>
+      </Card>
 
       {snapshot.generalNote ? (
         <p className="text-sm text-rose-700">{snapshot.generalNote}</p>
