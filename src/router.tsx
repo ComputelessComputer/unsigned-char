@@ -907,7 +907,7 @@ function MeetingScreen() {
       <div className="flex items-end justify-between gap-4">
         <NumberField
           className="w-full max-w-[200px] shrink-0"
-          disabled={meeting.status !== "live"}
+          disabled={snapshot.transcriptionBusy || snapshot.diarizationRunBusy}
           min={1}
           step={1}
           value={meeting.requestedSpeakerCount}

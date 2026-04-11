@@ -94,9 +94,21 @@ export function NumberField({
   };
 
   const adjustValue = (direction: -1 | 1) => {
-    const baseValue = currentValue ?? min ?? 0;
-    const nextValue = currentValue === null ? baseValue : currentValue + direction * resolvedStep;
-    setValue(nextValue);
+    if (currentValue === null) {
+      if (direction === -1) {
+        return;
+      }
+
+      setValue(min ?? 0);
+      return;
+    }
+
+    if (direction === -1 && typeof min === "number" && currentValue <= min) {
+      setValue(null);
+      return;
+    }
+
+    setValue(currentValue + direction * resolvedStep);
   };
 
   return (
@@ -140,13 +152,12 @@ function NumberFieldStepButton({
   disabled,
   ...props
 }: NumberFieldStepButtonProps) {
-  const { adjustValue, disabled: contextDisabled, max, min, value } = useNumberFieldContext(
+  const { adjustValue, disabled: contextDisabled, max, value } = useNumberFieldContext(
     direction === 1 ? "NumberFieldIncrement" : "NumberFieldDecrement",
   );
-  const reachedMinimum = typeof min === "number" && value !== null && value <= min;
   const reachedMaximum = typeof max === "number" && value !== null && value >= max;
   const buttonDisabled =
-    disabled || contextDisabled || (direction === -1 ? reachedMinimum : reachedMaximum);
+    disabled || contextDisabled || (direction === -1 ? value === null : reachedMaximum);
 
   return (
     <Button
