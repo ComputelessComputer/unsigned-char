@@ -756,6 +756,15 @@ fn reveal_meeting_export_in_finder<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn meeting_export_exists<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    path: String,
+) -> Result<bool, String> {
+    let target = resolve_meeting_export_path(&app, &path)?;
+    Ok(target.is_file())
+}
+
+#[tauri::command]
 fn delete_meeting_export<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     path: String,
@@ -2350,6 +2359,7 @@ pub fn run() {
             run_local_diarization,
             sync_meeting_markdown,
             reveal_meeting_export_in_finder,
+            meeting_export_exists,
             delete_meeting_export,
             start_live_transcription,
             live_transcription_state,

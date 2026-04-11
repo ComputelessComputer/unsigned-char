@@ -828,13 +828,23 @@ function currentMeetingIdFromHash() {
   return match?.[1] ?? null;
 }
 
-async function syncMeetingMarkdown(id: string) {
+async function syncMeetingMarkdown(id: string, options?: { force?: boolean }) {
   const meeting = getMeeting(id);
   if (!meeting) {
     return null;
   }
 
+  const force = options?.force === true;
+  const exportPath = meeting.exportPath?.trim() || null;
+
   try {
+    if (!force && exportPath) {
+      const exists = await invoke<boolean>("meeting_export_exists", { path: exportPath });
+      if (!exists) {
+        return null;
+      }
+    }
+
     const path = await invoke<string>("sync_meeting_markdown", {
       export: buildMarkdownExport(meeting),
     });
@@ -1365,7 +1375,7 @@ async function revealMeetingExportInFinder(meetingId: string) {
   patch({ permissionNote: "" });
 
   try {
-    const path = meeting.exportPath?.trim() || (await syncMeetingMarkdown(meetingId));
+    const path = await syncMeetingMarkdown(meetingId, { force: true });
     if (!path) {
       throw new Error("Failed to resolve the meeting export.");
     }
