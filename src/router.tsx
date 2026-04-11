@@ -892,9 +892,9 @@ function MeetingScreen() {
         </div>
       </WindowDragRegion>
 
-      <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)] md:items-end">
+      <div className="flex items-end justify-between gap-4">
         <NumberField
-          className="w-full max-w-[200px]"
+          className="w-full max-w-[200px] shrink-0"
           disabled={meeting.status !== "live"}
           min={1}
           step={1}
@@ -920,7 +920,7 @@ function MeetingScreen() {
           </NumberFieldGroup>
         </NumberField>
 
-        <div className="flex items-end justify-start md:justify-end">
+        <div className="flex min-w-0 items-end justify-end">
           <Button
             size="lg"
             variant={meeting.status === "live" ? "destructive" : "outline"}
