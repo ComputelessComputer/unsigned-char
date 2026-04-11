@@ -13,8 +13,8 @@ Apple Silicon local meeting transcription desktop app for macOS, with a bundled 
 ## Run
 
 ```bash
-npm install
-npm run tauri dev
+bun install
+bun desktop
 ```
 
 ## CLI
