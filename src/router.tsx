@@ -9,7 +9,7 @@ import {
   useParams,
 } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, ChevronLeft, Ellipsis } from "lucide-react";
+import { ChevronDown, ChevronLeft, Ellipsis, Users } from "lucide-react";
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -47,7 +47,6 @@ import {
   appStore,
   currentSetupBannerContent,
   formatDateTime,
-  formatRelativeDate,
   getMeetingTranscriptLines,
   getTimezoneOptions,
   isSettingsWindow,
@@ -857,10 +856,8 @@ function MeetingScreen() {
           </div>
 
           <div className="min-w-0">
-            <p className="flex min-w-0 items-center justify-center gap-2 text-center text-sm text-zinc-600">
-              <span className="truncate">{formatDateTime(meeting.createdAt)}</span>
-              <span className="shrink-0 text-zinc-400">·</span>
-              <span className="shrink-0 text-zinc-500">{formatRelativeDate(meeting.createdAt)}</span>
+            <p className="truncate text-center text-sm text-zinc-600">
+              {formatDateTime(meeting.createdAt)}
             </p>
           </div>
 
@@ -896,30 +893,32 @@ function MeetingScreen() {
       </WindowDragRegion>
 
       <div className="grid gap-4 md:grid-cols-[200px_minmax(0,1fr)] md:items-end">
-        <label className="block w-full max-w-[200px]">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-            Participants count
-          </span>
-          <NumberField
-            className="mt-2"
-            disabled={meeting.status !== "live"}
-            min={1}
-            step={1}
-            value={meeting.requestedSpeakerCount}
-            onValueChange={(value) => {
-              appStore.updateMeetingRequestedSpeakerCount(
-                meeting.id,
-                value === null ? "" : String(value),
-              );
-            }}
-          >
-            <NumberFieldGroup>
-              <NumberFieldDecrement />
-              <NumberFieldInput placeholder="Auto" aria-label="Participants count" />
-              <NumberFieldIncrement />
-            </NumberFieldGroup>
-          </NumberField>
-        </label>
+        <NumberField
+          className="w-full max-w-[200px]"
+          disabled={meeting.status !== "live"}
+          min={1}
+          step={1}
+          value={meeting.requestedSpeakerCount}
+          onValueChange={(value) => {
+            appStore.updateMeetingRequestedSpeakerCount(
+              meeting.id,
+              value === null ? "" : String(value),
+            );
+          }}
+        >
+          <NumberFieldGroup>
+            <NumberFieldDecrement />
+            <div className="flex min-w-0 flex-1 items-center gap-2 border-x border-[color:var(--border)] px-3 text-zinc-500">
+              <Users className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+              <NumberFieldInput
+                placeholder="Auto"
+                aria-label="Participants"
+                className="border-0 px-0 text-left"
+              />
+            </div>
+            <NumberFieldIncrement />
+          </NumberFieldGroup>
+        </NumberField>
 
         <div className="flex items-end justify-start md:justify-end">
           <Button
@@ -948,12 +947,12 @@ function MeetingScreen() {
           <Card className="min-h-[260px] flex-1 overflow-hidden">
             <div className="relative h-full">
               <section
-                className="h-full overflow-y-auto p-4"
+                className="flex h-full flex-col overflow-y-auto p-4"
                 ref={attachTranscriptRef}
                 onScroll={handleTranscriptScroll}
               >
                 {transcriptLines.length === 0 ? (
-                  <div className={emptyStateClass}>
+                  <div className={cn(emptyStateClass, "flex min-h-full flex-col items-center justify-center")}>
                     <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Live transcript</p>
                     <p className="mt-2 text-sm leading-6 text-zinc-600">
                       {meeting.status === "live"
