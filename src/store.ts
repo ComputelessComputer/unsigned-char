@@ -129,6 +129,7 @@ type AppState = {
   generalBusy: boolean;
   startMeetingBusy: boolean;
   transcriptionBusy: boolean;
+  transcriptionStopping: boolean;
   transcriptionRunning: boolean;
   liveTranscriptText: string;
   recordingMeetingId: string | null;
@@ -151,6 +152,7 @@ const isMacLike = /Mac|iPhone|iPad|iPod/.test(window.navigator.userAgent);
 export const NEW_MEETING_SHORTCUT = isMacLike ? "⌘N" : "Ctrl+N";
 const SETTINGS_WINDOW_LABEL = "settings";
 const LIVE_TRANSCRIPTION_POLL_MS = 1200;
+const LIVE_TRANSCRIPTION_STOP_WAIT_MS = 250;
 const MODEL_DOWNLOAD_POLL_MS = 1000;
 const MEETING_MARKDOWN_SYNC_MS = 250;
 const MARKDOWN_SAVE_ERROR_PREFIX = "Markdown save failed:";
@@ -238,6 +240,7 @@ let state: AppState = {
   generalBusy: false,
   startMeetingBusy: false,
   transcriptionBusy: false,
+  transcriptionStopping: false,
   transcriptionRunning: false,
   liveTranscriptText: "",
   recordingMeetingId: null,
@@ -1090,6 +1093,7 @@ async function startLiveTranscriptionSession(meetingId: string | null) {
     ...state,
     recordingMeetingId: meetingId,
     transcriptionRunning: snapshot.running,
+    transcriptionStopping: false,
     liveTranscriptText: snapshot.text.trim(),
   };
   emit();
@@ -1104,6 +1108,7 @@ function finalizeLiveTranscript(markDone = false) {
     patch({
       liveTranscriptText: "",
       recordingMeetingId: null,
+      transcriptionStopping: false,
     });
     return null;
   }
@@ -1125,19 +1130,24 @@ function finalizeLiveTranscript(markDone = false) {
   patch({
     liveTranscriptText: "",
     recordingMeetingId: null,
+    transcriptionStopping: false,
   });
 
   return meeting.id;
 }
 
 async function refreshLiveTranscription(silent = false) {
+  const wasRunning = state.transcriptionRunning;
+  const wasStopping = state.transcriptionStopping;
+
   try {
     const snapshot = await invoke<LiveTranscriptionState>("live_transcription_state");
-    const wasRunning = state.transcriptionRunning;
 
     state = {
       ...state,
       transcriptionRunning: snapshot.running,
+      transcriptionBusy: wasStopping ? snapshot.running : state.transcriptionBusy,
+      transcriptionStopping: wasStopping && snapshot.running,
       liveTranscriptText: snapshot.text.trim(),
       meetingNote: snapshot.error || state.meetingNote,
     };
@@ -1153,33 +1163,51 @@ async function refreshLiveTranscription(silent = false) {
     if (!silent) {
       patch({ meetingNote: `Live transcription failed: ${String(error)}` });
     }
-    patch({ transcriptionRunning: false });
-  } finally {
-    state = {
-      ...state,
+    patch({
       transcriptionBusy: false,
-    };
-    emit();
+      transcriptionRunning: false,
+      transcriptionStopping: false,
+    });
+  } finally {
     syncLiveTranscriptionPolling();
   }
 }
 
-async function stopLiveTranscriptionSession() {
-  const snapshot = await invoke<LiveTranscriptionState>("stop_live_transcription");
+function waitForDelay(ms: number) {
+  return new Promise<void>((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+async function requestStopLiveTranscriptionSession() {
+  const snapshot = await invoke<LiveTranscriptionState>("request_stop_live_transcription");
+
+  const stopPending = snapshot.running;
 
   state = {
     ...state,
+    transcriptionBusy: stopPending,
     transcriptionRunning: snapshot.running,
+    transcriptionStopping: stopPending,
     liveTranscriptText: snapshot.text.trim(),
     meetingNote: snapshot.error || state.meetingNote,
   };
   emit();
 
-  const endedMeetingId = finalizeLiveTranscript(true);
-  if (endedMeetingId) {
-    queueMeetingAutoDiarization(endedMeetingId);
+  if (!stopPending) {
+    const endedMeetingId = finalizeLiveTranscript(true);
+    if (endedMeetingId) {
+      queueMeetingAutoDiarization(endedMeetingId);
+    }
   }
   syncLiveTranscriptionPolling();
+}
+
+async function waitForLiveTranscriptionStopCompletion() {
+  while (state.transcriptionRunning) {
+    await waitForDelay(LIVE_TRANSCRIPTION_STOP_WAIT_MS);
+    await refreshLiveTranscription(true);
+  }
 }
 
 async function stopActiveRecordingIfNeeded(nextMeetingId: string | null = null) {
@@ -1188,7 +1216,10 @@ async function stopActiveRecordingIfNeeded(nextMeetingId: string | null = null) 
     return;
   }
 
-  await stopLiveTranscriptionSession();
+  await requestStopLiveTranscriptionSession();
+  if (state.transcriptionRunning) {
+    await waitForLiveTranscriptionStopCompletion();
+  }
 }
 
 function setHashRoute(path: string) {
@@ -1240,7 +1271,7 @@ async function toggleMeetingStatus(meetingId: string) {
 
   try {
     if (meeting.status === "live") {
-      await stopLiveTranscriptionSession();
+      await requestStopLiveTranscriptionSession();
       return;
     }
 
@@ -1258,7 +1289,9 @@ async function toggleMeetingStatus(meetingId: string) {
       meetingNote: error instanceof Error ? error.message : String(error),
     });
   } finally {
-    patch({ transcriptionBusy: false });
+    if (!state.transcriptionStopping) {
+      patch({ transcriptionBusy: false });
+    }
   }
 }
 

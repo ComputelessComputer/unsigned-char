@@ -849,6 +849,7 @@ function MeetingScreen() {
     snapshot.transcriptionBusy,
     snapshot.recordingMeetingId,
   );
+  const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
 
   return (
     <section className={cn("mx-auto flex max-w-[760px] flex-col gap-5 overflow-hidden", windowShellHeightClass)}>
@@ -939,12 +940,13 @@ function MeetingScreen() {
             variant={meeting.status === "live" ? "destructive" : "outline"}
             className="min-w-[190px]"
             disabled={snapshot.transcriptionBusy}
+            loading={isStoppingMeeting}
             onClick={() => {
               void appStore.toggleMeetingStatus(meeting.id);
             }}
           >
             {meeting.status === "live" ? (
-              "Stop listening"
+              isStoppingMeeting ? "Processing audio" : "Stop listening"
             ) : (
               <>
                 <LiveIndicator />

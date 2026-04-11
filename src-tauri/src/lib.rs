@@ -587,7 +587,9 @@ fn run_local_diarization<R: tauri::Runtime>(
             return Err("Speaker count must be at least 1.".to_string());
         }
 
-        command.arg("--speaker-count").arg(speaker_count.to_string());
+        command
+            .arg("--speaker-count")
+            .arg(speaker_count.to_string());
     }
 
     if let Some(token) = hugging_face_token {
@@ -714,31 +716,33 @@ async fn start_live_transcription<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-fn live_transcription_state(state: State<'_, AppState>) -> Result<LiveTranscriptionState, String> {
-    Ok(state
-        .inner()
-        .transcription
-        .lock()
-        .map_err(|_| "Failed to access transcription state.".to_string())?
-        .state())
-}
-
-#[tauri::command]
-async fn stop_live_transcription<R: tauri::Runtime>(
+fn live_transcription_state<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<LiveTranscriptionState, String> {
     let transcription = state.inner().transcription.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let snapshot = transcription
-            .lock()
-            .map_err(|_| "Failed to access transcription state.".to_string())?
-            .stop()?;
+    let snapshot = transcription
+        .lock()
+        .map_err(|_| "Failed to access transcription state.".to_string())?
+        .state()?;
+
+    if !snapshot.running {
         refresh_selected_model_preload(&app, &transcription);
-        Ok(snapshot)
-    })
-    .await
-    .map_err(|error| "Failed to join transcription shutdown task: ".to_owned() + &error.to_string())?
+    }
+
+    Ok(snapshot)
+}
+
+#[tauri::command]
+fn request_stop_live_transcription(
+    state: State<'_, AppState>,
+) -> Result<LiveTranscriptionState, String> {
+    state
+        .inner()
+        .transcription
+        .lock()
+        .map_err(|_| "Failed to access transcription state.".to_string())?
+        .request_stop()
 }
 
 fn refresh_selected_model_preload<R: tauri::Runtime>(
@@ -1294,7 +1298,9 @@ fn resolve_meeting_export_path<R: tauri::Runtime>(
     };
 
     if !resolved.starts_with(&exports_dir) {
-        return Err("Meeting export path is outside the unsigned char document folder.".to_string());
+        return Err(
+            "Meeting export path is outside the unsigned char document folder.".to_string(),
+        );
     }
 
     if resolved.extension().and_then(|value| value.to_str()) != Some("md") {
@@ -2257,7 +2263,7 @@ pub fn run() {
             delete_meeting_export,
             start_live_transcription,
             live_transcription_state,
-            stop_live_transcription
+            request_stop_live_transcription
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -86,10 +86,7 @@ impl TranscriptionManager {
         if let Some(preloaded) = self.preloaded.as_ref() {
             if preloaded.model_path == model_path {
                 if let Ok(result) = preloaded.shared.0.lock() {
-                    if result
-                        .as_ref()
-                        .is_none_or(|state| state.as_ref().is_ok())
-                    {
+                    if result.as_ref().is_none_or(|state| state.as_ref().is_ok()) {
                         return;
                     }
                 }
@@ -117,11 +114,30 @@ impl TranscriptionManager {
         self.preloaded = None;
     }
 
-    pub fn state(&self) -> LiveTranscriptionState {
-        self.active
-            .as_ref()
-            .map(SessionHandle::snapshot)
-            .unwrap_or_default()
+    pub fn request_stop(&mut self) -> Result<LiveTranscriptionState, String> {
+        let Some(session) = self.active.as_ref() else {
+            return Ok(LiveTranscriptionState::default());
+        };
+
+        session.request_stop()?;
+        Ok(session.snapshot())
+    }
+
+    pub fn state(&mut self) -> Result<LiveTranscriptionState, String> {
+        let Some(session) = self.active.as_ref() else {
+            return Ok(LiveTranscriptionState::default());
+        };
+
+        if session.running.load(Ordering::SeqCst) {
+            return Ok(session.snapshot());
+        }
+
+        let session = self
+            .active
+            .take()
+            .ok_or_else(|| "Failed to access transcription state.".to_string())?;
+
+        session.finish()
     }
 
     pub fn stop(&mut self) -> Result<LiveTranscriptionState, String> {
@@ -197,15 +213,28 @@ impl SessionHandle {
         }
     }
 
-    fn stop(mut self) -> Result<LiveTranscriptionState, String> {
-        let _ = self.command_tx.send(SessionCommand::Stop);
+    fn request_stop(&self) -> Result<(), String> {
+        if self.command_tx.send(SessionCommand::Stop).is_err()
+            && self.running.load(Ordering::SeqCst)
+        {
+            return Err("Failed to stop local transcription.".to_string());
+        }
 
+        Ok(())
+    }
+
+    fn finish(mut self) -> Result<LiveTranscriptionState, String> {
         if let Some(join) = self.join.take() {
             join.join()
                 .map_err(|_| "The transcription session crashed.".to_string())?;
         }
 
         Ok(self.snapshot())
+    }
+
+    fn stop(self) -> Result<LiveTranscriptionState, String> {
+        self.request_stop()?;
+        self.finish()
     }
 
     fn snapshot(&self) -> LiveTranscriptionState {
