@@ -387,12 +387,16 @@ function SearchableSelect({
           <div className="max-h-60 overflow-y-auto">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option, index) => (
-                <button
+                <Button
                   key={option.value}
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   className={cn(
-                    "flex w-full items-center justify-between gap-3 rounded-[calc(var(--radius)-8px)] px-3 py-2 text-left text-sm text-zinc-900 transition",
-                    index === activeIndex ? "bg-zinc-100" : "hover:bg-zinc-50",
+                    "h-auto w-full justify-between rounded-[calc(var(--radius)-8px)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
+                    index === activeIndex
+                      ? "bg-zinc-100 hover:bg-zinc-100 data-pressed:bg-zinc-100"
+                      : "hover:bg-zinc-50 data-pressed:bg-zinc-50",
                   )}
                   onMouseEnter={() => setActiveIndex(index)}
                   onMouseDown={(event) => event.preventDefault()}
@@ -407,7 +411,7 @@ function SearchableSelect({
                       {option.detail}
                     </span>
                   ) : null}
-                </button>
+                </Button>
               ))
             ) : (
               <div className="px-3 py-2 text-sm text-zinc-500">No results found.</div>
@@ -492,14 +496,16 @@ function SpokenLanguagesCombobox({
             className="gap-2 px-3 py-1 text-xs font-medium normal-case tracking-normal"
           >
             {LANGUAGE_OPTIONS.find((option) => option.value === language)?.label ?? language}
-            <button
+            <Button
               type="button"
-              className="text-zinc-500 transition hover:text-zinc-900"
+              variant="ghost"
+              size="icon-xs"
+              className="size-5 rounded-full border-transparent bg-transparent p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-zinc-900 data-pressed:bg-transparent"
               onClick={() => onRemove(language)}
               disabled={disabled}
             >
               <IconClose />
-            </button>
+            </Button>
           </Badge>
         ))}
         <input
@@ -556,12 +562,16 @@ function SpokenLanguagesCombobox({
         <Card className="absolute inset-x-0 top-[calc(100%+8px)] z-20 p-2">
           <div className="max-h-60 overflow-y-auto">
             {filteredOptions.map((option, index) => (
-              <button
+              <Button
                 key={option.value}
                 type="button"
+                variant="ghost"
+                size="sm"
                 className={cn(
-                  "flex w-full items-center justify-between gap-3 rounded-[calc(var(--radius)-8px)] px-3 py-2 text-left text-sm text-zinc-900 transition",
-                  index === activeIndex ? "bg-zinc-100" : "hover:bg-zinc-50",
+                  "h-auto w-full justify-between rounded-[calc(var(--radius)-8px)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
+                  index === activeIndex
+                    ? "bg-zinc-100 hover:bg-zinc-100 data-pressed:bg-zinc-100"
+                    : "hover:bg-zinc-50 data-pressed:bg-zinc-50",
                 )}
                 onMouseEnter={() => setActiveIndex(index)}
                 onMouseDown={(event) => event.preventDefault()}
@@ -571,7 +581,7 @@ function SpokenLanguagesCombobox({
                 <span className="text-[11px] uppercase tracking-[0.08em] text-zinc-500">
                   {option.value}
                 </span>
-              </button>
+              </Button>
             ))}
           </div>
         </Card>
@@ -704,24 +714,26 @@ function HomeScreen() {
                 );
 
                 return (
-                  <button
-                    key={meeting.id}
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => {
-                      navigate({
-                        to: "/meeting/$meetingId",
-                        params: { meetingId: meeting.id },
-                      });
-                    }}
-                    onContextMenu={(event) => {
-                      void showNativeContextMenu(
-                        getMeetingActionMenuItems(meeting, deleteDisabled, setMeetingPendingDelete),
-                        event,
-                      );
-                    }}
-                  >
+                  <div key={meeting.id} className="relative">
                     <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="absolute inset-0 z-10 h-auto w-full rounded-[calc(var(--radius)+2px)] border-transparent bg-transparent p-0 text-left shadow-none hover:bg-transparent data-pressed:bg-transparent"
+                        aria-label={`Open ${meeting.title}`}
+                        onClick={() => {
+                          navigate({
+                            to: "/meeting/$meetingId",
+                            params: { meetingId: meeting.id },
+                          });
+                        }}
+                        onContextMenu={(event) => {
+                          void showNativeContextMenu(
+                            getMeetingActionMenuItems(meeting, deleteDisabled, setMeetingPendingDelete),
+                            event,
+                          );
+                        }}
+                      />
                       <CardPanel className="p-4">
                         <div className="flex min-w-0 flex-col gap-1.5">
                           <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
@@ -731,7 +743,7 @@ function HomeScreen() {
                         </div>
                       </CardPanel>
                     </Card>
-                  </button>
+                  </div>
                 );
               })}
             </div>

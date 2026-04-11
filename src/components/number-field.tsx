@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { cn } from "./ui";
+import { Button, cn } from "./ui";
 
 type NumberFieldValue = number | null;
 
@@ -149,12 +149,14 @@ function NumberFieldStepButton({
     disabled || contextDisabled || (direction === -1 ? reachedMinimum : reachedMaximum);
 
   return (
-    <button
+    <Button
       type="button"
       {...props}
+      variant="ghost"
+      size="icon"
       disabled={buttonDisabled}
       className={cn(
-        "inline-flex w-11 shrink-0 items-center justify-center bg-transparent text-zinc-500 transition hover:bg-[color:var(--secondary)] hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-inset disabled:pointer-events-none disabled:text-zinc-300",
+        "h-full w-11 rounded-none bg-transparent px-0 text-zinc-500 shadow-none hover:bg-[color:var(--secondary)] hover:text-zinc-950 data-pressed:bg-[color:var(--secondary)] data-pressed:text-zinc-950 focus-visible:ring-[color:var(--ring)] focus-visible:ring-inset disabled:text-zinc-300",
         className,
       )}
       onClick={() => {
@@ -166,7 +168,7 @@ function NumberFieldStepButton({
       ) : (
         <Minus className="size-4" strokeWidth={1.8} aria-hidden="true" />
       )}
-    </button>
+    </Button>
   );
 }
 
