@@ -369,7 +369,7 @@ function SearchableSelect({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-auto w-full justify-between rounded-[calc(var(--radius)-8px)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
+                    "h-auto w-full justify-between rounded-[var(--radius-control-sm)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
                     index === activeIndex
                       ? "bg-zinc-100 hover:bg-zinc-100 data-pressed:bg-zinc-100"
                       : "hover:bg-zinc-50 data-pressed:bg-zinc-50",
@@ -476,7 +476,7 @@ function SpokenLanguagesCombobox({
               type="button"
               variant="ghost"
               size="icon-xs"
-              className="size-5 rounded-full border-transparent bg-transparent p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-zinc-900 data-pressed:bg-transparent"
+              className="size-5 rounded-[var(--radius-control-sm)] border-transparent bg-transparent p-0 text-zinc-500 shadow-none hover:bg-transparent hover:text-zinc-900 data-pressed:bg-transparent"
               onClick={() => onRemove(language)}
               disabled={disabled}
             >
@@ -544,7 +544,7 @@ function SpokenLanguagesCombobox({
                 variant="ghost"
                 size="sm"
                 className={cn(
-                  "h-auto w-full justify-between rounded-[calc(var(--radius)-8px)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
+                  "h-auto w-full justify-between rounded-[var(--radius-control-sm)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
                   index === activeIndex
                     ? "bg-zinc-100 hover:bg-zinc-100 data-pressed:bg-zinc-100"
                     : "hover:bg-zinc-50 data-pressed:bg-zinc-50",
@@ -602,6 +602,7 @@ function HomeScreen() {
         <BrandWordmark className="relative -top-1 shrink-0" />
         <div data-window-drag="false">
           <Button
+            size="lg"
             className="gap-2.5"
             disabled={snapshot.startMeetingBusy || requiresAppSetup(snapshot)}
             onClick={async () => {

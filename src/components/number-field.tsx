@@ -123,7 +123,7 @@ export function NumberFieldGroup({ className, ...props }: HTMLAttributes<HTMLDiv
     <div
       {...props}
       className={cn(
-        "flex h-11 items-stretch overflow-hidden rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--input)] shadow-[0_1px_0_rgba(255,255,255,0.85)]",
+        "flex h-11 items-stretch overflow-hidden rounded-[var(--radius-control)] border border-[color:var(--border-strong)] bg-[color:var(--input)] shadow-[0_1px_0_rgba(255,255,255,0.85)]",
         className,
       )}
     />
