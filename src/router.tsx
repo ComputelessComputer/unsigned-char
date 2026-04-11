@@ -952,7 +952,7 @@ function MeetingScreen() {
                 onScroll={handleTranscriptScroll}
               >
                 {transcriptLines.length === 0 ? (
-                  <div className={cn(emptyStateClass, "flex min-h-full flex-col items-center justify-center")}>
+                  <div className={cn(emptyStateClass, "flex flex-1 flex-col items-center justify-center")}>
                     <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Live transcript</p>
                     <p className="mt-2 text-sm leading-6 text-zinc-600">
                       {meeting.status === "live"
