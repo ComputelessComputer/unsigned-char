@@ -208,8 +208,6 @@ function DeleteMeetingDialog({
 
 const insetPanelClass =
   "rounded-[calc(var(--radius)-4px)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3";
-const emptyStateClass =
-  "rounded-[var(--radius)] border border-dashed border-[color:var(--border-strong)] bg-[color:var(--secondary)] px-6 py-8 text-center";
 const windowShellHeightClass = "h-[calc(100vh-2.5rem)]";
 const appWindow = getCurrentWindow();
 
@@ -959,23 +957,18 @@ function MeetingScreen() {
 
       <div className="-mx-4 min-h-0 flex-1 px-4 pb-4 pr-5">
         <div className="flex h-full min-h-0 flex-col gap-4">
-          <Card className="min-h-[260px] flex-1 overflow-hidden">
-            <div className="relative flex h-full min-h-0 flex-col">
-              <section
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
-                ref={attachTranscriptRef}
-                onScroll={handleTranscriptScroll}
-              >
-                {transcriptLines.length === 0 ? (
-                  <div className={cn(emptyStateClass, "flex flex-1 flex-col items-center justify-center")}>
-                    <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Live transcript</p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-600">
-                      {meeting.status === "live"
-                        ? "Start speaking and your transcript will appear here."
-                        : "Resume listening and the live transcript will appear here."}
-                    </p>
-                  </div>
-                ) : (
+          {transcriptLines.length === 0 ? (
+            <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
+              <p className="text-sm leading-6 text-zinc-600">Transcript will appear here.</p>
+            </Card>
+          ) : (
+            <Card className="min-h-[260px] flex-1 overflow-hidden">
+              <div className="relative flex h-full min-h-0 flex-col">
+                <section
+                  className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
+                  ref={attachTranscriptRef}
+                  onScroll={handleTranscriptScroll}
+                >
                   <div className="space-y-3">
                     {transcriptLines.map((line, index) => (
                       <article
@@ -989,15 +982,15 @@ function MeetingScreen() {
                       </article>
                     ))}
                   </div>
-                )}
-              </section>
-              <ScrollFade
-                tone="card"
-                showTop={transcriptScrollFade.showTop}
-                showBottom={transcriptScrollFade.showBottom}
-              />
-            </div>
-          </Card>
+                </section>
+                <ScrollFade
+                  tone="card"
+                  showTop={transcriptScrollFade.showTop}
+                  showBottom={transcriptScrollFade.showBottom}
+                />
+              </div>
+            </Card>
+          )}
 
           {snapshot.meetingNote ? (
             <p className="text-sm text-rose-700">{snapshot.meetingNote}</p>
