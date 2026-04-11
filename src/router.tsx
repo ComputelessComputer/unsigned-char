@@ -907,17 +907,17 @@ function MeetingScreen() {
             );
           }}
         >
-          <NumberFieldGroup>
-            <NumberFieldDecrement />
-            <div className="grid min-w-0 flex-1 grid-cols-[auto_auto] items-center justify-center gap-2 border-x border-[color:var(--border)] px-3 text-zinc-500">
+          <NumberFieldGroup className="h-10">
+            <NumberFieldDecrement className="w-10" />
+            <div className="grid min-w-0 flex-1 grid-cols-[auto_auto] items-center justify-center gap-1.5 border-x border-[color:var(--border)] px-2.5 text-zinc-500">
               <Users className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
               <NumberFieldInput
                 placeholder="Auto"
                 aria-label="Participants"
-                className="w-[3.25rem] min-w-0 flex-none border-0 bg-transparent px-0 text-center placeholder:text-center"
+                className="w-[3rem] min-w-0 flex-none border-0 bg-transparent px-0 text-center placeholder:text-center"
               />
             </div>
-            <NumberFieldIncrement />
+            <NumberFieldIncrement className="w-10" />
           </NumberFieldGroup>
         </NumberField>
 
