@@ -90,6 +90,18 @@ function BrandWordmark({ className }: { className?: string }) {
   return <img src={brandWordmark} alt="unsigned {char}" className={cn("block h-9 w-auto", className)} />;
 }
 
+function LiveIndicator({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("relative inline-flex size-3 shrink-0 items-center justify-center", className)}
+    >
+      <span className="absolute inline-flex size-3 animate-ping rounded-full bg-rose-400/35 motion-reduce:animate-none" />
+      <span className="relative inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
+    </span>
+  );
+}
+
 function StatusBadge({
   tone,
   children,
@@ -616,7 +628,7 @@ function HomeScreen() {
             }}
           >
             <span className="inline-flex items-center gap-2">
-              <span className="inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
+              <LiveIndicator />
               <span className="text-white">{snapshot.startMeetingBusy ? "Starting..." : "New meeting"}</span>
             </span>
           </Button>
@@ -935,7 +947,7 @@ function MeetingScreen() {
               "Stop listening"
             ) : (
               <>
-                <span className="inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
+                <LiveIndicator />
                 <span>Resume listening</span>
               </>
             )}
