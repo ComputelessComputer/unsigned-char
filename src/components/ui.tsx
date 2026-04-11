@@ -215,3 +215,45 @@ export function Kbd({
     </kbd>
   );
 }
+
+type ScrollFadeTone = "background" | "card";
+
+const scrollFadeTones = {
+  background: "from-[color:var(--background)]",
+  card: "from-[color:var(--card)]",
+} satisfies Record<ScrollFadeTone, string>;
+
+export function ScrollFade({
+  className,
+  showBottom,
+  showTop,
+  tone = "background",
+}: {
+  className?: string;
+  showBottom: boolean;
+  showTop: boolean;
+  tone?: ScrollFadeTone;
+}) {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-10 h-8 bg-gradient-to-b to-transparent transition-opacity duration-150",
+          scrollFadeTones[tone],
+          showTop ? "opacity-100" : "opacity-0",
+          className,
+        )}
+      />
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8 bg-gradient-to-t to-transparent transition-opacity duration-150",
+          scrollFadeTones[tone],
+          showBottom ? "opacity-100" : "opacity-0",
+          className,
+        )}
+      />
+    </>
+  );
+}

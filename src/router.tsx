@@ -31,8 +31,10 @@ import {
   CardPanel,
   CardTitle,
   Input,
+  ScrollFade,
   cn,
 } from "./components/ui";
+import { useScrollFade } from "./hooks/useScrollFade";
 import {
   LANGUAGE_OPTIONS,
   appStore,
@@ -588,6 +590,7 @@ function HomeScreen() {
   const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
   const meetings = sortedMeetings(snapshot.meetings);
   const setupBanner = currentSetupBannerContent(snapshot);
+  const homeScrollFade = useScrollFade<HTMLDivElement>();
 
   return (
     <section className={cn("mx-auto flex max-w-[780px] flex-col gap-4", windowShellHeightClass)}>
@@ -615,108 +618,119 @@ function HomeScreen() {
         </div>
       </WindowDragRegion>
 
-      <div
-        id="home-content"
-        className="-mx-4 flex-1 overflow-y-auto px-4 pt-4 pr-5 pb-4"
-        ref={(node) => {
-          if (node) {
-            node.scrollTop = snapshot.homeScrollTop;
-          }
-        }}
-        onScroll={(event) => {
-          appStore.setHomeScrollTop(event.currentTarget.scrollTop);
-        }}
-      >
-        {snapshot.permissionNote ? (
-          <p className="mb-3 text-sm text-rose-700">{snapshot.permissionNote}</p>
-        ) : null}
+      <div className="relative -mx-4 min-h-0 flex-1">
+        <div
+          id="home-content"
+          className="h-full overflow-y-auto px-4 pt-4 pr-5 pb-4"
+          ref={(node) => {
+            homeScrollFade.attachRef(node);
 
-        {setupBanner ? (
-          <Card className="mb-4">
-            <CardHeader className="gap-1.5">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                {setupBanner.kicker}
-              </p>
-              <CardTitle className="text-2xl">{setupBanner.title}</CardTitle>
-              <CardDescription>{setupBanner.copy}</CardDescription>
-            </CardHeader>
-            <CardPanel className="pt-4">
-              <p className="text-sm text-zinc-500">{setupBanner.detail}</p>
-              {setupBanner.localPath ? (
-                <div className={cn("mt-4", insetPanelClass)}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                    Storage
-                  </p>
-                  <code className="mt-1 block break-all text-xs text-zinc-700">
-                    {setupBanner.localPath}
-                  </code>
-                </div>
+            if (node) {
+              node.scrollTop = snapshot.homeScrollTop;
+            }
+          }}
+          onScroll={(event) => {
+            homeScrollFade.handleScroll(event);
+            appStore.setHomeScrollTop(event.currentTarget.scrollTop);
+          }}
+        >
+          {snapshot.permissionNote ? (
+            <p className="mb-3 text-sm text-rose-700">{snapshot.permissionNote}</p>
+          ) : null}
+
+          {setupBanner ? (
+            <Card className="mb-4">
+              <CardHeader className="gap-1.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                  {setupBanner.kicker}
+                </p>
+                <CardTitle className="text-2xl">{setupBanner.title}</CardTitle>
+                <CardDescription>{setupBanner.copy}</CardDescription>
+              </CardHeader>
+              <CardPanel className="pt-4">
+                <p className="text-sm text-zinc-500">{setupBanner.detail}</p>
+                {setupBanner.localPath ? (
+                  <div className={cn("mt-4", insetPanelClass)}>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                      Storage
+                    </p>
+                    <code className="mt-1 block break-all text-xs text-zinc-700">
+                      {setupBanner.localPath}
+                    </code>
+                  </div>
+                ) : null}
+              </CardPanel>
+              {setupBanner.actionLabel ? (
+                <CardFooter className="border-t-0 pt-0">
+                  <Button
+                    disabled={snapshot.modelBusy}
+                    onClick={() => {
+                      void appStore.startManagedModelDownload();
+                    }}
+                  >
+                    {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
+                  </Button>
+                </CardFooter>
               ) : null}
-            </CardPanel>
-            {setupBanner.actionLabel ? (
-              <CardFooter className="border-t-0 pt-0">
-                <Button
-                  disabled={snapshot.modelBusy}
-                  onClick={() => {
-                    void appStore.startManagedModelDownload();
-                  }}
-                >
-                  {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
-                </Button>
-              </CardFooter>
-            ) : null}
-          </Card>
-        ) : meetings.length === 0 ? (
-          <Card>
-            <CardHeader className="items-center px-8 py-8 text-center">
-              <CardTitle>No meetings yet</CardTitle>
-              <CardDescription>
-                Create a meeting from the button above and transcripts will show up here.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {meetings.map((meeting) => {
-              const deleteDisabled = isMeetingDeleteDisabled(
-                meeting,
-                snapshot.transcriptionBusy,
-                snapshot.recordingMeetingId,
-              );
+            </Card>
+          ) : meetings.length === 0 ? (
+            <Card>
+              <CardHeader className="items-center px-8 py-8 text-center">
+                <CardTitle>No meetings yet</CardTitle>
+                <CardDescription>
+                  Create a meeting from the button above and transcripts will show up here.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {meetings.map((meeting) => {
+                const deleteDisabled = isMeetingDeleteDisabled(
+                  meeting,
+                  snapshot.transcriptionBusy,
+                  snapshot.recordingMeetingId,
+                );
 
-              return (
-                <button
-                  key={meeting.id}
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => {
-                    navigate({
-                      to: "/meeting/$meetingId",
-                      params: { meetingId: meeting.id },
-                    });
-                  }}
-                  onContextMenu={(event) => {
-                    void showNativeContextMenu(
-                      getMeetingActionMenuItems(meeting, deleteDisabled, setMeetingPendingDelete),
-                      event,
-                    );
-                  }}
-                >
-                  <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
-                    <CardPanel className="p-4">
-                      <div className="flex min-w-0 flex-col gap-1.5">
-                        <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
-                        <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
-                          {meeting.title}
-                        </h2>
-                      </div>
-                    </CardPanel>
-                  </Card>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                return (
+                  <button
+                    key={meeting.id}
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => {
+                      navigate({
+                        to: "/meeting/$meetingId",
+                        params: { meetingId: meeting.id },
+                      });
+                    }}
+                    onContextMenu={(event) => {
+                      void showNativeContextMenu(
+                        getMeetingActionMenuItems(meeting, deleteDisabled, setMeetingPendingDelete),
+                        event,
+                      );
+                    }}
+                  >
+                    <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
+                      <CardPanel className="p-4">
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                          <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
+                          <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
+                            {meeting.title}
+                          </h2>
+                        </div>
+                      </CardPanel>
+                    </Card>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <ScrollFade
+          className="mx-4"
+          tone="background"
+          showTop={homeScrollFade.showTop}
+          showBottom={homeScrollFade.showBottom}
+        />
       </div>
       <DeleteMeetingDialog
         meeting={meetingPendingDelete}
@@ -773,6 +787,7 @@ function MeetingScreen() {
   const snapshot = useAppState();
   const navigate = useNavigate();
   const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
+  const transcriptScrollFade = useScrollFade<HTMLElement>();
   const { meetingId } = useParams({ from: "/meeting/$meetingId" });
   const meeting = snapshot.meetings.find((candidate) => candidate.id === meetingId) ?? null;
 
@@ -924,82 +939,92 @@ function MeetingScreen() {
       <div className="-mx-4 min-h-0 flex-1 overflow-y-auto px-4 pb-4 pr-5">
         <div className="flex min-h-full flex-col gap-4">
           <Card className="min-h-[260px] flex-1 overflow-hidden">
-            <section
-              className="h-full overflow-y-auto p-4"
-              ref={(node) => {
-                if (!node) {
-                  return;
-                }
+            <div className="relative h-full">
+              <section
+                className="h-full overflow-y-auto p-4"
+                ref={(node) => {
+                  transcriptScrollFade.attachRef(node);
 
-                window.requestAnimationFrame(() => {
-                  node.scrollTop = node.scrollHeight;
-                });
-              }}
-            >
-              {showTranscriptPermissionPrompt ? (
-                <div className={cn(emptyStateClass, "text-left")}>
-                  <p className="text-center text-lg font-semibold tracking-[-0.02em] text-zinc-950">
-                    Allow audio access
-                  </p>
-                  <p className="mt-2 text-center text-sm leading-6 text-zinc-600">
-                    unsigned char needs microphone and system audio permissions before the live transcript
-                    can hear both sides of the meeting.
-                  </p>
+                  if (!node) {
+                    return;
+                  }
 
-                  <div className="mt-6 space-y-3">
-                    {transcriptPermissionRows.map((permission) => (
-                      <div
-                        key={permission.kind}
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3 text-left"
+                  window.requestAnimationFrame(() => {
+                    node.scrollTop = node.scrollHeight;
+                  });
+                }}
+                onScroll={transcriptScrollFade.handleScroll}
+              >
+                {showTranscriptPermissionPrompt ? (
+                  <div className={cn(emptyStateClass, "text-left")}>
+                    <p className="text-center text-lg font-semibold tracking-[-0.02em] text-zinc-950">
+                      Allow audio access
+                    </p>
+                    <p className="mt-2 text-center text-sm leading-6 text-zinc-600">
+                      unsigned char needs microphone and system audio permissions before the live transcript
+                      can hear both sides of the meeting.
+                    </p>
+
+                    <div className="mt-6 space-y-3">
+                      {transcriptPermissionRows.map((permission) => (
+                        <div
+                          key={permission.kind}
+                          className="flex flex-wrap items-center justify-between gap-3 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border)] bg-[color:var(--card)] px-4 py-3 text-left"
+                        >
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-zinc-950">{permission.label}</p>
+                            <p className="mt-1 text-sm leading-6 text-zinc-600">{permission.detail}</p>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={permissionStatusVariant(permission.status)}>
+                              {permissionStatusLabel(permission.status)}
+                            </Badge>
+                            {permission.status === "authorized" ? null : (
+                              <Button
+                                size="sm"
+                                variant={permission.status === "denied" ? "outline" : "secondary"}
+                                disabled={snapshot.transcriptionBusy}
+                                onClick={() => {
+                                  void appStore.requestMeetingPermission(permission.kind);
+                                }}
+                              >
+                                {permission.status === "denied" ? "Open settings" : "Allow access"}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : transcriptLines.length === 0 ? (
+                  <div className={emptyStateClass}>
+                    <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Live transcript</p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-600">
+                      Start speaking and your microphone transcript will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {transcriptLines.map((line, index) => (
+                      <article
+                        key={`${meeting.id}-${index}-${line.slice(0, 12)}`}
+                        className="grid grid-cols-[auto,minmax(0,1fr)] gap-3 rounded-[var(--radius)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3"
                       >
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-zinc-950">{permission.label}</p>
-                          <p className="mt-1 text-sm leading-6 text-zinc-600">{permission.detail}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={permissionStatusVariant(permission.status)}>
-                            {permissionStatusLabel(permission.status)}
-                          </Badge>
-                          {permission.status === "authorized" ? null : (
-                            <Button
-                              size="sm"
-                              variant={permission.status === "denied" ? "outline" : "secondary"}
-                              disabled={snapshot.transcriptionBusy}
-                              onClick={() => {
-                                void appStore.requestMeetingPermission(permission.kind);
-                              }}
-                            >
-                              {permission.status === "denied" ? "Open settings" : "Allow access"}
-                            </Button>
-                          )}
-                        </div>
-                      </div>
+                        <span className="pt-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                          {index + 1}
+                        </span>
+                        <p className="text-sm leading-6 text-zinc-800">{line}</p>
+                      </article>
                     ))}
                   </div>
-                </div>
-              ) : transcriptLines.length === 0 ? (
-                <div className={emptyStateClass}>
-                  <p className="text-lg font-semibold tracking-[-0.02em] text-zinc-950">Live transcript</p>
-                  <p className="mt-2 text-sm leading-6 text-zinc-600">
-                    Start speaking and your microphone transcript will appear here.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {transcriptLines.map((line, index) => (
-                    <article
-                      key={`${meeting.id}-${index}-${line.slice(0, 12)}`}
-                      className="grid grid-cols-[auto,minmax(0,1fr)] gap-3 rounded-[var(--radius)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3"
-                    >
-                      <span className="pt-0.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                        {index + 1}
-                      </span>
-                      <p className="text-sm leading-6 text-zinc-800">{line}</p>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
+                )}
+              </section>
+              <ScrollFade
+                tone="card"
+                showTop={transcriptScrollFade.showTop}
+                showBottom={transcriptScrollFade.showBottom}
+              />
+            </div>
           </Card>
 
           {snapshot.meetingNote ? (
