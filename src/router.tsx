@@ -9,7 +9,7 @@ import {
   useParams,
 } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, ChevronLeft } from "lucide-react";
+import { ChevronDown, ChevronLeft, Ellipsis } from "lucide-react";
 import { type KeyboardEvent, type MouseEvent, type ReactNode, useMemo, useState } from "react";
 
 import brandWordmark from "./assets/brand-wordmark.svg";
@@ -43,11 +43,16 @@ import {
   isSettingsWindow,
   requiresAppSetup,
   sortedMeetings,
+  type Meeting,
   type PermissionKind,
   type PermissionStatus,
   useAppState,
 } from "./store";
-import { showNativeContextMenu } from "./hooks/useNativeContextMenu";
+import {
+  type MenuItemDef,
+  showNativeContextMenu,
+  showNativeMenu,
+} from "./hooks/useNativeContextMenu";
 
 function IconChevronDown() {
   return <ChevronDown className="size-4 opacity-60" strokeWidth={1.5} aria-hidden="true" />;
@@ -55,6 +60,10 @@ function IconChevronDown() {
 
 function IconBack() {
   return <ChevronLeft className="size-5" strokeWidth={1.5} aria-hidden="true" />;
+}
+
+function IconMore() {
+  return <Ellipsis className="size-4" strokeWidth={1.5} aria-hidden="true" />;
 }
 
 function IconClose() {
@@ -116,6 +125,43 @@ function permissionStatusVariant(status: PermissionStatus) {
     default:
       return "secondary";
   }
+}
+
+function isMeetingDeleteDisabled(
+  meeting: Meeting,
+  transcriptionBusy: boolean,
+  recordingMeetingId: string | null,
+) {
+  return transcriptionBusy || recordingMeetingId === meeting.id || meeting.status === "live";
+}
+
+function getMeetingActionMenuItems(meeting: Meeting, deleteDisabled: boolean): MenuItemDef[] {
+  return [
+    {
+      id: `show-meeting-in-finder-${meeting.id}`,
+      text: "Show in Finder",
+      action: () => {
+        void appStore.revealMeetingExportInFinder(meeting.id);
+      },
+    },
+    { separator: true },
+    {
+      id: `delete-meeting-${meeting.id}`,
+      text: "Delete meeting",
+      disabled: deleteDisabled,
+      action: () => {
+        if (
+          !window.confirm(
+            `Delete "${meeting.title}" from unsigned {char}? This also removes its saved markdown export.`,
+          )
+        ) {
+          return;
+        }
+
+        void appStore.deleteMeeting(meeting.id);
+      },
+    },
+  ];
 }
 
 const insetPanelClass =
@@ -586,10 +632,11 @@ function HomeScreen() {
         ) : (
           <div className="space-y-3">
             {meetings.map((meeting) => {
-              const deleteDisabled =
-                snapshot.transcriptionBusy ||
-                snapshot.recordingMeetingId === meeting.id ||
-                meeting.status === "live";
+              const deleteDisabled = isMeetingDeleteDisabled(
+                meeting,
+                snapshot.transcriptionBusy,
+                snapshot.recordingMeetingId,
+              );
 
               return (
                 <button
@@ -603,35 +650,7 @@ function HomeScreen() {
                     });
                   }}
                   onContextMenu={(event) => {
-                    void showNativeContextMenu(
-                      [
-                        {
-                          id: `show-meeting-in-finder-${meeting.id}`,
-                          text: "Show in Finder",
-                          action: () => {
-                            void appStore.revealMeetingExportInFinder(meeting.id);
-                          },
-                        },
-                        { separator: true },
-                        {
-                          id: `delete-meeting-${meeting.id}`,
-                          text: "Delete meeting",
-                          disabled: deleteDisabled,
-                          action: () => {
-                            if (
-                              !window.confirm(
-                                `Delete "${meeting.title}" from unsigned {char}? This also removes its saved markdown export.`,
-                              )
-                            ) {
-                              return;
-                            }
-
-                            void appStore.deleteMeeting(meeting.id);
-                          },
-                        },
-                      ],
-                      event,
-                    );
+                    void showNativeContextMenu(getMeetingActionMenuItems(meeting, deleteDisabled), event);
                   }}
                 >
                   <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
@@ -742,25 +761,53 @@ function MeetingScreen() {
   const showTranscriptPermissionPrompt =
     transcriptLines.length === 0 &&
     transcriptPermissionRows.some((permission) => permission.status !== "authorized");
+  const deleteDisabled = isMeetingDeleteDisabled(
+    meeting,
+    snapshot.transcriptionBusy,
+    snapshot.recordingMeetingId,
+  );
 
   return (
     <section className={cn("mx-auto flex max-w-[760px] flex-col gap-4 overflow-hidden", windowShellHeightClass)}>
       <WindowDragRegion className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div data-window-drag="false">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0"
+                aria-label="Back"
+                onClick={() => {
+                  navigate({ to: "/" });
+                }}
+              >
+                <IconBack />
+              </Button>
+            </div>
+            <p className="truncate text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
+          </div>
           <div data-window-drag="false">
             <Button
               variant="ghost"
               size="icon"
-              className="shrink-0"
-              aria-label="Back"
-              onClick={() => {
-                navigate({ to: "/" });
+              className="size-9 shrink-0 rounded-full"
+              aria-label="More actions"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+
+                void showNativeMenu(getMeetingActionMenuItems(meeting, deleteDisabled), {
+                  event,
+                  at: {
+                    x: rect.left,
+                    y: rect.bottom + 6,
+                  },
+                });
               }}
             >
-              <IconBack />
+              <IconMore />
             </Button>
           </div>
-          <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
         </div>
 
         <div className="min-w-0 pl-[3.25rem]" data-window-drag="false">

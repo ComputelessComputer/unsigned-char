@@ -1,3 +1,4 @@
+import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { type MouseEvent, useCallback } from "react";
 
@@ -11,11 +12,20 @@ export type MenuItemDef =
   | { separator: true };
 
 type ContextMenuEvent = MouseEvent<HTMLElement> | globalThis.MouseEvent;
+type MenuPopupPoint = {
+  x: number;
+  y: number;
+};
 
-export async function showNativeContextMenu(items: MenuItemDef[], event: ContextMenuEvent) {
-  event.preventDefault();
-  event.stopPropagation();
-
+export async function showNativeMenu(
+  items: MenuItemDef[],
+  options?: {
+    event?: ContextMenuEvent;
+    at?: MenuPopupPoint;
+  },
+) {
+  options?.event?.preventDefault();
+  options?.event?.stopPropagation();
   const menuItems = await Promise.all(
     items.map((item) =>
       "separator" in item
@@ -30,7 +40,13 @@ export async function showNativeContextMenu(items: MenuItemDef[], event: Context
   );
 
   const menu = await Menu.new({ items: menuItems });
-  await menu.popup();
+  await menu.popup(
+    options?.at ? new LogicalPosition(options.at.x, options.at.y) : undefined,
+  );
+}
+
+export async function showNativeContextMenu(items: MenuItemDef[], event: ContextMenuEvent) {
+  await showNativeMenu(items, { event });
 }
 
 export function useNativeContextMenu(items: MenuItemDef[]) {
