@@ -877,7 +877,7 @@ function MeetingScreen() {
             <div data-window-drag="false">
               <Button
                 variant="ghost"
-                size="icon"
+                size="icon-sm"
                 className="shrink-0"
                 aria-label="Back"
                 onClick={() => {
@@ -891,9 +891,9 @@ function MeetingScreen() {
           </div>
           <div data-window-drag="false">
             <Button
-              variant="ghost"
-              size="icon"
-              className="size-9 shrink-0 rounded-full"
+              variant="secondary"
+              size="icon-sm"
+              className="shrink-0"
               aria-label="More actions"
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect();

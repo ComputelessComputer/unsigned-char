@@ -9,8 +9,25 @@ export function cn(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
 }
 
-type ButtonVariant = "default" | "secondary" | "outline" | "ghost" | "destructive";
-type ButtonSize = "default" | "sm" | "lg" | "icon";
+type ButtonVariant =
+  | "default"
+  | "secondary"
+  | "outline"
+  | "ghost"
+  | "destructive"
+  | "destructive-outline"
+  | "link";
+type ButtonSize =
+  | "default"
+  | "xs"
+  | "sm"
+  | "lg"
+  | "xl"
+  | "icon-xs"
+  | "icon-sm"
+  | "icon"
+  | "icon-lg"
+  | "icon-xl";
 
 const buttonVariants = {
   default:
@@ -23,13 +40,23 @@ const buttonVariants = {
     "border border-transparent bg-transparent text-[color:var(--muted-foreground)] hover:bg-[color:var(--muted)] hover:text-[color:var(--foreground)] disabled:text-zinc-400",
   destructive:
     "border border-rose-600 bg-rose-600 text-white hover:bg-rose-700 disabled:border-rose-300 disabled:bg-rose-300 disabled:text-white/80",
+  "destructive-outline":
+    "border border-rose-200 bg-[color:var(--card)] text-rose-700 hover:bg-rose-50 disabled:border-rose-100 disabled:text-rose-300",
+  link:
+    "border border-transparent bg-transparent px-0 text-[color:var(--foreground)] underline-offset-4 hover:underline disabled:text-zinc-400",
 } satisfies Record<ButtonVariant, string>;
 
 const buttonSizes = {
   default: "h-10 px-4 text-sm",
-  sm: "h-8 px-3 text-xs",
+  xs: "h-7 px-2.5 text-xs",
+  sm: "h-8 px-3 text-sm",
   lg: "h-11 px-5 text-sm",
-  icon: "size-10 p-0",
+  xl: "h-12 px-6 text-base",
+  "icon-xs": "size-7 p-0",
+  "icon-sm": "size-8 p-0",
+  icon: "size-9 p-0",
+  "icon-lg": "size-10 p-0",
+  "icon-xl": "size-11 p-0",
 } satisfies Record<ButtonSize, string>;
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -52,7 +79,7 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[calc(var(--radius)-6px)] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:pointer-events-none",
+        "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-[calc(var(--radius)-6px)] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[color:var(--background)] disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
         buttonVariants[variant],
         buttonSizes[size],
         className,
