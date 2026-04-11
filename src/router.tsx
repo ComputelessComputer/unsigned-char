@@ -14,7 +14,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
-  useEffectEvent,
+  useCallback,
   useMemo,
   useState,
 } from "react";
@@ -598,13 +598,17 @@ function HomeScreen() {
   const meetings = sortedMeetings(snapshot.meetings);
   const setupBanner = currentSetupBannerContent(snapshot);
   const homeScrollFade = useScrollFade<HTMLDivElement>();
-  const attachHomeContentRef = useEffectEvent((node: HTMLDivElement | null) => {
-    homeScrollFade.attachRef(node);
+  const { attachRef: attachHomeScrollFade, handleScroll: handleHomeScroll } = homeScrollFade;
+  const attachHomeContentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      attachHomeScrollFade(node);
 
-    if (node) {
-      node.scrollTop = snapshot.homeScrollTop;
-    }
-  });
+      if (node) {
+        node.scrollTop = snapshot.homeScrollTop;
+      }
+    },
+    [attachHomeScrollFade, snapshot.homeScrollTop],
+  );
 
   return (
     <section className={cn("mx-auto flex max-w-[780px] flex-col gap-4", windowShellHeightClass)}>
@@ -638,7 +642,7 @@ function HomeScreen() {
           className="h-full overflow-y-auto px-4 pt-4 pr-5 pb-4"
           ref={attachHomeContentRef}
           onScroll={(event) => {
-            homeScrollFade.handleScroll(event);
+            handleHomeScroll(event);
             appStore.setHomeScrollTop(event.currentTarget.scrollTop);
           }}
         >
@@ -796,19 +800,24 @@ function MeetingScreen() {
   const navigate = useNavigate();
   const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
   const transcriptScrollFade = useScrollFade<HTMLElement>();
+  const { attachRef: attachTranscriptScrollFade, handleScroll: handleTranscriptScroll } =
+    transcriptScrollFade;
   const { meetingId } = useParams({ from: "/meeting/$meetingId" });
   const meeting = snapshot.meetings.find((candidate) => candidate.id === meetingId) ?? null;
-  const attachTranscriptRef = useEffectEvent((node: HTMLElement | null) => {
-    transcriptScrollFade.attachRef(node);
+  const attachTranscriptRef = useCallback(
+    (node: HTMLElement | null) => {
+      attachTranscriptScrollFade(node);
 
-    if (!node) {
-      return;
-    }
+      if (!node) {
+        return;
+      }
 
-    window.requestAnimationFrame(() => {
-      node.scrollTop = node.scrollHeight;
-    });
-  });
+      window.requestAnimationFrame(() => {
+        node.scrollTop = node.scrollHeight;
+      });
+    },
+    [attachTranscriptScrollFade],
+  );
 
   if (!meeting) {
     return (
@@ -962,7 +971,7 @@ function MeetingScreen() {
               <section
                 className="h-full overflow-y-auto p-4"
                 ref={attachTranscriptRef}
-                onScroll={transcriptScrollFade.handleScroll}
+                onScroll={handleTranscriptScroll}
               >
                 {showTranscriptPermissionPrompt ? (
                   <div className={cn(emptyStateClass, "text-left")}>

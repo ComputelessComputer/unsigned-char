@@ -1,4 +1,4 @@
-import { type UIEventHandler, useEffect, useEffectEvent, useState } from "react";
+import { type UIEventHandler, useCallback, useEffect, useState } from "react";
 
 type ScrollFadeState = {
   showBottom: boolean;
@@ -12,7 +12,7 @@ export function useScrollFade<T extends HTMLElement>() {
     showTop: false,
   });
 
-  const updateState = useEffectEvent((element: T) => {
+  const updateState = useCallback((element: T) => {
     const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
     const scrollTop = Math.max(0, element.scrollTop);
     const nextState = {
@@ -25,7 +25,7 @@ export function useScrollFade<T extends HTMLElement>() {
         ? current
         : nextState,
     );
-  });
+  }, []);
 
   useEffect(() => {
     if (!node) {
@@ -54,22 +54,26 @@ export function useScrollFade<T extends HTMLElement>() {
       mutationObserver.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [node]);
+  }, [node, updateState]);
 
-  const attachRef = (nextNode: T | null) => {
-    setNode(nextNode);
+  const attachRef = useCallback((nextNode: T | null) => {
+    setNode((current) => (current === nextNode ? current : nextNode));
 
     if (!nextNode) {
-      setState({
-        showBottom: false,
-        showTop: false,
-      });
+      setState((current) =>
+        current.showBottom || current.showTop
+          ? {
+              showBottom: false,
+              showTop: false,
+            }
+          : current,
+      );
     }
-  };
+  }, []);
 
-  const handleScroll: UIEventHandler<T> = (event) => {
+  const handleScroll: UIEventHandler<T> = useCallback((event) => {
     updateState(event.currentTarget);
-  };
+  }, [updateState]);
 
   return {
     attachRef,
