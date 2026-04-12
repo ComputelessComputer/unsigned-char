@@ -1113,7 +1113,9 @@ fn show_settings_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::
     .visible(false)
     .transparent(false)
     .resizable(true);
-    builder.build()?;
+    let window = builder.build()?;
+    window.show()?;
+    window.set_focus()?;
 
     Ok(())
 }

@@ -1115,14 +1115,31 @@ function MeetingScreen() {
 
 function SettingsScreen() {
   const snapshot = useAppState();
+  const settingsLoadNote =
+    snapshot.permissionNote || snapshot.generalNote || snapshot.summaryNote;
 
   if (!snapshot.generalSettings || !snapshot.summarySettings || !snapshot.modelSettings) {
     return (
       <section className={cn("mx-auto flex max-w-[760px] items-center", windowShellHeightClass)}>
         <Card className="w-full">
           <CardHeader className="px-8 py-8">
-            <CardDescription>Loading preferences...</CardDescription>
+            <CardTitle>{settingsLoadNote ? "Could not load settings" : "Loading preferences..."}</CardTitle>
+            <CardDescription>
+              {settingsLoadNote || "Loading preferences..."}
+            </CardDescription>
           </CardHeader>
+          {settingsLoadNote ? (
+            <CardFooter className="pt-0">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  void appStore.refreshSettingsWindowData();
+                }}
+              >
+                Retry
+              </Button>
+            </CardFooter>
+          ) : null}
         </Card>
       </section>
     );
@@ -1513,6 +1530,9 @@ function SettingsScreen() {
       ) : null}
       {snapshot.summaryNote ? (
         <p className="text-sm text-rose-700">{snapshot.summaryNote}</p>
+      ) : null}
+      {snapshot.permissionNote ? (
+        <p className="text-sm text-rose-700">{snapshot.permissionNote}</p>
       ) : null}
     </section>
   );

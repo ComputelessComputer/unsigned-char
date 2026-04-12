@@ -1163,6 +1163,15 @@ async function refreshSummarySettings(silent = false) {
   }
 }
 
+async function refreshSettingsWindowData(silent = false) {
+  await Promise.all([
+    refreshGeneralSettings(silent),
+    refreshSummarySettings(silent),
+    refreshManagedModelDownloadState(silent),
+    refreshModelSettings(silent),
+  ]);
+}
+
 async function ensureModelReady() {
   await refreshModelSettings(true);
 
@@ -1865,12 +1874,7 @@ async function startManagedModelDownload() {
 
 function handleAppFocus() {
   if (isSettingsWindow) {
-    void Promise.all([
-      refreshGeneralSettings(true),
-      refreshSummarySettings(true),
-      refreshManagedModelDownloadState(true),
-      refreshModelSettings(true),
-    ]);
+    void refreshSettingsWindowData(true);
     return;
   }
 
@@ -2172,13 +2176,7 @@ async function start() {
   window.addEventListener("keydown", handleWindowKeydown);
 
   if (isSettingsWindow) {
-    await Promise.all([currentWindow.show(), currentWindow.setFocus()]);
-    await Promise.all([
-      refreshGeneralSettings(true),
-      refreshSummarySettings(true),
-      refreshManagedModelDownloadState(true),
-      refreshModelSettings(true),
-    ]);
+    await refreshSettingsWindowData(false);
     patch({ initialized: true });
     return;
   }
@@ -2223,6 +2221,7 @@ export const appStore = {
   setSummaryApiKey,
   saveSummarySettings,
   removeSummaryApiKey,
+  refreshSettingsWindowData,
   generateMeetingSummary,
   getMeetingById,
 };
