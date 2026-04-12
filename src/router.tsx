@@ -60,6 +60,10 @@ import {
   showNativeContextMenu,
   showNativeMenu,
 } from "./hooks/useNativeContextMenu";
+import {
+  SUMMARY_PROVIDERS,
+  getSummaryProviderDefinition,
+} from "./lib/summary-providers";
 
 function IconChevronDown() {
   return <ChevronDown className="size-4 opacity-60" strokeWidth={1.5} aria-hidden="true" />;
@@ -221,6 +225,15 @@ type SearchableOption = {
   label: string;
   detail?: string;
 };
+
+const summaryProviderOptions: readonly SearchableOption[] = [
+  { value: "", label: "Disabled", detail: "Off" },
+  ...SUMMARY_PROVIDERS.map((provider) => ({
+    value: provider.id,
+    label: provider.label,
+    detail: provider.detail,
+  })),
+];
 
 function shouldSkipWindowDrag(target: EventTarget | null) {
   return target instanceof Element && target.closest('[data-window-drag="false"]') !== null;
@@ -855,6 +868,8 @@ function MeetingScreen() {
     snapshot.recordingMeetingId,
   );
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
+  const summaryReady = Boolean(snapshot.summarySettings?.ready);
+  const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
 
   return (
     <section className={cn("mx-auto flex max-w-[760px] flex-col gap-5", windowShellHeightClass)}>
@@ -964,6 +979,79 @@ function MeetingScreen() {
 
       <div className="-mx-4 min-h-0 flex-1 px-4 pb-4 pr-5">
         <div className="flex h-full min-h-0 flex-col gap-4">
+          {transcriptLines.length > 0 || meeting.summary ? (
+            <Card>
+              <CardHeader className="flex-row items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <CardTitle>Summary</CardTitle>
+                  <CardDescription>
+                    {meeting.summary
+                      ? "Stored locally alongside the transcript export."
+                      : summaryReady
+                        ? "Generate a concise summary from the current transcript."
+                        : snapshot.summarySettings?.status ??
+                          "Configure an LLM provider in Settings to summarize transcripts."}
+                  </CardDescription>
+                </div>
+                {meeting.summary ? (
+                  <CardAction>
+                    <StatusBadge tone="ready">saved</StatusBadge>
+                  </CardAction>
+                ) : null}
+              </CardHeader>
+              <CardPanel className="pt-0">
+                {meeting.summary ? (
+                  <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
+                    {meeting.summary}
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      "rounded-[calc(var(--radius)-4px)] border border-dotted border-[color:var(--border-strong)] bg-[color:var(--secondary)] px-4 py-4 text-sm leading-6 text-zinc-600",
+                    )}
+                  >
+                    Transcript summaries are generated on demand and saved back into the meeting
+                    export.
+                  </div>
+                )}
+              </CardPanel>
+              <CardFooter className="justify-between">
+                <div className="text-xs leading-5 text-zinc-500">
+                  {meeting.summaryUpdatedAt ? (
+                    <span>
+                      {meeting.summaryProviderLabel ? `${meeting.summaryProviderLabel}` : "Summary"} ·{" "}
+                      {meeting.summaryModel ?? "model"} · Updated{" "}
+                      {formatDateTime(meeting.summaryUpdatedAt)}
+                    </span>
+                  ) : (
+                    <span>{transcriptLines.length} transcript {transcriptLines.length === 1 ? "line" : "lines"}</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                  {!summaryReady ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        navigate({ to: "/settings" });
+                      }}
+                    >
+                      Open settings
+                    </Button>
+                  ) : null}
+                  <Button
+                    disabled={!summaryReady || transcriptLines.length === 0 || snapshot.summaryMeetingId !== null}
+                    loading={isGeneratingSummary}
+                    onClick={() => {
+                      void appStore.generateMeetingSummary(meeting.id);
+                    }}
+                  >
+                    {meeting.summary ? "Regenerate summary" : "Generate summary"}
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          ) : null}
+
           {transcriptLines.length === 0 ? (
             <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
               <p className="text-sm leading-6 text-zinc-600">Transcript will appear here.</p>
@@ -1021,7 +1109,7 @@ function MeetingScreen() {
 function SettingsScreen() {
   const snapshot = useAppState();
 
-  if (!snapshot.generalSettings) {
+  if (!snapshot.generalSettings || !snapshot.summarySettings) {
     return (
       <section className={cn("mx-auto flex max-w-[760px] items-center", windowShellHeightClass)}>
         <Card className="w-full">
@@ -1045,6 +1133,28 @@ function SettingsScreen() {
         : "needs setup";
   const modelStatusTone = downloadStatus === "downloading" ? "missing" : modelReady ? "ready" : "missing";
   const setupBanner = currentSetupBannerContent(snapshot);
+  const selectedSummaryProvider = getSummaryProviderDefinition(snapshot.summaryDraft.provider);
+  const summaryStatusLabel = !snapshot.summarySettings.provider
+    ? "off"
+    : snapshot.summarySettings.ready
+      ? "ready"
+      : "needs setup";
+  const summaryStatusTone = !snapshot.summarySettings.provider
+    ? "off"
+    : snapshot.summarySettings.ready
+      ? "ready"
+      : "missing";
+  const summarySettingsDirty =
+    snapshot.summaryDraft.provider !== snapshot.summarySettings.provider ||
+    snapshot.summaryDraft.model.trim() !== snapshot.summarySettings.model.trim() ||
+    snapshot.summaryDraft.baseUrl.trim() !== snapshot.summarySettings.baseUrl.trim() ||
+    snapshot.summaryDraft.apiKeyDirty;
+  const apiKeyPlaceholder =
+    snapshot.summaryDraft.apiKeyPresent && !snapshot.summaryDraft.apiKeyDirty
+      ? "API key saved"
+      : selectedSummaryProvider?.requiresApiKey
+        ? "Paste API key"
+        : "Optional API key";
 
   return (
     <section
@@ -1102,6 +1212,135 @@ function SettingsScreen() {
             </Button>
           </CardFooter>
         ) : null}
+      </Card>
+
+      <Card>
+        <CardHeader className="flex-row items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle>AI summaries</CardTitle>
+            <CardDescription>
+              Connect an LLM provider to turn transcripts into local meeting summaries.
+            </CardDescription>
+          </div>
+          <CardAction>
+            <StatusBadge tone={summaryStatusTone}>{summaryStatusLabel}</StatusBadge>
+          </CardAction>
+        </CardHeader>
+        <CardPanel className="grid gap-6 pt-0">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),220px] md:items-center">
+            <div>
+              <p className="text-sm font-semibold text-zinc-950">Provider</p>
+              <p className="mt-1 text-sm leading-6 text-zinc-600">
+                Pick the model provider used when you generate a summary from a transcript.
+              </p>
+            </div>
+            <SearchableSelect
+              ariaLabel="Summary provider"
+              value={snapshot.summaryDraft.provider}
+              onChange={appStore.setSummaryProvider}
+              options={summaryProviderOptions}
+              placeholder="Select provider"
+              searchPlaceholder="Search provider..."
+              disabled={snapshot.summaryBusy}
+            />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),220px] md:items-center">
+            <div>
+              <p className="text-sm font-semibold text-zinc-950">Model</p>
+              <p className="mt-1 text-sm leading-6 text-zinc-600">
+                Enter the exact chat model identifier for the selected provider.
+              </p>
+            </div>
+            <Input
+              value={snapshot.summaryDraft.model}
+              onChange={(event) => {
+                appStore.setSummaryModel(event.target.value);
+              }}
+              placeholder={selectedSummaryProvider?.modelPlaceholder ?? "Model id"}
+              disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
+            />
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-zinc-950">Base URL</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-600">
+              Leave this blank to use the provider default. Add one for local servers or custom
+              gateways.
+            </p>
+            <Input
+              className="mt-4"
+              value={snapshot.summaryDraft.baseUrl}
+              onChange={(event) => {
+                appStore.setSummaryBaseUrl(event.target.value);
+              }}
+              placeholder={selectedSummaryProvider?.defaultBaseUrl || "https://example.com/v1"}
+              disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
+            />
+          </div>
+
+          <div>
+            <p className="text-sm font-semibold text-zinc-950">API key</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-600">
+              {selectedSummaryProvider?.requiresApiKey
+                ? "Required for this provider. The saved key stays in the app config on this device."
+                : "Optional. Leave it blank for providers that do not need authentication."}
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <Input
+                className="flex-1"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={snapshot.summaryDraft.apiKey}
+                onChange={(event) => {
+                  appStore.setSummaryApiKey(event.target.value);
+                }}
+                placeholder={apiKeyPlaceholder}
+                disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
+              />
+              {snapshot.summaryDraft.apiKeyPresent ? (
+                <Button
+                  variant="secondary"
+                  disabled={snapshot.summaryBusy}
+                  onClick={() => {
+                    void appStore.removeSummaryApiKey();
+                  }}
+                >
+                  Remove saved key
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          {selectedSummaryProvider?.help ? (
+            <div className={cn(insetPanelClass, "space-y-2")}>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                Provider notes
+              </p>
+              <p className="text-sm leading-6 text-zinc-600">{selectedSummaryProvider.help}</p>
+              {snapshot.summaryDraft.provider ? (
+                <code className="block break-all text-xs text-zinc-700">
+                  {snapshot.summaryDraft.baseUrl.trim() ||
+                    selectedSummaryProvider.defaultBaseUrl ||
+                    "Custom base URL required"}
+                </code>
+              ) : null}
+            </div>
+          ) : null}
+        </CardPanel>
+        <CardFooter className="justify-between">
+          <p className="text-sm text-zinc-500">{snapshot.summarySettings.status}</p>
+          <Button
+            disabled={snapshot.summaryBusy || !summarySettingsDirty}
+            loading={snapshot.summaryBusy}
+            onClick={() => {
+              void appStore.saveSummarySettings();
+            }}
+          >
+            Save summary settings
+          </Button>
+        </CardFooter>
       </Card>
 
       <Card>
@@ -1170,6 +1409,9 @@ function SettingsScreen() {
 
       {snapshot.generalNote ? (
         <p className="text-sm text-rose-700">{snapshot.generalNote}</p>
+      ) : null}
+      {snapshot.summaryNote ? (
+        <p className="text-sm text-rose-700">{snapshot.summaryNote}</p>
       ) : null}
     </section>
   );

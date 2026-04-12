@@ -75,6 +75,14 @@ struct MarkdownExport {
     diarization_ran_at: Option<String>,
     #[serde(default)]
     path: Option<String>,
+    #[serde(default)]
+    summary: String,
+    #[serde(default)]
+    summary_provider_label: String,
+    #[serde(default)]
+    summary_model: String,
+    #[serde(default)]
+    summary_updated_at: Option<String>,
     transcript: String,
     #[serde(default)]
     speaker_turns: String,
@@ -121,6 +129,28 @@ struct SaveGeneralSettingsInput {
     timezone: String,
 }
 
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveSummarySettingsInput {
+    provider: String,
+    model: String,
+    base_url: String,
+    #[serde(default)]
+    api_key: String,
+    #[serde(default)]
+    update_api_key: bool,
+    #[serde(default)]
+    clear_api_key: bool,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GenerateTranscriptSummaryInput {
+    title: String,
+    transcript: String,
+    language: String,
+}
+
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredModelSettings {
@@ -158,6 +188,23 @@ struct StoredGeneralSettings {
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct StoredSummarySettings {
+    #[serde(default)]
+    provider: String,
+    #[serde(default)]
+    model: String,
+    #[serde(default)]
+    base_url: String,
+    #[serde(default)]
+    base_url_provider: String,
+    #[serde(default)]
+    api_key: String,
+    #[serde(default)]
+    api_key_provider: String,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StoredAppSettings {
     #[serde(default)]
     general: StoredGeneralSettings,
@@ -165,6 +212,8 @@ struct StoredAppSettings {
     model: StoredModelSettings,
     #[serde(default)]
     diarization: StoredDiarizationSettings,
+    #[serde(default)]
+    summary: StoredSummarySettings,
 }
 
 #[derive(Serialize)]
@@ -231,6 +280,27 @@ struct GeneralSettingsState {
     timezone: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SummarySettingsState {
+    provider: String,
+    provider_label: String,
+    model: String,
+    base_url: String,
+    resolved_base_url: String,
+    api_key_present: bool,
+    ready: bool,
+    status: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TranscriptSummaryResult {
+    summary: String,
+    provider_label: String,
+    model: String,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiarizationSegment {
@@ -291,6 +361,52 @@ impl StoredGeneralSettings {
             spoken_languages,
             timezone: input.timezone.trim().to_string(),
         }
+    }
+}
+
+impl StoredSummarySettings {
+    fn apply_input(&mut self, input: SaveSummarySettingsInput) -> Result<(), String> {
+        let provider = normalize_summary_provider(&input.provider)?;
+        self.provider = provider.clone();
+        self.model = input.model.trim().to_string();
+
+        let base_url = input.base_url.trim();
+        if provider.is_empty() || base_url.is_empty() {
+            self.base_url.clear();
+            self.base_url_provider.clear();
+        } else {
+            self.base_url = normalize_summary_base_url(base_url)?;
+            self.base_url_provider = provider.clone();
+        }
+
+        if input.clear_api_key {
+            self.api_key.clear();
+            self.api_key_provider.clear();
+        } else if input.update_api_key {
+            let api_key = input.api_key.trim();
+            if !api_key.is_empty() {
+                self.api_key = api_key.to_string();
+                self.api_key_provider = provider;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn current_base_url(&self) -> String {
+        if self.provider.is_empty() || self.base_url_provider != self.provider {
+            return String::new();
+        }
+
+        self.base_url.trim().to_string()
+    }
+
+    fn current_api_key(&self) -> String {
+        if self.provider.is_empty() || self.api_key_provider != self.provider {
+            return String::new();
+        }
+
+        self.api_key.trim().to_string()
     }
 }
 
@@ -475,6 +591,13 @@ fn general_settings_state<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn summary_settings_state<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<SummarySettingsState, String> {
+    build_summary_settings_state(&load_summary_settings(&app)?)
+}
+
+#[tauri::command]
 fn save_model_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: SaveModelSettingsInput,
@@ -524,6 +647,34 @@ fn save_general_settings<R: tauri::Runtime>(
         "Saved general settings",
     );
     build_general_settings_state(&settings)
+}
+
+#[tauri::command]
+fn save_summary_settings<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    settings: SaveSummarySettingsInput,
+) -> Result<SummarySettingsState, String> {
+    let mut stored = load_summary_settings(&app)?;
+    stored.apply_input(settings)?;
+    persist_summary_settings(&app, &stored)?;
+    info!(
+        provider = %stored.provider,
+        model = %stored.model,
+        base_url = %stored.current_base_url(),
+        api_key_present = !stored.current_api_key().is_empty(),
+        "Saved summary settings",
+    );
+    build_summary_settings_state(&stored)
+}
+
+#[tauri::command]
+async fn generate_transcript_summary<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    input: GenerateTranscriptSummaryInput,
+) -> Result<TranscriptSummaryResult, String> {
+    tauri::async_runtime::spawn_blocking(move || generate_transcript_summary_blocking(&app, input))
+        .await
+        .map_err(|error| format!("Failed to join summary task: {error}"))?
 }
 
 #[tauri::command]
@@ -1025,6 +1176,45 @@ fn build_general_settings_state(
     })
 }
 
+fn build_summary_settings_state(
+    settings: &StoredSummarySettings,
+) -> Result<SummarySettingsState, String> {
+    let provider = settings.provider.trim().to_string();
+    let provider_label = summary_provider_label(&provider).to_string();
+    let model = settings.model.trim().to_string();
+    let base_url = settings.current_base_url();
+    let resolved_base_url = summary_provider_resolved_base_url(&provider, &base_url).to_string();
+    let api_key_present = !settings.current_api_key().is_empty();
+
+    let status = if provider.is_empty() {
+        "Choose a provider and model to enable transcript summaries.".to_string()
+    } else if model.is_empty() {
+        format!("Add a model for {provider_label} to enable summaries.")
+    } else if summary_provider_requires_base_url(&provider) && resolved_base_url.is_empty() {
+        format!("Add a base URL for {provider_label}.")
+    } else if summary_provider_requires_api_key(&provider) && !api_key_present {
+        format!("Add an API key for {provider_label}.")
+    } else {
+        format!("Ready to summarize transcripts with {provider_label}.")
+    };
+
+    let ready = !provider.is_empty()
+        && !model.is_empty()
+        && (!summary_provider_requires_base_url(&provider) || !resolved_base_url.is_empty())
+        && (!summary_provider_requires_api_key(&provider) || api_key_present);
+
+    Ok(SummarySettingsState {
+        provider,
+        provider_label,
+        model,
+        base_url,
+        resolved_base_url,
+        api_key_present,
+        ready,
+        status,
+    })
+}
+
 fn load_model_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<StoredModelSettings, String> {
@@ -1041,6 +1231,12 @@ fn load_general_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<StoredGeneralSettings, String> {
     Ok(load_app_settings(app)?.general)
+}
+
+fn load_summary_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<StoredSummarySettings, String> {
+    Ok(load_app_settings(app)?.summary)
 }
 
 fn persist_model_settings<R: tauri::Runtime>(
@@ -1070,6 +1266,15 @@ fn persist_general_settings<R: tauri::Runtime>(
     persist_app_settings(app, &app_settings)
 }
 
+fn persist_summary_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &StoredSummarySettings,
+) -> Result<(), String> {
+    let mut app_settings = load_app_settings(app)?;
+    app_settings.summary = settings.clone();
+    persist_app_settings(app, &app_settings)
+}
+
 fn load_app_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<StoredAppSettings, String> {
@@ -1084,6 +1289,7 @@ fn load_app_settings<R: tauri::Runtime>(
         general: load_legacy_general_settings(app)?,
         model: load_legacy_model_settings(app)?,
         diarization: load_legacy_diarization_settings(app)?,
+        summary: StoredSummarySettings::default(),
     })
 }
 
@@ -1691,8 +1897,457 @@ fn resolve_selected_model_path<R: tauri::Runtime>(
     ))
 }
 
+#[derive(Deserialize)]
+struct OpenAiCompatibleResponse {
+    #[serde(default)]
+    choices: Vec<OpenAiCompatibleChoice>,
+}
+
+#[derive(Deserialize)]
+struct OpenAiCompatibleChoice {
+    message: OpenAiCompatibleMessage,
+}
+
+#[derive(Deserialize)]
+struct OpenAiCompatibleMessage {
+    content: serde_json::Value,
+}
+
+#[derive(Deserialize)]
+struct AnthropicResponse {
+    #[serde(default)]
+    content: Vec<AnthropicContentBlock>,
+}
+
+#[derive(Deserialize)]
+struct AnthropicContentBlock {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    text: String,
+}
+
+#[derive(Deserialize)]
+struct GeminiResponse {
+    #[serde(default)]
+    candidates: Vec<GeminiCandidate>,
+}
+
+#[derive(Deserialize)]
+struct GeminiCandidate {
+    content: Option<GeminiContent>,
+}
+
+#[derive(Deserialize)]
+struct GeminiContent {
+    #[serde(default)]
+    parts: Vec<GeminiPart>,
+}
+
+#[derive(Deserialize)]
+struct GeminiPart {
+    text: Option<String>,
+}
+
+fn normalize_summary_provider(value: &str) -> Result<String, String> {
+    let provider = value.trim().to_string();
+    if provider.is_empty() {
+        return Ok(String::new());
+    }
+
+    match provider.as_str() {
+        "openai"
+        | "anthropic"
+        | "google_generative_ai"
+        | "openrouter"
+        | "ollama"
+        | "lmstudio"
+        | "custom" => Ok(provider),
+        _ => Err(format!("Unsupported summary provider: {provider}")),
+    }
+}
+
+fn normalize_summary_base_url(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(String::new());
+    }
+
+    let parsed =
+        reqwest::Url::parse(trimmed).map_err(|error| format!("Invalid base URL: {error}"))?;
+    Ok(parsed.to_string().trim_end_matches('/').to_string())
+}
+
+fn summary_provider_label(provider: &str) -> &'static str {
+    match provider {
+        "openai" => "OpenAI",
+        "anthropic" => "Anthropic",
+        "google_generative_ai" => "Google Gemini",
+        "openrouter" => "OpenRouter",
+        "ollama" => "Ollama",
+        "lmstudio" => "LM Studio",
+        "custom" => "Custom",
+        _ => "Not configured",
+    }
+}
+
+fn summary_provider_default_base_url(provider: &str) -> &'static str {
+    match provider {
+        "openai" => "https://api.openai.com/v1",
+        "anthropic" => "https://api.anthropic.com/v1",
+        "google_generative_ai" => "https://generativelanguage.googleapis.com/v1beta",
+        "openrouter" => "https://openrouter.ai/api/v1",
+        "ollama" => "http://127.0.0.1:11434/v1",
+        "lmstudio" => "http://127.0.0.1:1234/v1",
+        _ => "",
+    }
+}
+
+fn summary_provider_requires_api_key(provider: &str) -> bool {
+    matches!(
+        provider,
+        "openai" | "anthropic" | "google_generative_ai" | "openrouter"
+    )
+}
+
+fn summary_provider_requires_base_url(provider: &str) -> bool {
+    provider == "custom"
+}
+
+fn summary_provider_resolved_base_url<'a>(provider: &'a str, base_url: &'a str) -> &'a str {
+    let trimmed = base_url.trim();
+    if !trimmed.is_empty() {
+        trimmed
+    } else {
+        summary_provider_default_base_url(provider)
+    }
+}
+
+fn summary_http_client() -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(90))
+        .build()
+        .map_err(|error| format!("Failed to initialize summary HTTP client: {error}"))
+}
+
+fn generate_transcript_summary_blocking<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    input: GenerateTranscriptSummaryInput,
+) -> Result<TranscriptSummaryResult, String> {
+    let transcript = input.transcript.trim();
+    if transcript.is_empty() {
+        return Err("A transcript is required before generating a summary.".to_string());
+    }
+
+    let settings = load_summary_settings(app)?;
+    let state = build_summary_settings_state(&settings)?;
+    if !state.ready {
+        return Err(state.status);
+    }
+
+    let provider = state.provider.as_str();
+    let provider_label = state.provider_label.clone();
+    let model = state.model.trim().to_string();
+    let base_url = state.resolved_base_url.trim().to_string();
+    let api_key = settings.current_api_key();
+    let system_prompt = summary_system_prompt(&input.language);
+    let user_prompt = summary_user_prompt(&input.title, transcript);
+    let client = summary_http_client()?;
+
+    let summary = match provider {
+        "anthropic" => call_anthropic_summary(
+            &client,
+            &base_url,
+            &api_key,
+            &model,
+            &system_prompt,
+            &user_prompt,
+        )?,
+        "google_generative_ai" => call_google_summary(
+            &client,
+            &base_url,
+            &api_key,
+            &model,
+            &system_prompt,
+            &user_prompt,
+        )?,
+        _ => call_openai_compatible_summary(
+            &client,
+            provider,
+            &base_url,
+            &api_key,
+            &model,
+            &system_prompt,
+            &user_prompt,
+        )?,
+    };
+
+    let summary = summary.trim().to_string();
+    if summary.is_empty() {
+        return Err(format!("{provider_label} returned an empty summary."));
+    }
+
+    Ok(TranscriptSummaryResult {
+        summary,
+        provider_label,
+        model,
+    })
+}
+
+fn summary_system_prompt(language: &str) -> String {
+    let trimmed_language = language.trim();
+    if trimmed_language.is_empty() {
+        "You turn raw meeting transcripts into concise, actionable Markdown summaries. Use only information grounded in the transcript. If something is uncertain, say so plainly. Keep the output tight and useful.".to_string()
+    } else {
+        format!(
+            "You turn raw meeting transcripts into concise, actionable Markdown summaries. Use only information grounded in the transcript. If something is uncertain, say so plainly. Respond in the language identified by this code when possible: {trimmed_language}. Keep the output tight and useful."
+        )
+    }
+}
+
+fn summary_user_prompt(title: &str, transcript: &str) -> String {
+    format!(
+        "Meeting title: {}\n\nFormat the response as Markdown with these sections:\n## Summary\n## Decisions\n## Action Items\n## Open Questions\n\nUse flat bullet lists where appropriate. If a section has no clear information, write `- None`.\n\nTranscript:\n{}",
+        title.trim(),
+        transcript.trim()
+    )
+}
+
+fn call_openai_compatible_summary(
+    client: &reqwest::blocking::Client,
+    provider: &str,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let mut request = client.post(url).json(&serde_json::json!({
+        "model": model,
+        "temperature": 0.2,
+        "messages": [
+            { "role": "system", "content": system_prompt },
+            { "role": "user", "content": user_prompt }
+        ]
+    }));
+
+    if !api_key.trim().is_empty() {
+        request = request.bearer_auth(api_key.trim());
+    }
+
+    if provider == "openrouter" {
+        request = request
+            .header("HTTP-Referer", "https://unsigned.char")
+            .header("X-Title", APP_DISPLAY_NAME);
+    }
+
+    let response = request.send().map_err(|error| {
+        format!(
+            "Failed to reach {}: {error}",
+            summary_provider_label(provider)
+        )
+    })?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().unwrap_or_default();
+        return Err(format!(
+            "{} summary request failed with {}{}",
+            summary_provider_label(provider),
+            status,
+            summarize_error_body(&body)
+        ));
+    }
+
+    let payload: OpenAiCompatibleResponse = response.json().map_err(|error| {
+        format!(
+            "Failed to decode {} response: {error}",
+            summary_provider_label(provider)
+        )
+    })?;
+
+    payload
+        .choices
+        .first()
+        .and_then(|choice| extract_openai_message_text(&choice.message.content))
+        .ok_or_else(|| {
+            format!(
+                "{} returned no summary text.",
+                summary_provider_label(provider)
+            )
+        })
+}
+
+fn call_anthropic_summary(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
+    let url = format!("{}/messages", base_url.trim_end_matches('/'));
+    let response = client
+        .post(url)
+        .header("x-api-key", api_key.trim())
+        .header("anthropic-version", "2023-06-01")
+        .json(&serde_json::json!({
+            "model": model,
+            "max_tokens": 1200,
+            "system": system_prompt,
+            "messages": [{ "role": "user", "content": user_prompt }]
+        }))
+        .send()
+        .map_err(|error| format!("Failed to reach Anthropic: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().unwrap_or_default();
+        return Err(format!(
+            "Anthropic summary request failed with {}{}",
+            status,
+            summarize_error_body(&body)
+        ));
+    }
+
+    let payload: AnthropicResponse = response
+        .json()
+        .map_err(|error| format!("Failed to decode Anthropic response: {error}"))?;
+
+    let text = payload
+        .content
+        .iter()
+        .filter(|block| block.kind == "text")
+        .filter_map(|block| {
+            let text = block.text.trim();
+            (!text.is_empty()).then_some(text)
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+
+    if text.is_empty() {
+        return Err("Anthropic returned no summary text.".to_string());
+    }
+
+    Ok(text)
+}
+
+fn call_google_summary(
+    client: &reqwest::blocking::Client,
+    base_url: &str,
+    api_key: &str,
+    model: &str,
+    system_prompt: &str,
+    user_prompt: &str,
+) -> Result<String, String> {
+    let model = model.trim().trim_start_matches("models/");
+    let mut url = reqwest::Url::parse(&format!(
+        "{}/models/{}:generateContent",
+        base_url.trim_end_matches('/'),
+        model
+    ))
+    .map_err(|error| format!("Invalid Gemini URL: {error}"))?;
+    url.query_pairs_mut().append_pair("key", api_key.trim());
+
+    let response = client
+        .post(url)
+        .json(&serde_json::json!({
+            "systemInstruction": {
+                "parts": [{ "text": system_prompt }]
+            },
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{ "text": user_prompt }]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2
+            }
+        }))
+        .send()
+        .map_err(|error| format!("Failed to reach Google Gemini: {error}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().unwrap_or_default();
+        return Err(format!(
+            "Google Gemini summary request failed with {}{}",
+            status,
+            summarize_error_body(&body)
+        ));
+    }
+
+    let payload: GeminiResponse = response
+        .json()
+        .map_err(|error| format!("Failed to decode Google Gemini response: {error}"))?;
+
+    let text = payload
+        .candidates
+        .first()
+        .and_then(|candidate| candidate.content.as_ref())
+        .map(|content| {
+            content
+                .parts
+                .iter()
+                .filter_map(|part| part.text.as_deref())
+                .filter_map(|text| {
+                    let text = text.trim();
+                    (!text.is_empty()).then_some(text)
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        })
+        .unwrap_or_default();
+
+    if text.is_empty() {
+        return Err("Google Gemini returned no summary text.".to_string());
+    }
+
+    Ok(text)
+}
+
+fn extract_openai_message_text(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(text) => {
+            let trimmed = text.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        }
+        serde_json::Value::Array(items) => {
+            let text = items
+                .iter()
+                .filter_map(|item| item.get("text").and_then(serde_json::Value::as_str))
+                .map(str::trim)
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            (!text.is_empty()).then_some(text)
+        }
+        _ => None,
+    }
+}
+
+fn summarize_error_body(body: &str) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let compact = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
+    let message = if compact.len() > 200 {
+        format!(": {}", &compact[..200])
+    } else {
+        format!(": {compact}")
+    };
+    message
+}
+
 fn build_markdown(export: &MarkdownExport) -> String {
     let title = export.title.trim();
+    let summary = if export.summary.trim().is_empty() {
+        "_No summary yet._".to_string()
+    } else {
+        export.summary.trim().to_string()
+    };
     let transcript = if export.transcript.trim().is_empty() {
         "_No transcript yet._".to_string()
     } else {
@@ -1705,18 +2360,22 @@ fn build_markdown(export: &MarkdownExport) -> String {
     };
 
     format!(
-        "---\nid: {id}\ntitle: {frontmatter_title}\ncreated_at: {created_at}\nupdated_at: {updated_at}\nstatus: {status}\naudio_path: {audio_path}\ndiarization_speaker_count: {diarization_speaker_count}\ndiarization_pipeline_source: {diarization_pipeline_source}\ndiarization_ran_at: {diarization_ran_at}\n---\n\n# {title}\n\n## Transcript\n\n{transcript}\n\n## Speaker Turns\n\n{speaker_turns}\n",
+        "---\nid: {id}\ntitle: {frontmatter_title}\ncreated_at: {created_at}\nupdated_at: {updated_at}\nstatus: {status}\naudio_path: {audio_path}\nsummary_provider: {summary_provider}\nsummary_model: {summary_model}\nsummary_updated_at: {summary_updated_at}\ndiarization_speaker_count: {diarization_speaker_count}\ndiarization_pipeline_source: {diarization_pipeline_source}\ndiarization_ran_at: {diarization_ran_at}\n---\n\n# {title}\n\n## Summary\n\n{summary}\n\n## Transcript\n\n{transcript}\n\n## Speaker Turns\n\n{speaker_turns}\n",
         id = yaml_string(&export.id),
         frontmatter_title = yaml_string(title),
         created_at = yaml_string(export.created_at.trim()),
         updated_at = yaml_string(export.updated_at.trim()),
         status = yaml_string(export.status.trim()),
         audio_path = yaml_optional_string(Some(export.audio_path.trim())),
+        summary_provider = yaml_optional_string(Some(export.summary_provider_label.trim())),
+        summary_model = yaml_optional_string(Some(export.summary_model.trim())),
+        summary_updated_at = yaml_optional_string(export.summary_updated_at.as_deref()),
         diarization_speaker_count = export.diarization_speaker_count,
         diarization_pipeline_source =
             yaml_optional_string(export.diarization_pipeline_source.as_deref()),
         diarization_ran_at = yaml_optional_string(export.diarization_ran_at.as_deref()),
         title = title,
+        summary = summary,
         transcript = transcript,
         speaker_turns = speaker_turns
     )
@@ -1786,9 +2445,12 @@ pub fn run() {
             delete_managed_model,
             diarization_settings_state,
             general_settings_state,
+            summary_settings_state,
             save_model_settings,
             save_diarization_settings,
             save_general_settings,
+            save_summary_settings,
+            generate_transcript_summary,
             run_local_diarization,
             sync_meeting_markdown,
             reveal_meeting_export_in_finder,

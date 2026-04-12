@@ -28,6 +28,10 @@ export type Meeting = {
   diarizationSpeakerCount: number;
   diarizationPipelineSource: string | null;
   diarizationRanAt: string | null;
+  summary: string | null;
+  summaryProviderLabel: string | null;
+  summaryModel: string | null;
+  summaryUpdatedAt: string | null;
   exportPath: string | null;
 };
 
@@ -80,6 +84,26 @@ export type GeneralSettings = {
 
 type GeneralDraft = GeneralSettings;
 
+export type SummarySettings = {
+  provider: string;
+  providerLabel: string;
+  model: string;
+  baseUrl: string;
+  resolvedBaseUrl: string;
+  apiKeyPresent: boolean;
+  ready: boolean;
+  status: string;
+};
+
+type SummaryDraft = {
+  provider: string;
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  apiKeyDirty: boolean;
+  apiKeyPresent: boolean;
+};
+
 export type DiarizationSegment = {
   speaker: string;
   startSeconds: number;
@@ -100,6 +124,10 @@ type MarkdownExport = {
   updatedAt: string;
   status: MeetingStatus;
   audioPath: string;
+  summary: string;
+  summaryProviderLabel: string;
+  summaryModel: string;
+  summaryUpdatedAt: string | null;
   diarizationSpeakerCount: number;
   diarizationPipelineSource: string | null;
   diarizationRanAt: string | null;
@@ -114,6 +142,12 @@ type LiveTranscriptionState = {
   error: string | null;
 };
 
+type GeneratedTranscriptSummary = {
+  summary: string;
+  providerLabel: string;
+  model: string;
+};
+
 type AppState = {
   initialized: boolean;
   onboarding: OnboardingState | null;
@@ -122,11 +156,15 @@ type AppState = {
   diarizationSettings: DiarizationSettings | null;
   generalSettings: GeneralSettings | null;
   generalDraft: GeneralDraft;
+  summarySettings: SummarySettings | null;
+  summaryDraft: SummaryDraft;
   meetings: Meeting[];
   permissionNote: string;
   generalNote: string;
+  summaryNote: string;
   modelBusy: boolean;
   generalBusy: boolean;
+  summaryBusy: boolean;
   startMeetingBusy: boolean;
   transcriptionBusy: boolean;
   transcriptionStopping: boolean;
@@ -134,6 +172,7 @@ type AppState = {
   liveTranscriptText: string;
   recordingMeetingId: string | null;
   diarizationRunBusy: boolean;
+  summaryMeetingId: string | null;
   meetingNote: string;
   homeScrollTop: number;
 };
@@ -233,11 +272,15 @@ let state: AppState = {
   diarizationSettings: null,
   generalSettings: null,
   generalDraft: emptyGeneralDraft(),
+  summarySettings: null,
+  summaryDraft: emptySummaryDraft(),
   meetings: loadMeetings(),
   permissionNote: "",
   generalNote: "",
+  summaryNote: "",
   modelBusy: false,
   generalBusy: false,
+  summaryBusy: false,
   startMeetingBusy: false,
   transcriptionBusy: false,
   transcriptionStopping: false,
@@ -245,6 +288,7 @@ let state: AppState = {
   liveTranscriptText: "",
   recordingMeetingId: null,
   diarizationRunBusy: false,
+  summaryMeetingId: null,
   meetingNote: "",
   homeScrollTop: 0,
 };
@@ -282,6 +326,17 @@ function emptyGeneralDraft(): GeneralDraft {
     mainLanguage: defaultMainLanguage(),
     spokenLanguages: [],
     timezone: "",
+  };
+}
+
+function emptySummaryDraft(): SummaryDraft {
+  return {
+    provider: "",
+    model: "",
+    baseUrl: "",
+    apiKey: "",
+    apiKeyDirty: false,
+    apiKeyPresent: false,
   };
 }
 
@@ -355,6 +410,17 @@ function syncGeneralDraft(settings: GeneralSettings) {
   };
 }
 
+function syncSummaryDraft(settings: SummarySettings): SummaryDraft {
+  return {
+    provider: settings.provider.trim(),
+    model: settings.model.trim(),
+    baseUrl: settings.baseUrl.trim(),
+    apiKey: "",
+    apiKeyDirty: false,
+    apiKeyPresent: settings.apiKeyPresent,
+  };
+}
+
 function loadMeetings(): Meeting[] {
   try {
     const raw = window.localStorage.getItem(STORE_KEY);
@@ -421,6 +487,23 @@ function normalizeMeeting(value: unknown): Meeting | null {
     diarizationRanAt:
       typeof candidate.diarizationRanAt === "string" && candidate.diarizationRanAt.length > 0
         ? candidate.diarizationRanAt
+        : null,
+    summary:
+      typeof candidate.summary === "string" && candidate.summary.trim().length > 0
+        ? candidate.summary
+        : null,
+    summaryProviderLabel:
+      typeof candidate.summaryProviderLabel === "string" &&
+      candidate.summaryProviderLabel.trim().length > 0
+        ? candidate.summaryProviderLabel
+        : null,
+    summaryModel:
+      typeof candidate.summaryModel === "string" && candidate.summaryModel.trim().length > 0
+        ? candidate.summaryModel
+        : null,
+    summaryUpdatedAt:
+      typeof candidate.summaryUpdatedAt === "string" && candidate.summaryUpdatedAt.length > 0
+        ? candidate.summaryUpdatedAt
         : null,
     exportPath:
       typeof candidate.exportPath === "string" && candidate.exportPath.length > 0
@@ -557,6 +640,10 @@ function buildMarkdownExport(meeting: Meeting): MarkdownExport {
     updatedAt: meeting.updatedAt,
     status: meeting.status,
     audioPath: meeting.audioPath.trim(),
+    summary: meeting.summary?.trim() ?? "",
+    summaryProviderLabel: meeting.summaryProviderLabel?.trim() ?? "",
+    summaryModel: meeting.summaryModel?.trim() ?? "",
+    summaryUpdatedAt: meeting.summaryUpdatedAt,
     diarizationSpeakerCount: meeting.diarizationSpeakerCount,
     diarizationPipelineSource: meeting.diarizationPipelineSource,
     diarizationRanAt: meeting.diarizationRanAt,
@@ -746,6 +833,10 @@ function createMeeting() {
     diarizationSpeakerCount: 0,
     diarizationPipelineSource: null,
     diarizationRanAt: null,
+    summary: null,
+    summaryProviderLabel: null,
+    summaryModel: null,
+    summaryUpdatedAt: null,
     exportPath: null,
   };
 
@@ -1014,6 +1105,21 @@ async function refreshGeneralSettings(silent = false) {
   }
 }
 
+async function refreshSummarySettings(silent = false) {
+  try {
+    const summarySettings = await invoke<SummarySettings>("summary_settings_state");
+    patch({
+      summarySettings,
+      summaryDraft: syncSummaryDraft(summarySettings),
+      summaryNote: "",
+    });
+  } catch (error) {
+    if (!silent) {
+      patch({ summaryNote: `Failed to load summary settings: ${String(error)}` });
+    }
+  }
+}
+
 async function ensureModelReady() {
   await refreshModelSettings(true);
 
@@ -1142,11 +1248,16 @@ function finalizeLiveTranscript(markDone = false) {
       text && current.transcript[current.transcript.length - 1] !== text
         ? [...current.transcript, text]
         : current.transcript;
+    const transcriptChanged = transcript !== current.transcript;
 
     return {
       ...current,
       transcript,
       status: markDone ? "done" : current.status,
+      summary: transcriptChanged ? null : current.summary,
+      summaryProviderLabel: transcriptChanged ? null : current.summaryProviderLabel,
+      summaryModel: transcriptChanged ? null : current.summaryModel,
+      summaryUpdatedAt: transcriptChanged ? null : current.summaryUpdatedAt,
       updatedAt: new Date().toISOString(),
     };
   });
@@ -1586,6 +1697,42 @@ async function saveGeneralSettings() {
   }
 }
 
+async function saveSummarySettings(options?: { clearApiKey?: boolean }) {
+  if (state.summaryBusy) {
+    return;
+  }
+
+  patch({
+    summaryBusy: true,
+    summaryNote: "",
+  });
+
+  try {
+    const summarySettings = await invoke<SummarySettings>("save_summary_settings", {
+      settings: {
+        provider: state.summaryDraft.provider.trim(),
+        model: state.summaryDraft.model.trim(),
+        baseUrl: state.summaryDraft.baseUrl.trim(),
+        apiKey: state.summaryDraft.apiKey.trim(),
+        updateApiKey: state.summaryDraft.apiKeyDirty && state.summaryDraft.apiKey.trim().length > 0,
+        clearApiKey: options?.clearApiKey === true,
+      },
+    });
+
+    patch({
+      summarySettings,
+      summaryDraft: syncSummaryDraft(summarySettings),
+      summaryNote: "",
+    });
+  } catch (error) {
+    patch({
+      summaryNote: `Summary settings save failed: ${String(error)}`,
+    });
+  } finally {
+    patch({ summaryBusy: false });
+  }
+}
+
 async function startManagedModelDownload() {
   if (state.modelBusy) {
     return;
@@ -1614,6 +1761,7 @@ function handleAppFocus() {
   if (isSettingsWindow) {
     void Promise.all([
       refreshGeneralSettings(true),
+      refreshSummarySettings(true),
       refreshManagedModelDownloadState(true),
       refreshModelSettings(true),
     ]);
@@ -1622,6 +1770,7 @@ function handleAppFocus() {
 
   void Promise.all([
     refreshGeneralSettings(true),
+    refreshSummarySettings(true),
     refreshPermissions(true),
     refreshManagedModelDownloadState(true),
     refreshModelSettings(true),
@@ -1775,6 +1924,118 @@ function removeSpokenLanguage(language: string) {
   void saveGeneralSettings();
 }
 
+function setSummaryProvider(provider: string) {
+  const nextProvider = provider.trim();
+  const restoreSaved = state.summarySettings?.provider === nextProvider;
+
+  patch({
+    summaryDraft: {
+      provider: nextProvider,
+      model: restoreSaved ? state.summarySettings?.model ?? "" : "",
+      baseUrl: restoreSaved ? state.summarySettings?.baseUrl ?? "" : "",
+      apiKey: "",
+      apiKeyDirty: false,
+      apiKeyPresent: restoreSaved ? Boolean(state.summarySettings?.apiKeyPresent) : false,
+    },
+    summaryNote: "",
+  });
+}
+
+function setSummaryModel(model: string) {
+  patch({
+    summaryDraft: {
+      ...state.summaryDraft,
+      model,
+    },
+    summaryNote: "",
+  });
+}
+
+function setSummaryBaseUrl(baseUrl: string) {
+  patch({
+    summaryDraft: {
+      ...state.summaryDraft,
+      baseUrl,
+    },
+    summaryNote: "",
+  });
+}
+
+function setSummaryApiKey(apiKey: string) {
+  patch({
+    summaryDraft: {
+      ...state.summaryDraft,
+      apiKey,
+      apiKeyDirty: true,
+      apiKeyPresent: state.summaryDraft.apiKeyPresent,
+    },
+    summaryNote: "",
+  });
+}
+
+async function removeSummaryApiKey() {
+  patch({
+    summaryDraft: {
+      ...state.summaryDraft,
+      apiKey: "",
+      apiKeyDirty: false,
+      apiKeyPresent: false,
+    },
+    summaryNote: "",
+  });
+  await saveSummarySettings({ clearApiKey: true });
+}
+
+async function generateMeetingSummary(meetingId: string) {
+  const meeting = getMeeting(meetingId);
+  if (!meeting || state.summaryMeetingId) {
+    return;
+  }
+
+  const transcript = getMeetingTranscriptLines(meeting).join("\n\n").trim();
+  if (!transcript) {
+    patch({ meetingNote: "Add some transcript before generating a summary." });
+    return;
+  }
+
+  patch({
+    summaryMeetingId: meetingId,
+    meetingNote: "",
+  });
+
+  try {
+    const language = normalizeLanguageCode(state.generalDraft.mainLanguage) || defaultMainLanguage();
+    const result = await invoke<GeneratedTranscriptSummary>("generate_transcript_summary", {
+      input: {
+        title: meeting.title,
+        transcript,
+        language,
+      },
+    });
+    const summaryUpdatedAt = new Date().toISOString();
+
+    updateMeeting(meetingId, (current) => ({
+      ...current,
+      summary: result.summary,
+      summaryProviderLabel: result.providerLabel,
+      summaryModel: result.model,
+      summaryUpdatedAt,
+      updatedAt: summaryUpdatedAt,
+    }));
+
+    patch({
+      meetingNote: `Summary created with ${result.providerLabel}.`,
+    });
+  } catch (error) {
+    patch({
+      meetingNote:
+        error instanceof Error ? error.message : `Summary generation failed: ${String(error)}`,
+    });
+  } finally {
+    patch({ summaryMeetingId: null });
+  }
+}
+
 function getMeetingById(meetingId: string) {
   return getMeeting(meetingId);
 }
@@ -1792,6 +2053,7 @@ async function start() {
     await Promise.all([currentWindow.show(), currentWindow.setFocus()]);
     await Promise.all([
       refreshGeneralSettings(true),
+      refreshSummarySettings(true),
       refreshManagedModelDownloadState(true),
       refreshModelSettings(true),
     ]);
@@ -1804,6 +2066,7 @@ async function start() {
   window.addEventListener("focus", handleAppFocus);
   await Promise.all([
     refreshGeneralSettings(true),
+    refreshSummarySettings(true),
     refreshPermissions(true),
     refreshManagedModelDownloadState(true),
     refreshModelSettings(true),
@@ -1830,5 +2093,12 @@ export const appStore = {
   setTimezone,
   addSpokenLanguage,
   removeSpokenLanguage,
+  setSummaryProvider,
+  setSummaryModel,
+  setSummaryBaseUrl,
+  setSummaryApiKey,
+  saveSummarySettings,
+  removeSummaryApiKey,
+  generateMeetingSummary,
   getMeetingById,
 };
