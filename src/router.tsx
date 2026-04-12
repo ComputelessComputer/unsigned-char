@@ -53,6 +53,7 @@ import {
   isSettingsWindow,
   requiresAppSetup,
   sortedMeetings,
+  type ManagedModelDownloadState,
   type Meeting,
   useAppState,
 } from "./store";
@@ -126,6 +127,53 @@ function StatusBadge({
     <Badge variant={variants[tone]}>
       {children}
     </Badge>
+  );
+}
+
+function getModelDownloadProgressPercent(download: ManagedModelDownloadState | null) {
+  if (!download?.totalBytes || download.totalBytes <= 0) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(100, Math.round((download.bytesDownloaded / download.totalBytes) * 100)));
+}
+
+function ModelDownloadGauge({
+  busy,
+  download,
+}: {
+  busy: boolean;
+  download: ManagedModelDownloadState | null;
+}) {
+  const progressPercent = getModelDownloadProgressPercent(download);
+  const progressLabel = progressPercent === null ? "0%" : `${progressPercent}%`;
+  const progressWidth = progressPercent === null ? "2%" : `${Math.max(progressPercent, 2)}%`;
+
+  return (
+    <div className="w-full rounded-[calc(var(--radius)-6px)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-3 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="min-w-0 truncate text-sm font-medium text-zinc-900">
+          {download?.currentFile ?? (busy ? "Starting download..." : "Preparing download...")}
+        </p>
+        <span className="shrink-0 text-sm text-zinc-500">{progressLabel}</span>
+      </div>
+      <div
+        aria-label="Model download progress"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={progressPercent ?? 0}
+        className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200"
+        role="progressbar"
+      >
+        <div
+          className={cn(
+            "h-full rounded-full bg-zinc-950 transition-[width] duration-500 ease-out",
+            progressPercent === null && "animate-pulse",
+          )}
+          style={{ width: progressWidth }}
+        />
+      </div>
+    </div>
   );
 }
 
@@ -612,6 +660,8 @@ function HomeScreen() {
   const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
   const meetings = sortedMeetings(snapshot.meetings);
   const setupBanner = currentSetupBannerContent(snapshot);
+  const showModelDownloadGauge =
+    snapshot.modelBusy || snapshot.modelDownload?.status === "downloading";
   const homeScrollFade = useScrollFade<HTMLDivElement>();
   const { attachRef: attachHomeScrollFade, handleScroll: handleHomeScroll } = homeScrollFade;
   const attachHomeContentRef = useCallback(
@@ -688,7 +738,11 @@ function HomeScreen() {
                   </div>
                 ) : null}
               </CardPanel>
-              {setupBanner.actionLabel ? (
+              {showModelDownloadGauge ? (
+                <CardFooter className="border-t-0 pt-0">
+                  <ModelDownloadGauge busy={snapshot.modelBusy} download={snapshot.modelDownload} />
+                </CardFooter>
+              ) : setupBanner.actionLabel ? (
                 <CardFooter className="border-t-0 pt-0">
                   <Button
                     disabled={snapshot.modelBusy}
@@ -1150,6 +1204,7 @@ function SettingsScreen() {
   const timezoneOptions = getTimezoneOptions(snapshot);
   const modelReady = Boolean(modelSettings.selectedReady);
   const downloadStatus = snapshot.modelDownload?.status ?? "idle";
+  const showModelDownloadGauge = snapshot.modelBusy || downloadStatus === "downloading";
   const modelStatusLabel =
     downloadStatus === "downloading"
       ? "downloading"
@@ -1318,16 +1373,18 @@ function SettingsScreen() {
         </CardPanel>
         {!modelReady ? (
           <CardFooter className="border-t-0 pt-0">
-            <Button
-              disabled={snapshot.modelBusy || downloadStatus === "downloading"}
-              onClick={() => {
-                void appStore.startManagedModelDownload();
-              }}
-            >
-              {snapshot.modelBusy || downloadStatus === "downloading"
-                ? "Starting download..."
-                : "Download model"}
-            </Button>
+            {showModelDownloadGauge ? (
+              <ModelDownloadGauge busy={snapshot.modelBusy} download={snapshot.modelDownload} />
+            ) : (
+              <Button
+                disabled={snapshot.modelBusy}
+                onClick={() => {
+                  void appStore.startManagedModelDownload();
+                }}
+              >
+                Download model
+              </Button>
+            )}
           </CardFooter>
         ) : null}
       </Card>
