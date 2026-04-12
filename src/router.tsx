@@ -696,7 +696,9 @@ function HomeScreen() {
                       void appStore.startManagedModelDownload();
                     }}
                   >
-                    {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
+                    <span className="text-white">
+                      {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
+                    </span>
                   </Button>
                 </CardFooter>
               ) : null}
