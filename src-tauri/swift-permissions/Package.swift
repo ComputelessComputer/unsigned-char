@@ -4,16 +4,25 @@ import PackageDescription
 
 let package = Package(
   name: "permissions-swift",
-  platforms: [.macOS("14.2")],
+  platforms: [.macOS("15.0")],
   products: [
     .library(
       name: "permissions-swift",
       type: .static,
       targets: ["PermissionsSwift"])
   ],
+  dependencies: [
+    .package(url: "https://github.com/Brendonovich/swift-rs", exact: "1.0.7"),
+    .package(url: "https://github.com/soniqo/speech-swift", exact: "0.0.9"),
+  ],
   targets: [
     .target(
       name: "PermissionsSwift",
+      dependencies: [
+        .product(name: "AudioCommon", package: "speech-swift"),
+        .product(name: "ParakeetStreamingASR", package: "speech-swift"),
+        .product(name: "SwiftRs", package: "swift-rs"),
+      ],
       path: "src")
   ]
 )

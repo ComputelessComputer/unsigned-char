@@ -4,12 +4,16 @@ mod permissions;
 
 use std::{
     env,
-    io::{Read, Write},
     path::{Component, Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
-use asr::{LiveTranscriptionState, TranscriptionManager};
+use asr::{
+    managed_model_download_state as speech_model_download_state,
+    managed_model_path as speech_model_path, reset_managed_model as reset_speech_model,
+    start_managed_model_download as start_speech_model_download, LiveTranscriptionState,
+    SpeechModelDownloadState, TranscriptionManager,
+};
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -20,21 +24,11 @@ use tracing::{error, info, warn};
 
 const APP_NAME: &str = "unsigned char";
 const APP_DISPLAY_NAME: &str = "unsigned {char}";
-const BUNDLED_MODEL_NAME: &str = "Bundled Qwen3-ASR";
-const BUNDLED_MODEL_RELATIVE_PATH: &str = "models/qwen-asr";
-const DEFAULT_MODEL_NAME: &str = "Qwen3-ASR 0.6B";
-const DEFAULT_HUGGING_FACE_MODEL_REPO: &str = "Qwen/Qwen3-ASR-0.6B";
+const BUNDLED_MODEL_NAME: &str = "Bundled speech-swift";
+const BUNDLED_MODEL_RELATIVE_PATH: &str = "models";
+const DEFAULT_MODEL_NAME: &str = "speech-swift Parakeet Streaming ASR";
+const DEFAULT_HUGGING_FACE_MODEL_REPO: &str = "aufklarer/Parakeet-EOU-120M-CoreML-INT8";
 const DEFAULT_HUGGING_FACE_MODEL_REVISION: &str = "main";
-const MANAGED_MODEL_RELATIVE_PATH: &str = "models/qwen3-asr-0.6b";
-const MANAGED_MODEL_FILES: &[&str] = &[
-    "config.json",
-    "generation_config.json",
-    "merges.txt",
-    "model.safetensors",
-    "preprocessor_config.json",
-    "tokenizer_config.json",
-    "vocab.json",
-];
 const PYANNOTE_RUNNER_RELATIVE_PATH: &str = "scripts/pyannote_diarize.py";
 const SETTINGS_CONFIG_FILE: &str = "settings.json";
 const LEGACY_GENERAL_SETTINGS_FILE: &str = "general-settings.json";
@@ -214,23 +208,6 @@ struct ManagedModelDownloadState {
     error: Option<String>,
 }
 
-#[derive(Deserialize)]
-struct HuggingFaceModelMetadata {
-    #[serde(default)]
-    siblings: Vec<HuggingFaceModelSibling>,
-}
-
-#[derive(Deserialize)]
-struct HuggingFaceModelSibling {
-    rfilename: String,
-    size: Option<u64>,
-}
-
-struct ManagedModelFileDescriptor {
-    name: &'static str,
-    size: Option<u64>,
-}
-
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiarizationSettingsState {
@@ -289,10 +266,6 @@ impl StoredModelSettings {
 
     fn source(&self) -> ModelSource {
         self.source.unwrap_or(ModelSource::HuggingFace)
-    }
-
-    fn has_custom_hugging_face_selection(&self) -> bool {
-        !self.hugging_face_repo.trim().is_empty() || !self.hugging_face_local_path.trim().is_empty()
     }
 }
 
@@ -394,7 +367,6 @@ fn download_managed_model<R: tauri::Runtime>(
 ) -> Result<ManagedModelDownloadState, String> {
     let target_dir = managed_model_path(&app)?;
     let shared = state.inner().managed_model_download.clone();
-    let transcription = state.inner().transcription.clone();
 
     if model_path_is_ready(&target_dir) {
         info!(
@@ -415,66 +387,12 @@ fn download_managed_model<R: tauri::Runtime>(
         return Ok(download_state.clone());
     }
 
-    {
-        let mut download_state = shared
-            .lock()
-            .map_err(|_| "Failed to access model download state.".to_string())?;
-        if matches!(
-            download_state.status,
-            ManagedModelDownloadStatus::Downloading
-        ) {
-            info!(
-                target_dir = %target_dir.display(),
-                "Managed transcription model download already in progress",
-            );
-            return Ok(download_state.clone());
-        }
-
-        *download_state = ManagedModelDownloadState {
-            status: ManagedModelDownloadStatus::Downloading,
-            local_path: target_dir.display().to_string(),
-            current_file: None,
-            bytes_downloaded: 0,
-            total_bytes: None,
-            error: None,
-        };
-    }
-
     info!(
         target_dir = %target_dir.display(),
-        "Starting managed transcription model download",
+        "Starting speech-swift transcription model download",
     );
 
-    std::thread::spawn({
-        let shared = shared.clone();
-        let app = app.clone();
-        move || {
-            if let Err(error) = download_managed_model_snapshot(&target_dir, &shared) {
-                error!(
-                    target_dir = %target_dir.display(),
-                    %error,
-                    "Managed transcription model download failed",
-                );
-                if let Ok(mut download_state) = shared.lock() {
-                    *download_state = ManagedModelDownloadState {
-                        status: ManagedModelDownloadStatus::Error,
-                        local_path: target_dir.display().to_string(),
-                        current_file: None,
-                        bytes_downloaded: 0,
-                        total_bytes: None,
-                        error: Some(error),
-                    };
-                }
-                return;
-            }
-
-            info!(
-                target_dir = %target_dir.display(),
-                "Managed transcription model download finished",
-            );
-            refresh_selected_model_preload(&app, &transcription);
-        }
-    });
+    start_speech_model_download()?;
 
     snapshot_managed_model_download_state(&app, &shared)
 }
@@ -502,18 +420,13 @@ fn delete_managed_model<R: tauri::Runtime>(
 ) -> Result<ManagedModelDownloadState, String> {
     let target_dir = managed_model_path(&app)?;
     let shared = state.inner().managed_model_download.clone();
+    let snapshot = snapshot_managed_model_download_state(&app, &shared)?;
 
-    {
-        let download_state = shared
-            .lock()
-            .map_err(|_| "Failed to access model download state.".to_string())?;
-        if matches!(
-            download_state.status,
-            ManagedModelDownloadStatus::Downloading
-        ) {
-            return Err("The transcription model is still downloading.".to_string());
-        }
+    if matches!(snapshot.status, ManagedModelDownloadStatus::Downloading) {
+        return Err("The transcription model is still downloading.".to_string());
     }
+
+    reset_speech_model()?;
 
     if target_dir.exists() {
         std::fs::remove_dir_all(&target_dir).map_err(|error| {
@@ -1003,25 +916,8 @@ fn default_managed_model_settings<R: tauri::Runtime>(
 
 fn effective_model_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    settings: &StoredModelSettings,
+    _settings: &StoredModelSettings,
 ) -> Result<StoredModelSettings, String> {
-    let bundled_path = resolve_bundled_model_path(app);
-    if matches!(settings.source(), ModelSource::Bundled) && model_path_is_ready(&bundled_path) {
-        return Ok(settings.clone());
-    }
-
-    if settings.has_custom_hugging_face_selection() {
-        let mut custom = settings.clone();
-        custom.source = Some(ModelSource::HuggingFace);
-        if resolve_custom_model_path(&custom.hugging_face_local_path)
-            .as_ref()
-            .map(|path| model_path_is_ready(path))
-            .unwrap_or(false)
-        {
-            return Ok(custom);
-        }
-    }
-
     default_managed_model_settings(app)
 }
 
@@ -1030,84 +926,43 @@ fn build_model_settings_state<R: tauri::Runtime>(
     settings: &StoredModelSettings,
 ) -> Result<ModelSettingsState, String> {
     let settings = effective_model_settings(app, settings)?;
-    let bundled_path = resolve_bundled_model_path(app);
-    let bundled_ready = model_path_is_ready(&bundled_path);
-    let bundled_status = if bundled_ready {
+    let managed_model_path = managed_model_path(app)?;
+    let hugging_face_repo = DEFAULT_HUGGING_FACE_MODEL_REPO.to_string();
+    let hugging_face_revision = DEFAULT_HUGGING_FACE_MODEL_REVISION.to_string();
+    let hugging_face_local_path = managed_model_path.display().to_string();
+    let hugging_face_ready = model_path_is_ready(&managed_model_path);
+    let hugging_face_status = if hugging_face_ready {
         format!(
-            "{BUNDLED_MODEL_NAME} is bundled and ready at {}.",
-            bundled_path.display()
+            "Using {DEFAULT_MODEL_NAME} from {}.",
+            managed_model_path.display()
         )
     } else {
         format!(
-            "Bundled model is incomplete. Put vocab.json and Qwen3-ASR safetensors files under {}.",
-            bundled_path.display()
+            "Download {DEFAULT_MODEL_NAME} once to run local transcription. The files stay cached at {}.",
+            managed_model_path.display()
         )
     };
 
-    let hugging_face_repo = settings.hugging_face_repo.trim().to_string();
-    let hugging_face_revision = settings.hugging_face_revision.trim().to_string();
-    let hugging_face_local_path = settings.hugging_face_local_path.trim().to_string();
-    let hugging_face_resolved_path = resolve_custom_model_path(&hugging_face_local_path);
-    let hugging_face_ready = hugging_face_resolved_path
-        .as_ref()
-        .map(|path| model_path_is_ready(path))
-        .unwrap_or(false);
-    let managed_model_path = managed_model_path(app)?;
-    let uses_managed_model = hugging_face_local_path == managed_model_path.display().to_string();
-    let hugging_face_status = build_hugging_face_status(
-        &hugging_face_repo,
-        &hugging_face_revision,
-        &hugging_face_local_path,
-        hugging_face_resolved_path.as_deref(),
-        hugging_face_ready,
-        uses_managed_model,
-    );
-
-    let source = settings.source();
-    let selected_ready = match source {
-        ModelSource::Bundled => bundled_ready,
-        ModelSource::HuggingFace => hugging_face_ready,
-    };
-    let selected_reference = match source {
-        ModelSource::Bundled => Some(bundled_path.display().to_string()),
-        ModelSource::HuggingFace => {
-            if hugging_face_repo.is_empty() {
-                hugging_face_resolved_path
-                    .as_ref()
-                    .map(|path| path.display().to_string())
-            } else if let Some(path) = hugging_face_resolved_path.as_ref() {
-                Some(format!(
-                    "{} ({})",
-                    format_hugging_face_reference(&hugging_face_repo, &hugging_face_revision),
-                    path.display()
-                ))
-            } else {
-                Some(format_hugging_face_reference(
-                    &hugging_face_repo,
-                    &hugging_face_revision,
-                ))
-            }
-        }
-    };
-
     Ok(ModelSettingsState {
-        source,
+        source: settings.source(),
         bundled_label: BUNDLED_MODEL_NAME,
         bundled_relative_path: BUNDLED_MODEL_RELATIVE_PATH,
-        bundled_resolved_path: bundled_path.display().to_string(),
-        bundled_ready,
-        bundled_status,
+        bundled_resolved_path: String::new(),
+        bundled_ready: false,
+        bundled_status: "Bundled ASR models are not used in this build.".to_string(),
         hugging_face_repo,
         hugging_face_revision,
         hugging_face_local_path,
-        hugging_face_resolved_path: hugging_face_resolved_path
-            .as_ref()
-            .map(|path| path.display().to_string()),
+        hugging_face_resolved_path: Some(managed_model_path.display().to_string()),
         hugging_face_ready,
         hugging_face_status,
-        uses_managed_model,
-        selected_ready,
-        selected_reference,
+        uses_managed_model: true,
+        selected_ready: hugging_face_ready,
+        selected_reference: Some(format!(
+            "{} ({})",
+            DEFAULT_MODEL_NAME,
+            managed_model_path.display()
+        )),
     })
 }
 
@@ -1331,27 +1186,9 @@ fn cleanup_legacy_settings_files<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-fn resolve_bundled_model_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
-    let packaged_candidate = app
-        .path()
-        .resource_dir()
-        .ok()
-        .map(|path| path.join(BUNDLED_MODEL_RELATIVE_PATH));
-    let dev_candidate = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("resources")
-        .join(BUNDLED_MODEL_RELATIVE_PATH);
-
-    match packaged_candidate {
-        Some(path) if path.exists() => path,
-        _ => dev_candidate,
-    }
-}
-
 fn managed_model_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path| path.join(MANAGED_MODEL_RELATIVE_PATH))
-        .map_err(|error| error.to_string())
+    let _ = app;
+    speech_model_path()
 }
 
 fn meeting_exports_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
@@ -1482,353 +1319,38 @@ fn snapshot_managed_model_download_state<R: tauri::Runtime>(
     shared: &Arc<Mutex<ManagedModelDownloadState>>,
 ) -> Result<ManagedModelDownloadState, String> {
     let local_path = managed_model_path(app)?;
-    let ready = model_path_is_ready(&local_path);
+    let speech_state = speech_model_download_state()?;
     let mut download_state = shared
         .lock()
         .map_err(|_| "Failed to access model download state.".to_string())?;
 
     download_state.local_path = local_path.display().to_string();
 
-    if ready
-        && !matches!(
-            download_state.status,
-            ManagedModelDownloadStatus::Downloading
-        )
-    {
-        download_state.status = ManagedModelDownloadStatus::Ready;
-        download_state.current_file = None;
-        download_state.bytes_downloaded = 0;
-        download_state.total_bytes = None;
-        download_state.error = None;
-    } else if !ready && matches!(download_state.status, ManagedModelDownloadStatus::Ready) {
-        download_state.status = ManagedModelDownloadStatus::Idle;
-        download_state.current_file = None;
-        download_state.bytes_downloaded = 0;
-        download_state.total_bytes = None;
-    }
+    apply_speech_model_download_state(
+        &mut download_state,
+        speech_state,
+        model_path_is_ready(&local_path),
+    );
 
     Ok(download_state.clone())
 }
 
-fn set_managed_model_download_progress(
-    shared: &Arc<Mutex<ManagedModelDownloadState>>,
-    local_path: &Path,
-    current_file: Option<&str>,
-    bytes_downloaded: u64,
-    total_bytes: Option<u64>,
-) -> Result<(), String> {
-    let mut download_state = shared
-        .lock()
-        .map_err(|_| "Failed to access model download state.".to_string())?;
-    download_state.status = ManagedModelDownloadStatus::Downloading;
-    download_state.local_path = local_path.display().to_string();
-    download_state.current_file = current_file.map(str::to_string);
-    download_state.bytes_downloaded = bytes_downloaded;
-    download_state.total_bytes = total_bytes;
-    download_state.error = None;
-    Ok(())
-}
-
-fn download_managed_model_snapshot(
-    target_dir: &Path,
-    shared: &Arc<Mutex<ManagedModelDownloadState>>,
-) -> Result<(), String> {
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(format!("{APP_NAME}/{}", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|error| format!("Failed to prepare model download client: {error}"))?;
-    let file_descriptors = fetch_managed_model_manifest(&client)?;
-    let total_bytes = if file_descriptors.iter().all(|file| file.size.is_some()) {
-        Some(file_descriptors.iter().filter_map(|file| file.size).sum())
-    } else {
-        None
+fn apply_speech_model_download_state(
+    download_state: &mut ManagedModelDownloadState,
+    speech_state: SpeechModelDownloadState,
+    ready: bool,
+) {
+    download_state.status = match speech_state.status.as_str() {
+        "downloading" => ManagedModelDownloadStatus::Downloading,
+        "ready" if ready => ManagedModelDownloadStatus::Ready,
+        "error" => ManagedModelDownloadStatus::Error,
+        _ if ready => ManagedModelDownloadStatus::Ready,
+        _ => ManagedModelDownloadStatus::Idle,
     };
-
-    if let Some(parent) = target_dir.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "Failed to prepare the model directory at {}: {error}",
-                parent.display()
-            )
-        })?;
-    }
-    std::fs::create_dir_all(target_dir).map_err(|error| {
-        format!(
-            "Failed to prepare the model directory at {}: {error}",
-            target_dir.display()
-        )
-    })?;
-
-    let mut bytes_downloaded = 0_u64;
-    for file in &file_descriptors {
-        let destination = target_dir.join(file.name);
-        if destination.is_file() {
-            if let Some(expected_size) = file.size {
-                if destination
-                    .metadata()
-                    .map(|metadata| metadata.len() == expected_size)
-                    .unwrap_or(false)
-                {
-                    bytes_downloaded += expected_size;
-                    continue;
-                }
-            }
-        }
-
-        let temporary = target_dir.join(format!("{}.part", file.name));
-        if !temporary.is_file() {
-            continue;
-        }
-
-        let partial_size = temporary
-            .metadata()
-            .map(|metadata| metadata.len())
-            .map_err(|error| {
-                format!(
-                    "Failed to inspect the partial download at {}: {error}",
-                    temporary.display()
-                )
-            })?;
-
-        if partial_size == 0 {
-            let _ = std::fs::remove_file(&temporary);
-            continue;
-        }
-
-        if let Some(expected_size) = file.size {
-            if partial_size == expected_size {
-                std::fs::rename(&temporary, &destination).map_err(|error| {
-                    format!(
-                        "Failed to restore {} from a previous partial download: {error}",
-                        destination.display()
-                    )
-                })?;
-                bytes_downloaded += expected_size;
-                continue;
-            }
-
-            if partial_size > expected_size {
-                let _ = std::fs::remove_file(&temporary);
-                continue;
-            }
-        }
-
-        bytes_downloaded += partial_size;
-    }
-
-    for file in &file_descriptors {
-        set_managed_model_download_progress(
-            shared,
-            target_dir,
-            Some(file.name),
-            bytes_downloaded,
-            total_bytes,
-        )?;
-
-        let destination = target_dir.join(file.name);
-        if destination.is_file() {
-            if let Some(expected_size) = file.size {
-                if destination
-                    .metadata()
-                    .map(|metadata| metadata.len() == expected_size)
-                    .unwrap_or(false)
-                {
-                    continue;
-                }
-            }
-        }
-
-        let temporary = target_dir.join(format!("{}.part", file.name));
-        let mut resume_from = if temporary.is_file() {
-            temporary
-                .metadata()
-                .map(|metadata| metadata.len())
-                .map_err(|error| {
-                    format!(
-                        "Failed to inspect the partial download at {}: {error}",
-                        temporary.display()
-                    )
-                })?
-        } else {
-            0
-        };
-
-        if let Some(expected_size) = file.size {
-            if resume_from >= expected_size {
-                if resume_from == expected_size {
-                    std::fs::rename(&temporary, &destination).map_err(|error| {
-                        format!(
-                            "Failed to restore {} from a previous partial download: {error}",
-                            destination.display()
-                        )
-                    })?;
-                    continue;
-                }
-
-                let _ = std::fs::remove_file(&temporary);
-                resume_from = 0;
-            }
-        }
-
-        let url = managed_model_remote_url(file.name);
-        let mut response = if resume_from > 0 {
-            client
-                .get(&url)
-                .header("Range", format!("bytes={resume_from}-"))
-                .send()
-                .map_err(|error| format!("Failed to resume {}: {error}", file.name))?
-        } else {
-            client
-                .get(&url)
-                .send()
-                .map_err(|error| format!("Failed to download {}: {error}", file.name))?
-        };
-
-        if resume_from > 0 && response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-            if !response.status().is_success() {
-                return Err(format!(
-                    "Failed to resume {}: received {}",
-                    file.name,
-                    response.status()
-                ));
-            }
-
-            let _ = std::fs::remove_file(&temporary);
-            bytes_downloaded = bytes_downloaded.saturating_sub(resume_from);
-            resume_from = 0;
-            set_managed_model_download_progress(
-                shared,
-                target_dir,
-                Some(file.name),
-                bytes_downloaded,
-                total_bytes,
-            )?;
-
-            response = client
-                .get(&url)
-                .send()
-                .map_err(|error| format!("Failed to download {}: {error}", file.name))?;
-        }
-
-        if !response.status().is_success() {
-            return Err(format!(
-                "Failed to download {}: received {}",
-                file.name,
-                response.status()
-            ));
-        }
-
-        let mut output = if resume_from > 0 {
-            std::fs::OpenOptions::new()
-                .append(true)
-                .open(&temporary)
-                .map_err(|error| {
-                    format!(
-                        "Failed to reopen {} while resuming the model download: {error}",
-                        temporary.display()
-                    )
-                })?
-        } else {
-            std::fs::File::create(&temporary).map_err(|error| {
-                format!(
-                    "Failed to create {} while downloading the model: {error}",
-                    temporary.display()
-                )
-            })?
-        };
-
-        let mut buffer = [0_u8; 64 * 1024];
-        loop {
-            let read = response
-                .read(&mut buffer)
-                .map_err(|error| format!("Failed to read {}: {error}", file.name))?;
-            if read == 0 {
-                break;
-            }
-
-            output
-                .write_all(&buffer[..read])
-                .map_err(|error| format!("Failed to write {}: {error}", destination.display()))?;
-            bytes_downloaded += read as u64;
-            set_managed_model_download_progress(
-                shared,
-                target_dir,
-                Some(file.name),
-                bytes_downloaded,
-                total_bytes,
-            )?;
-        }
-
-        output.flush().map_err(|error| {
-            format!(
-                "Failed to finish writing {}: {error}",
-                destination.display()
-            )
-        })?;
-        std::fs::rename(&temporary, &destination).map_err(|error| {
-            format!(
-                "Failed to move {} into place: {error}",
-                destination.display()
-            )
-        })?;
-    }
-
-    if !model_path_is_ready(target_dir) {
-        return Err(format!(
-            "The model download finished, but {} is still missing required files.",
-            target_dir.display()
-        ));
-    }
-
-    let mut download_state = shared
-        .lock()
-        .map_err(|_| "Failed to access model download state.".to_string())?;
-    *download_state = ManagedModelDownloadState {
-        status: ManagedModelDownloadStatus::Ready,
-        local_path: target_dir.display().to_string(),
-        current_file: None,
-        bytes_downloaded: 0,
-        total_bytes: None,
-        error: None,
-    };
-
-    Ok(())
-}
-
-fn fetch_managed_model_manifest(
-    client: &reqwest::blocking::Client,
-) -> Result<Vec<ManagedModelFileDescriptor>, String> {
-    let metadata: HuggingFaceModelMetadata = client
-        .get(format!(
-            "https://huggingface.co/api/models/{DEFAULT_HUGGING_FACE_MODEL_REPO}"
-        ))
-        .send()
-        .and_then(reqwest::blocking::Response::error_for_status)
-        .map_err(|error| format!("Failed to fetch model metadata: {error}"))?
-        .json()
-        .map_err(|error| format!("Failed to decode model metadata: {error}"))?;
-
-    MANAGED_MODEL_FILES
-        .iter()
-        .map(|file_name| {
-            let sibling = metadata
-                .siblings
-                .iter()
-                .find(|sibling| sibling.rfilename == *file_name)
-                .ok_or_else(|| format!("The upstream model is missing {}.", file_name))?;
-
-            Ok(ManagedModelFileDescriptor {
-                name: file_name,
-                size: sibling.size,
-            })
-        })
-        .collect()
-}
-
-fn managed_model_remote_url(file_name: &str) -> String {
-    format!(
-        "https://huggingface.co/{DEFAULT_HUGGING_FACE_MODEL_REPO}/resolve/{DEFAULT_HUGGING_FACE_MODEL_REVISION}/{file_name}"
-    )
+    download_state.current_file = speech_state.current_file;
+    download_state.bytes_downloaded = 0;
+    download_state.total_bytes = None;
+    download_state.error = speech_state.error;
 }
 
 fn resolve_pyannote_runner_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> PathBuf {
@@ -1917,42 +1439,12 @@ fn resolve_python_command() -> Result<&'static str, String> {
 }
 
 fn model_path_is_ready(path: &Path) -> bool {
-    if !path.is_dir() {
-        return false;
-    }
-
-    let entries = match std::fs::read_dir(path) {
-        Ok(entries) => entries,
-        Err(_) => return false,
-    };
-
-    let mut has_vocab = false;
-    let mut has_model = false;
-
-    for entry in entries.flatten() {
-        let file_path = entry.path();
-        if !file_path.is_file() {
-            continue;
-        }
-
-        let Some(file_name) = file_path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        let file_name = file_name.to_ascii_lowercase();
-
-        if file_name == "vocab.json" {
-            has_vocab = true;
-            continue;
-        }
-
-        if file_name == "model.safetensors"
-            || (file_name.starts_with("model-") && file_name.ends_with(".safetensors"))
-        {
-            has_model = true;
-        }
-    }
-
-    has_vocab && has_model
+    path.is_dir()
+        && path.join("config.json").is_file()
+        && path.join("vocab.json").is_file()
+        && path.join("encoder.mlmodelc").is_dir()
+        && path.join("decoder.mlmodelc").is_dir()
+        && path.join("joint.mlmodelc").is_dir()
 }
 
 fn pyannote_path_is_ready(path: &Path) -> bool {
@@ -2039,7 +1531,7 @@ fn extract_repo_from_hugging_face_url(path: &str) -> Result<String, String> {
 
     if repo_segments.is_empty() {
         return Err(
-            "Enter a Hugging Face repo like Qwen/Qwen3-ASR-0.6B or paste a repo URL.".to_string(),
+            "Enter a Hugging Face repo like aufklarer/Parakeet-EOU-120M-CoreML-INT8 or paste a repo URL.".to_string(),
         );
     }
 
@@ -2052,18 +1544,12 @@ fn validate_hugging_face_repo(repo: &str) -> Result<(), String> {
     }
 
     if repo.split('/').any(|segment| segment.is_empty()) {
-        return Err("Enter a Hugging Face repo like Qwen/Qwen3-ASR-0.6B.".to_string());
+        return Err(
+            "Enter a Hugging Face repo like aufklarer/Parakeet-EOU-120M-CoreML-INT8.".to_string(),
+        );
     }
 
     Ok(())
-}
-
-fn format_hugging_face_reference(repo: &str, revision: &str) -> String {
-    if revision.trim().is_empty() {
-        repo.to_string()
-    } else {
-        format!("{}@{}", repo, revision.trim())
-    }
 }
 
 fn resolve_hugging_face_token(
@@ -2189,73 +1675,20 @@ fn distinct_speaker_count(segments: &[DiarizationSegment]) -> usize {
     speakers.len()
 }
 
-fn build_hugging_face_status(
-    repo: &str,
-    revision: &str,
-    local_path: &str,
-    resolved_path: Option<&Path>,
-    ready: bool,
-    uses_managed_model: bool,
-) -> String {
-    if local_path.is_empty() {
-        return if uses_managed_model {
-            format!(
-                "Download {DEFAULT_MODEL_NAME} once to continue. The files stay on this device."
-            )
-        } else {
-            "Add a local snapshot path for the transcription model.".to_string()
-        };
-    }
-
-    if uses_managed_model && resolved_path.is_none() {
-        return format!(
-            "Download {DEFAULT_MODEL_NAME} once to continue. The files will be stored at {local_path}."
-        );
-    }
-
-    let reference = if repo.is_empty() {
-        DEFAULT_MODEL_NAME.to_string()
-    } else {
-        format_hugging_face_reference(repo, revision)
-    };
-    match resolved_path {
-        Some(path) if ready => format!("Using {reference} from {}.", path.display()),
-        Some(path) => format!(
-            "Found {} for {reference}, but qwen-asr needs vocab.json and model safetensors files there.",
-            path.display()
-        ),
-        None => format!("Local model path not found: {local_path}"),
-    }
-}
-
 fn resolve_selected_model_path<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    settings: &StoredModelSettings,
+    _settings: &StoredModelSettings,
 ) -> Result<PathBuf, String> {
-    let settings = effective_model_settings(app, settings)?;
-    let source = settings.source();
-    let selected_path = match source {
-        ModelSource::Bundled => resolve_bundled_model_path(app),
-        ModelSource::HuggingFace => resolve_custom_model_path(&settings.hugging_face_local_path)
-            .ok_or_else(|| {
-                "The local transcription model has not been downloaded yet.".to_string()
-            })?,
-    };
+    let selected_path = managed_model_path(app)?;
 
     if model_path_is_ready(&selected_path) {
         return Ok(selected_path);
     }
 
-    Err(match source {
-        ModelSource::Bundled => format!(
-            "Bundled model is incomplete at {}. The directory must include vocab.json and model safetensors files.",
-            selected_path.display()
-        ),
-        ModelSource::HuggingFace => format!(
-            "Hugging Face model is incomplete at {}. The directory must include vocab.json and model safetensors files.",
-            selected_path.display()
-        ),
-    })
+    Err(format!(
+        "speech-swift is not ready at {}. Download the Parakeet Streaming ASR model first.",
+        selected_path.display()
+    ))
 }
 
 fn build_markdown(export: &MarkdownExport) -> String {

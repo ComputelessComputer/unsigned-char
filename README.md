@@ -7,7 +7,7 @@ If you want the real thing, use [Char](https://github.com/fastrepl/char).
 Apple Silicon local meeting transcription desktop app for macOS, with a bundled CLI.
 
 - records from your machine
-- transcribes locally with Qwen ASR
+- transcribes locally with speech-swift
 - supports local speaker diarization with `pyannote.audio`
 
 ## Run

@@ -1,9 +1,7 @@
-Place the bundled Qwen3-ASR model files in this directory.
+Bundled ASR model files are no longer used by the app.
 
-Packaged Tauri builds copy `src-tauri/resources/models/**` into the app bundle,
-and the app resolves the default bundled model from `models/qwen-asr`.
+The live transcription engine now uses `speech-swift`, which downloads and caches
+its CoreML model files under the current user's cache directory on first setup.
 
-This placeholder keeps the directory in git. The app only treats the bundle as
-ready when it finds `vocab.json` plus `model.safetensors` or `model-*.safetensors`
-files here. Release builds now fail if those files are missing so packaged apps
-cannot ship without a working bundled ASR model.
+This placeholder directory stays in git so existing bundle resource wiring does
+not break while the old bundled-model path is retired.

@@ -634,13 +634,15 @@ export function currentSetupBannerContent(snapshot: AppState): SetupBannerConten
 
   if (isDownloading && download) {
     const progress = download.currentFile
-      ? `${download.currentFile} · ${modelDownloadProgressCopy(download)}`
+      ? download.bytesDownloaded > 0 || download.totalBytes
+        ? `${download.currentFile} · ${modelDownloadProgressCopy(download)}`
+        : download.currentFile
       : modelDownloadProgressCopy(download);
 
     return {
       kicker: "Downloading model",
       title: "Transcription model setup in progress",
-      copy: "unsigned {char} is downloading Qwen3-ASR once and storing it locally on this Mac.",
+      copy: "unsigned {char} is downloading the speech-swift Parakeet streaming model and storing it locally on this Mac.",
       detail: progress,
       localPath,
       actionLabel: null,
@@ -662,8 +664,8 @@ export function currentSetupBannerContent(snapshot: AppState): SetupBannerConten
     kicker: "Setup required",
     title: "Download transcription model",
     copy:
-      "Download Qwen3-ASR once to run transcription locally. The model is stored outside the app bundle and stays on this device.",
-    detail: "The download is about 1.8 GB.",
+      "Download the speech-swift Parakeet streaming model once to run transcription locally. The model is cached on this device.",
+    detail: "The first download includes the compiled CoreML model files.",
     localPath,
     actionLabel: "Download model",
   };

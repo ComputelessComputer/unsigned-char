@@ -1059,7 +1059,7 @@ function SettingsScreen() {
           <div className="space-y-1">
             <CardTitle>Transcription model</CardTitle>
             <CardDescription>
-              Download Qwen3-ASR once and keep it local to this Mac for offline transcription.
+              Download the speech-swift Parakeet streaming model once and keep it local to this Mac.
             </CardDescription>
           </div>
           <CardAction>
