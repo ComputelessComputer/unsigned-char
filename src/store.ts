@@ -697,6 +697,18 @@ function getRecordingMeeting() {
   return state.meetings.find((meeting) => meeting.id === state.recordingMeetingId) ?? null;
 }
 
+function isMeetingEmpty(meeting: Meeting) {
+  return (
+    meeting.transcript.length === 0 &&
+    !meeting.audioPath.trim() &&
+    meeting.diarizationSegments.length === 0
+  );
+}
+
+function shouldSyncMeetingMarkdown(meeting: Meeting) {
+  return meeting.status === "done" && !isMeetingEmpty(meeting);
+}
+
 function updateMeeting(id: string, updater: (meeting: Meeting) => Meeting) {
   let updatedMeeting: Meeting | null = null;
   state = {
@@ -869,11 +881,11 @@ async function syncMeetingMarkdown(id: string, options?: { force?: boolean }) {
 }
 
 function scheduleMeetingMarkdownSync(meeting: Meeting) {
-  if (isSettingsWindow) {
+  clearMeetingMarkdownSync(meeting.id);
+
+  if (isSettingsWindow || !shouldSyncMeetingMarkdown(meeting)) {
     return;
   }
-
-  clearMeetingMarkdownSync(meeting.id);
 
   const nextTimer = window.setTimeout(() => {
     meetingMarkdownSyncTimers.delete(meeting.id);
@@ -1213,6 +1225,92 @@ async function requestStopLiveTranscriptionSession() {
   syncLiveTranscriptionPolling();
 }
 
+async function deleteMeetingExportQuietly(path: string | null) {
+  const exportPath = path?.trim() || null;
+  if (!exportPath) {
+    return;
+  }
+
+  try {
+    await invoke("delete_meeting_export", { path: exportPath });
+  } catch {}
+}
+
+async function reconcilePersistedLiveMeetings() {
+  const liveMeetings = sortedMeetings(
+    state.meetings.filter((meeting) => meeting.status === "live"),
+  );
+  let snapshot: LiveTranscriptionState;
+
+  try {
+    snapshot = await invoke<LiveTranscriptionState>("live_transcription_state");
+  } catch {
+    return;
+  }
+
+  const activeMeetingId = snapshot.running ? liveMeetings[0]?.id ?? null : null;
+  const nextLiveTranscriptText = snapshot.text.trim();
+  const nextMeetingNote = snapshot.error || state.meetingNote;
+  const exportPathsToDelete: string[] = [];
+  const finishedAt = new Date().toISOString();
+  let meetingsChanged = false;
+
+  const nextMeetings = state.meetings.flatMap((meeting) => {
+    if (meeting.status !== "live") {
+      return [meeting];
+    }
+
+    if (snapshot.running && meeting.id === activeMeetingId) {
+      return [meeting];
+    }
+
+    meetingsChanged = true;
+
+    if (isMeetingEmpty(meeting)) {
+      const exportPath = meeting.exportPath?.trim();
+      if (exportPath) {
+        exportPathsToDelete.push(exportPath);
+      }
+      return [];
+    }
+
+    return [
+      {
+        ...meeting,
+        status: "done" as const,
+        updatedAt: finishedAt,
+      },
+    ];
+  });
+
+  const stateChanged =
+    meetingsChanged ||
+    state.recordingMeetingId !== activeMeetingId ||
+    state.transcriptionRunning !== snapshot.running ||
+    state.transcriptionStopping ||
+    state.liveTranscriptText !== nextLiveTranscriptText ||
+    state.meetingNote !== nextMeetingNote;
+
+  if (stateChanged) {
+    state = {
+      ...state,
+      meetings: nextMeetings,
+      recordingMeetingId: activeMeetingId,
+      transcriptionRunning: snapshot.running,
+      transcriptionStopping: false,
+      liveTranscriptText: nextLiveTranscriptText,
+      meetingNote: nextMeetingNote,
+    };
+    if (meetingsChanged) {
+      persistMeetings();
+    }
+    emit();
+  }
+
+  syncLiveTranscriptionPolling();
+  await Promise.all(exportPathsToDelete.map((path) => deleteMeetingExportQuietly(path)));
+}
+
 async function waitForLiveTranscriptionStopCompletion() {
   while (state.transcriptionRunning) {
     await waitForDelay(LIVE_TRANSCRIPTION_STOP_WAIT_MS);
@@ -1281,6 +1379,19 @@ async function toggleMeetingStatus(meetingId: string) {
 
   try {
     if (meeting.status === "live") {
+      if (!state.transcriptionRunning && state.recordingMeetingId !== meeting.id) {
+        updateMeeting(meeting.id, (current) => ({
+          ...current,
+          status: "done",
+          updatedAt: new Date().toISOString(),
+        }));
+        return;
+      }
+
+      if (state.recordingMeetingId !== meeting.id) {
+        patch({ recordingMeetingId: meeting.id });
+      }
+
       await requestStopLiveTranscriptionSession();
       return;
     }
@@ -1390,11 +1501,12 @@ async function revealMeetingExportInFinder(meetingId: string) {
 
 async function deleteMeeting(meetingId: string) {
   const meeting = getMeeting(meetingId);
+  const activeMeetingRunning =
+    state.recordingMeetingId === meetingId || (meeting?.status === "live" && state.transcriptionRunning);
   if (
     !meeting ||
     state.transcriptionBusy ||
-    state.recordingMeetingId === meetingId ||
-    meeting.status === "live"
+    activeMeetingRunning
   ) {
     return;
   }
@@ -1685,6 +1797,7 @@ async function start() {
     return;
   }
 
+  await reconcilePersistedLiveMeetings();
   queueLoadedMeetingMarkdownSync();
   window.addEventListener("focus", handleAppFocus);
   await Promise.all([

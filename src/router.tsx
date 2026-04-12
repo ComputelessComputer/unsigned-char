@@ -127,9 +127,14 @@ function StatusBadge({
 function isMeetingDeleteDisabled(
   meeting: Meeting,
   transcriptionBusy: boolean,
+  transcriptionRunning: boolean,
   recordingMeetingId: string | null,
 ) {
-  return transcriptionBusy || recordingMeetingId === meeting.id || meeting.status === "live";
+  return (
+    transcriptionBusy ||
+    recordingMeetingId === meeting.id ||
+    (meeting.status === "live" && transcriptionRunning)
+  );
 }
 
 type DeleteMeetingRequest = Pick<Meeting, "id" | "title">;
@@ -697,6 +702,7 @@ function HomeScreen() {
                 const deleteDisabled = isMeetingDeleteDisabled(
                   meeting,
                   snapshot.transcriptionBusy,
+                  snapshot.transcriptionRunning,
                   snapshot.recordingMeetingId,
                 );
 
@@ -845,6 +851,7 @@ function MeetingScreen() {
   const deleteDisabled = isMeetingDeleteDisabled(
     meeting,
     snapshot.transcriptionBusy,
+    snapshot.transcriptionRunning,
     snapshot.recordingMeetingId,
   );
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
