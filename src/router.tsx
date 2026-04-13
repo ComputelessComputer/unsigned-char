@@ -929,6 +929,8 @@ function MeetingScreen() {
     (meeting.status === "live" && snapshot.transcriptionRunning);
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
+  const showSummaryCard =
+    !isMeetingListening && Boolean(meeting.summary || (summaryReady && transcriptLines.length > 0));
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
   const emptyTranscriptCopy =
     meeting.status === "live" && snapshot.modelSettings?.processingMode === "batch"
@@ -1043,7 +1045,7 @@ function MeetingScreen() {
 
       <div className="-mx-4 min-h-0 flex-1 px-4 pb-4 pr-5">
         <div className="flex h-full min-h-0 flex-col gap-4">
-          {!isMeetingListening && (transcriptLines.length > 0 || meeting.summary) ? (
+          {showSummaryCard ? (
             <Card>
               <CardHeader className="flex-row items-start justify-between gap-4">
                 <div className="space-y-1">
