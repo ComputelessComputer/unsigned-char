@@ -1015,7 +1015,7 @@ function RootLayout() {
       ) : (
         <WindowDragRegion className="h-10 w-full" />
       )}
-      <div className="px-4">
+      <div className={cn(isSettingsWindow ? "px-0" : "px-4")}>
         <Outlet />
       </div>
     </div>
@@ -1618,7 +1618,7 @@ function SettingsScreen() {
     snapshot.permissionNote || snapshot.generalNote || snapshot.summaryNote;
   const settingsContentWidthClass = isSettingsWindow ? "max-w-[640px]" : "max-w-[760px]";
   const settingsShellHeightClass = isSettingsWindow ? "h-screen" : windowShellHeightClass;
-  const settingsContentInsetClass = isSettingsWindow ? "px-5 pt-12 pb-6" : "px-5 pt-5 pb-6";
+  const settingsContentInsetClass = isSettingsWindow ? "px-4 pt-12 pb-6" : "px-5 pt-5 pb-6";
   const settingsTitleOpacity = isSettingsWindow ? Math.max(0, 1 - settingsScrollTop / 24) : 1;
   const settingsTitle = isSettingsWindow ? (
     <div
