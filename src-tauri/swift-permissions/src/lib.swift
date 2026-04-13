@@ -14,7 +14,7 @@ private let tccHandle: UnsafeMutableRawPointer? = {
 
 private typealias TCCPreflightFunc = @convention(c) (CFString, CFDictionary?) -> Int
 
-private func mapMicrophoneStatus(_ status: AVAuthorizationStatus) -> Int {
+private func mapCaptureMicrophoneStatus(_ status: AVAuthorizationStatus) -> Int {
   switch status {
   case .authorized:
     grantedValue
@@ -27,13 +27,73 @@ private func mapMicrophoneStatus(_ status: AVAuthorizationStatus) -> Int {
   }
 }
 
+@available(macOS 14.0, *)
+private func mapAudioApplicationPermission(_ permission: AVAudioApplication.recordPermission) -> Int {
+  switch permission {
+  case .granted:
+    grantedValue
+  case .undetermined:
+    neverRequestedValue
+  case .denied:
+    deniedValue
+  @unknown default:
+    errorValue
+  }
+}
+
+private func currentMicrophonePermissionStatus() -> Int {
+  let captureStatus = mapCaptureMicrophoneStatus(AVCaptureDevice.authorizationStatus(for: .audio))
+
+  if #available(macOS 14.0, *) {
+    let appStatus = mapAudioApplicationPermission(AVAudioApplication.shared.recordPermission)
+
+    if appStatus == grantedValue || captureStatus == grantedValue {
+      return grantedValue
+    }
+
+    if appStatus == neverRequestedValue || captureStatus == neverRequestedValue {
+      return neverRequestedValue
+    }
+
+    return appStatus == errorValue ? captureStatus : appStatus
+  }
+
+  return captureStatus
+}
+
 @_cdecl("_microphone_permission_status")
 public func _microphone_permission_status() -> Int {
-  mapMicrophoneStatus(AVCaptureDevice.authorizationStatus(for: .audio))
+  currentMicrophonePermissionStatus()
 }
 
 @_cdecl("_request_microphone_permission")
 public func _request_microphone_permission() -> Bool {
+  if currentMicrophonePermissionStatus() == grantedValue {
+    return true
+  }
+
+  if #available(macOS 14.0, *) {
+    switch AVAudioApplication.shared.recordPermission {
+    case .granted:
+      return true
+    case .denied:
+      return currentMicrophonePermissionStatus() == grantedValue
+    case .undetermined:
+      let semaphore = DispatchSemaphore(value: 0)
+      var granted = false
+
+      AVAudioApplication.requestRecordPermission { allowed in
+        granted = allowed
+        semaphore.signal()
+      }
+
+      _ = semaphore.wait(timeout: .now() + .seconds(60))
+      return granted || currentMicrophonePermissionStatus() == grantedValue
+    @unknown default:
+      return currentMicrophonePermissionStatus() == grantedValue
+    }
+  }
+
   let status = AVCaptureDevice.authorizationStatus(for: .audio)
 
   switch status {
