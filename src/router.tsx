@@ -284,8 +284,9 @@ function ProcessingModeToggle({
 }) {
   const realtimeEnabled = supported && value === "realtime";
   const interactionDisabled = disabled || !supported;
+  const unsupportedTooltip = "This model is only available for batch processing.";
 
-  return (
+  const control = (
     <button
       type="button"
       role="switch"
@@ -295,7 +296,7 @@ function ProcessingModeToggle({
         "flex w-full items-center justify-between gap-4 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-4 py-4 text-left shadow-[0_1px_0_rgba(255,255,255,0.85)] transition",
         "hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]",
         disabled && "cursor-not-allowed opacity-60",
-        !supported && "cursor-not-allowed",
+        !supported && "cursor-not-allowed hover:bg-[color:var(--card)]",
       )}
       onClick={() => {
         if (interactionDisabled) {
@@ -308,13 +309,15 @@ function ProcessingModeToggle({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold text-zinc-950">Realtime transcription</p>
-          <Badge variant={supported ? (realtimeEnabled ? "info" : "outline") : "outline"}>
-            {supported ? (realtimeEnabled ? "On" : "Off") : "Batch only"}
-          </Badge>
+          {supported ? (
+            <Badge variant={realtimeEnabled ? "info" : "outline"}>
+              {realtimeEnabled ? "On" : "Off"}
+            </Badge>
+          ) : null}
         </div>
         <p className="mt-1 text-sm leading-6 text-zinc-600">
           {!supported
-            ? "This model runs after the meeting ends."
+            ? "Processed after the meeting ends."
             : realtimeEnabled
               ? "Streaming in real time while you record."
               : "Processed after the meeting ends."}
@@ -327,7 +330,9 @@ function ProcessingModeToggle({
           "relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors",
           realtimeEnabled
             ? "border-sky-200 bg-sky-500/90"
-            : "border-[color:var(--border-strong)] bg-[color:var(--secondary)]",
+            : supported
+              ? "border-[color:var(--border-strong)] bg-[color:var(--secondary)]"
+              : "border-zinc-200 bg-zinc-100",
         )}
       >
         <span
@@ -339,6 +344,25 @@ function ProcessingModeToggle({
       </span>
     </button>
   );
+
+  if (!supported) {
+    return (
+      <Tooltip>
+        <TooltipTrigger
+          render={<span className="block w-full cursor-not-allowed" />}
+          tabIndex={0}
+          aria-label={unsupportedTooltip}
+        >
+          {control}
+        </TooltipTrigger>
+        <TooltipPopup side="top" align="start">
+          {unsupportedTooltip}
+        </TooltipPopup>
+      </Tooltip>
+    );
+  }
+
+  return control;
 }
 
 function getModelDownloadProgressPercent(download: ManagedModelDownloadState | null) {
