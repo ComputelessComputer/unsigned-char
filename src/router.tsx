@@ -32,6 +32,7 @@ import {
 } from "react";
 
 import anthropicLogo from "./assets/provider-icons/anthropic.png";
+import brandWordmark from "./assets/brand-wordmark.svg";
 import googleLogo from "./assets/provider-icons/google.png";
 import lmStudioLogo from "./assets/provider-icons/lmstudio.png";
 import metaLogo from "./assets/provider-icons/meta.png";
@@ -131,14 +132,12 @@ function IconStopSquare({ className }: { className?: string }) {
 
 function BrandWordmark({ className }: { className?: string }) {
   return (
-    <span
-      className={cn(
-        "block text-[1.95rem] font-semibold leading-none tracking-[-0.08em] text-slate-950",
-        className,
-      )}
-    >
-      unsigned Char
-    </span>
+    <img
+      src={brandWordmark}
+      alt="unsigned Char"
+      className={cn("block h-7 w-auto", className)}
+      draggable={false}
+    />
   );
 }
 
@@ -1024,7 +1023,7 @@ function HomeScreen() {
   return (
     <section className={cn("mx-auto flex max-w-[780px] flex-col gap-4", windowShellHeightClass)}>
       <WindowDragRegion className="shrink-0 flex items-center justify-between gap-4">
-        <BrandWordmark className="relative -top-1 shrink-0" />
+        <BrandWordmark className="shrink-0" />
         <div data-window-drag="false">
           <Button
             size="lg"
