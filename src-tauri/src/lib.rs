@@ -19,8 +19,8 @@ use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
 use speech_models::{
     detect_device_profile, meeting_audio_file_name, model_path_is_ready, normalize_batch_model,
-    recommend_model, selected_model, speech_model_repo, speech_model_spec, DeviceProfileState,
-    SpeechModelId, TranscriptionMode,
+    recommend_model, selected_model, speech_model_spec, DeviceProfileState, SpeechModelId,
+    TranscriptionMode,
 };
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -1493,7 +1493,7 @@ fn managed_model_path_for<R: tauri::Runtime>(
     model_id: SpeechModelId,
 ) -> Result<PathBuf, String> {
     let _ = app;
-    speech_model_path(speech_model_repo(model_id))
+    speech_model_path(model_id.as_str())
 }
 
 fn meeting_exports_dir<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {

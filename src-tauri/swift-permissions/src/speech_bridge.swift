@@ -23,12 +23,16 @@ private enum ProcessingMode: String {
   case batch
 }
 
-private enum SpeechModelKind: String {
+private enum SpeechModelKind: String, CaseIterable {
   case parakeetStreaming
   case parakeetBatch
   case omnilingual
   case qwen3Small
   case qwen3Large
+
+  static func resolve(_ identifier: String) -> Self? {
+    Self(rawValue: identifier) ?? Self.allCases.first(where: { $0.repo == identifier })
+  }
 
   var label: String {
     switch self {
@@ -636,7 +640,7 @@ private actor SpeechBridge {
   private var activeLanguage: String?
 
   func cacheDirectory(modelId: String) -> String {
-    guard let kind = SpeechModelKind(rawValue: modelId) else {
+    guard let kind = SpeechModelKind.resolve(modelId) else {
       return ""
     }
 
@@ -645,7 +649,7 @@ private actor SpeechBridge {
   }
 
   func modelDownloadStateJSON(modelId: String) -> String {
-    guard let kind = SpeechModelKind(rawValue: modelId) else {
+    guard let kind = SpeechModelKind.resolve(modelId) else {
       return encodeJSON(
         ModelDownloadPayload(
           status: "error",
@@ -661,7 +665,7 @@ private actor SpeechBridge {
   }
 
   func startModelDownload(modelId: String) {
-    guard let kind = SpeechModelKind(rawValue: modelId) else {
+    guard let kind = SpeechModelKind.resolve(modelId) else {
       return
     }
 
@@ -713,7 +717,7 @@ private actor SpeechBridge {
   }
 
   func resetModel(modelId: String) {
-    guard let kind = SpeechModelKind(rawValue: modelId) else {
+    guard let kind = SpeechModelKind.resolve(modelId) else {
       return
     }
 
@@ -754,7 +758,7 @@ private actor SpeechBridge {
       guard let processingMode = ProcessingMode(rawValue: mode) else {
         throw SpeechBridgeError.message("Unsupported transcription mode: \(mode)")
       }
-      guard let kind = SpeechModelKind(rawValue: modelId) else {
+      guard let kind = SpeechModelKind.resolve(modelId) else {
         throw SpeechBridgeError.message("Unsupported speech model: \(modelId)")
       }
 

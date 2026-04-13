@@ -251,10 +251,6 @@ pub fn meeting_audio_file_name(meeting_id: &str) -> String {
     format!("meeting-{}.wav", sanitize_path_component(meeting_id))
 }
 
-pub fn speech_model_repo(model_id: SpeechModelId) -> &'static str {
-    speech_model_spec(model_id).repo
-}
-
 fn read_sysctl_value(name: &str) -> Option<String> {
     let output = Command::new("/usr/sbin/sysctl")
         .args(["-n", name])
