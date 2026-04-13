@@ -1,4 +1,5 @@
 mod asr;
+mod audio_capture;
 mod logging;
 mod permissions;
 mod speech_models;

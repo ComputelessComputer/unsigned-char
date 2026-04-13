@@ -236,6 +236,26 @@ private func waitForValue<T>(_ operation: @escaping () async -> T) -> T {
   return result
 }
 
+private func decodeFloatSamples(from data: Data) throws -> [Float] {
+  let stride = MemoryLayout<Float>.size
+  guard data.count.isMultiple(of: stride) else {
+    throw SpeechBridgeError.message("Invalid audio chunk received from native capture.")
+  }
+
+  let count = data.count / stride
+  var samples = [Float]()
+  samples.reserveCapacity(count)
+
+  data.withUnsafeBytes { bytes in
+    for index in 0..<count {
+      let bits = bytes.loadUnaligned(fromByteOffset: index * stride, as: UInt32.self)
+      samples.append(Float(bitPattern: UInt32(littleEndian: bits)))
+    }
+  }
+
+  return samples
+}
+
 private final class WAVCaptureWriter {
   private let url: URL
   private let sampleRate: Int
@@ -410,7 +430,6 @@ private final class WAVCaptureWriter {
 }
 
 private final class LiveTranscriptionSession {
-  private let audioIO = AudioIO()
   private let captureWriter: WAVCaptureWriter
   private let recordingPath: String
   private let mode: ProcessingMode
@@ -445,10 +464,6 @@ private final class LiveTranscriptionSession {
   }
 
   func start() throws {
-    try audioIO.startMicrophone(targetSampleRate: 16000) { [weak self] samples in
-      self?.append(samples)
-    }
-
     if streamingSession != nil {
       let timer = DispatchSource.makeTimerSource(queue: processingQueue)
       timer.schedule(deadline: .now(), repeating: .milliseconds(250))
@@ -484,7 +499,6 @@ private final class LiveTranscriptionSession {
     running = false
     stateLock.unlock()
 
-    audioIO.stopMicrophone()
     let timer = processingTimer
     processingTimer = nil
     timer?.cancel()
@@ -511,11 +525,22 @@ private final class LiveTranscriptionSession {
     stateLock.lock()
     running = false
     stateLock.unlock()
-    audioIO.stopMicrophone()
     let timer = processingTimer
     processingTimer = nil
     timer?.cancel()
     captureWriter.cancel(removeFile: removeRecording)
+  }
+
+  func ingest(_ samples: [Float]) {
+    stateLock.lock()
+    let isRunning = running
+    stateLock.unlock()
+
+    guard isRunning else {
+      return
+    }
+
+    append(samples)
   }
 
   private func append(_ samples: [Float]) {
@@ -556,7 +581,7 @@ private final class LiveTranscriptionSession {
     do {
       apply(try streamingSession.pushAudio(samples))
     } catch {
-      fail("speech-swift failed while processing microphone audio: \(error.localizedDescription)")
+      fail("speech-swift failed while processing meeting audio: \(error.localizedDescription)")
     }
   }
 
@@ -604,8 +629,6 @@ private final class LiveTranscriptionSession {
     errorMessage = message
     running = false
     stateLock.unlock()
-
-    audioIO.stopMicrophone()
 
     let timer = processingTimer
     processingTimer = nil
@@ -876,6 +899,20 @@ private actor SpeechBridge {
     }
   }
 
+  func appendTranscriptionAudio(samplesData: Data) -> String {
+    guard let activeSession else {
+      return "No active transcription session."
+    }
+
+    do {
+      let samples = try decodeFloatSamples(from: samplesData)
+      activeSession.ingest(samples)
+      return ""
+    } catch {
+      return error.localizedDescription
+    }
+  }
+
   private func clearActiveSession() {
     activeSession = nil
     activeMode = nil
@@ -1041,6 +1078,13 @@ public func _speech_live_transcription_start(
 @_cdecl("_speech_live_transcription_state")
 public func _speech_live_transcription_state() -> SRString {
   SRString(waitForValue { await SpeechBridge.shared.transcriptionStateJSON() })
+}
+
+@_cdecl("_speech_live_transcription_append")
+public func _speech_live_transcription_append(samples: SRData) -> SRString {
+  SRString(waitForValue {
+    await SpeechBridge.shared.appendTranscriptionAudio(samplesData: Data(samples.toArray()))
+  })
 }
 
 @_cdecl("_speech_live_transcription_stop")

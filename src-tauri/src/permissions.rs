@@ -41,6 +41,7 @@ pub struct PermissionSnapshot {
 impl PermissionSnapshot {
     pub fn ready(self) -> bool {
         self.microphone == PermissionStatus::Authorized
+            && self.system_audio == PermissionStatus::Authorized
     }
 }
 

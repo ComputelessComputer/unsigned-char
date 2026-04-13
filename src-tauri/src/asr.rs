@@ -3,8 +3,10 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
+use crate::audio_capture::LiveCaptureSession;
+
 #[cfg(target_os = "macos")]
-use swift_rs::{swift, Bool, SRString};
+use swift_rs::{swift, Bool, SRData, SRString};
 
 #[cfg(target_os = "macos")]
 swift!(fn _speech_model_cache_dir(model_id: &SRString) -> SRString);
@@ -22,12 +24,20 @@ swift!(fn _speech_live_transcription_start(
     language: &SRString
 ) -> SRString);
 #[cfg(target_os = "macos")]
+swift!(fn _speech_live_transcription_append(samples: &SRData) -> SRString);
+#[cfg(target_os = "macos")]
 swift!(fn _speech_live_transcription_state() -> SRString);
 #[cfg(target_os = "macos")]
 swift!(fn _speech_live_transcription_stop() -> SRString);
 
 #[derive(Default)]
-pub struct TranscriptionManager;
+pub struct TranscriptionManager {
+    active: Option<CaptureHandle>,
+}
+
+struct CaptureHandle {
+    capture: LiveCaptureSession,
+}
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -61,8 +71,30 @@ impl TranscriptionManager {
         language: &str,
     ) -> Result<LiveTranscriptionState, String> {
         let _ = self.stop();
-        info!(mode, model_id, recording_path = %recording_path.display(), "Starting speech-swift transcription session");
-        speech_live_transcription_start(mode, model_id, recording_path, language)
+        info!(
+            mode,
+            model_id,
+            recording_path = %recording_path.display(),
+            "Starting speech-swift transcription session"
+        );
+
+        let initial = ensure_started(speech_live_transcription_start(
+            mode,
+            model_id,
+            recording_path,
+            language,
+        )?)?;
+
+        match CaptureHandle::start() {
+            Ok(handle) => {
+                self.active = Some(handle);
+                Ok(initial)
+            }
+            Err(message) => {
+                let _ = speech_live_transcription_stop();
+                Err(message)
+            }
+        }
     }
 
     pub fn preload(&mut self, _model_id: &str) {}
@@ -71,15 +103,56 @@ impl TranscriptionManager {
 
     pub fn request_stop(&mut self) -> Result<LiveTranscriptionState, String> {
         info!("Requesting speech-swift transcription shutdown");
-        speech_live_transcription_stop()
-    }
+        if let Some(active) = self.active.as_ref() {
+            active.capture.request_stop()?;
+        }
 
-    pub fn state(&mut self) -> Result<LiveTranscriptionState, String> {
         speech_live_transcription_state()
     }
 
+    pub fn state(&mut self) -> Result<LiveTranscriptionState, String> {
+        let Some(active) = self.active.as_ref() else {
+            return speech_live_transcription_state();
+        };
+
+        if active.capture.is_running() {
+            return speech_live_transcription_state();
+        }
+
+        let active = self
+            .active
+            .take()
+            .ok_or_else(|| "Failed to access transcription state.".to_string())?;
+        active.finish()
+    }
+
     pub fn stop(&mut self) -> Result<LiveTranscriptionState, String> {
-        speech_live_transcription_stop()
+        let Some(active) = self.active.take() else {
+            return speech_live_transcription_stop();
+        };
+
+        let _ = active.capture.request_stop();
+        active.finish()
+    }
+}
+
+impl CaptureHandle {
+    fn start() -> Result<Self, String> {
+        let capture =
+            LiveCaptureSession::start(|samples| speech_live_transcription_append(&samples))?;
+        Ok(Self { capture })
+    }
+
+    fn finish(self) -> Result<LiveTranscriptionState, String> {
+        let capture_error = self.capture.take_error();
+        self.capture.finish()?;
+
+        let mut snapshot = speech_live_transcription_stop()?;
+        if snapshot.error.is_none() {
+            snapshot.error = capture_error;
+        }
+
+        Ok(snapshot)
     }
 }
 
@@ -147,6 +220,16 @@ pub fn reset_managed_model(model_id: &str) -> Result<(), String> {
     }
 }
 
+fn ensure_started(snapshot: LiveTranscriptionState) -> Result<LiveTranscriptionState, String> {
+    if snapshot.running {
+        return Ok(snapshot);
+    }
+
+    Err(snapshot
+        .error
+        .unwrap_or_else(|| "Failed to start the speech-swift transcription session.".to_string()))
+}
+
 fn speech_live_transcription_start(
     mode: &str,
     model_id: &str,
@@ -170,6 +253,30 @@ fn speech_live_transcription_start(
 
     #[cfg(not(target_os = "macos"))]
     {
+        Err("speech-swift is only available on macOS.".to_string())
+    }
+}
+
+fn speech_live_transcription_append(samples: &[f32]) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut bytes = Vec::with_capacity(samples.len() * std::mem::size_of::<f32>());
+        for sample in samples {
+            bytes.extend_from_slice(&sample.to_le_bytes());
+        }
+
+        let data: SRData = bytes.as_slice().into();
+        let message = unsafe { _speech_live_transcription_append(&data) };
+        if message.as_str().is_empty() {
+            return Ok(());
+        }
+
+        Err(message.as_str().to_string())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = samples;
         Err("speech-swift is only available on macOS.".to_string())
     }
 }
