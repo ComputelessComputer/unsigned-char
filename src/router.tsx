@@ -1475,7 +1475,10 @@ function MeetingScreen() {
         <Button
           size="lg"
           variant={isStoppingMeeting ? "outline" : meeting.status === "live" ? "destructive" : "outline"}
-          className="w-full min-w-0 justify-self-stretch"
+          className={cn(
+            "w-full min-w-0 justify-self-stretch",
+            meeting.status === "live" && !isStoppingMeeting && "text-white",
+          )}
           disabled={snapshot.transcriptionBusy}
           loading={isStoppingMeeting}
           onClick={() => {
@@ -1485,7 +1488,14 @@ function MeetingScreen() {
           {isStoppingMeeting ? (
             "Finishing transcript"
           ) : meeting.status === "live" ? (
-            isStartingMeeting ? "Starting listening" : "Stop listening"
+            isStartingMeeting ? (
+              "Starting listening"
+            ) : (
+              <>
+                <span aria-hidden="true" className="size-2.5 shrink-0 rounded-[2px] bg-current" />
+                <span>Stop listening</span>
+              </>
+            )
           ) : (
             <>
               <LiveIndicator />
