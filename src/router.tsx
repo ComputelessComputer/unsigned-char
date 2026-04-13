@@ -503,7 +503,7 @@ function DeleteMeetingDialog({
 
 const insetPanelClass =
   "rounded-[calc(var(--radius)-4px)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3";
-const windowShellHeightClass = "h-full";
+const windowShellHeightClass = "h-full min-h-0";
 const appWindow = getCurrentWindow();
 const isMainWindow = appWindow.label === "main";
 
@@ -1436,92 +1436,88 @@ function MeetingScreen() {
       </div>
 
       <div className="-mx-4 min-h-0 flex-1 pb-4">
-        <div className="flex h-full min-h-0 flex-col gap-4">
-          {showSummaryCard ? (
-            <div className="px-4">
-              <Card>
-                <CardHeader className="flex-row items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <CardTitle>Summary</CardTitle>
-                    <CardDescription>
-                      Stored locally alongside the transcript export.
-                    </CardDescription>
-                  </div>
-                  <CardAction>
-                    <StatusBadge tone="ready">saved</StatusBadge>
-                  </CardAction>
-                </CardHeader>
-                <CardPanel className="pt-0">
-                  <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
-                    {meeting.summary}
-                  </div>
-                </CardPanel>
-                <CardFooter className="justify-start">
-                  <div className="text-xs leading-5 text-zinc-500">
-                    {meeting.summaryUpdatedAt ? (
-                      <span>
-                        {meeting.summaryProviderLabel ? `${meeting.summaryProviderLabel}` : "Summary"} ·{" "}
-                        {meeting.summaryModel ?? "model"} · Updated{" "}
-                        {formatDateTime(meeting.summaryUpdatedAt)}
-                      </span>
-                    ) : null}
-                  </div>
-                </CardFooter>
-              </Card>
-            </div>
-          ) : null}
+        <div className="relative h-full min-h-0">
+          <div
+            className="h-full overflow-y-auto"
+            ref={attachTranscriptRef}
+            onScroll={handleTranscriptScroll}
+          >
+            <div className="flex min-h-full flex-col gap-4 px-4">
+              {showSummaryCard ? (
+                <Card>
+                  <CardHeader className="flex-row items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <CardTitle>Summary</CardTitle>
+                      <CardDescription>
+                        Stored locally alongside the transcript export.
+                      </CardDescription>
+                    </div>
+                    <CardAction>
+                      <StatusBadge tone="ready">saved</StatusBadge>
+                    </CardAction>
+                  </CardHeader>
+                  <CardPanel className="pt-0">
+                    <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
+                      {meeting.summary}
+                    </div>
+                  </CardPanel>
+                  <CardFooter className="justify-start">
+                    <div className="text-xs leading-5 text-zinc-500">
+                      {meeting.summaryUpdatedAt ? (
+                        <span>
+                          {meeting.summaryProviderLabel ? `${meeting.summaryProviderLabel}` : "Summary"} ·{" "}
+                          {meeting.summaryModel ?? "model"} · Updated{" "}
+                          {formatDateTime(meeting.summaryUpdatedAt)}
+                        </span>
+                      ) : null}
+                    </div>
+                  </CardFooter>
+                </Card>
+              ) : null}
 
-          {transcriptEntries.length === 0 ? (
-            <div className="flex flex-1 px-4">
-              <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
-                <p className="text-sm leading-6 text-zinc-600">{emptyTranscriptCopy}</p>
-              </Card>
-            </div>
-          ) : (
-            <div className="min-h-[260px] flex-1 overflow-hidden">
-              <div className="relative flex h-full min-h-0 flex-col">
-                <section
-                  className="flex min-h-0 flex-1 flex-col overflow-y-auto"
-                  ref={attachTranscriptRef}
-                  onScroll={handleTranscriptScroll}
-                >
-                  <div className="space-y-5 px-4 pb-2">
-                    {transcriptEntries.map((entry, index) => {
-                      const { speakerLabel, timestampLabel } = getTranscriptEntryMeta(
-                        meeting,
-                        entry,
-                        index,
-                      );
+              {transcriptEntries.length === 0 ? (
+                <div className="flex flex-1 pb-2">
+                  <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
+                    <p className="text-sm leading-6 text-zinc-600">{emptyTranscriptCopy}</p>
+                  </Card>
+                </div>
+              ) : (
+                <section className="space-y-5 pb-2">
+                  {transcriptEntries.map((entry, index) => {
+                    const { speakerLabel, timestampLabel } = getTranscriptEntryMeta(
+                      meeting,
+                      entry,
+                      index,
+                    );
 
-                      return (
-                        <article
-                          key={`${meeting.id}-${index}-${entry.source}-${entry.text.slice(0, 12)}`}
-                          className="space-y-2 border-b border-[color:var(--border)] pb-5 last:border-b-0 last:pb-0"
-                        >
-                          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                            <span className="text-zinc-700">{speakerLabel}</span>
-                            {timestampLabel ? <span>[{timestampLabel}]</span> : null}
-                          </div>
-                          <p className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-800">
-                            {entry.text}
-                          </p>
-                        </article>
-                      );
-                    })}
-                  </div>
+                    return (
+                      <article
+                        key={`${meeting.id}-${index}-${entry.source}-${entry.text.slice(0, 12)}`}
+                        className="space-y-2 border-b border-[color:var(--border)] pb-5 last:border-b-0 last:pb-0"
+                      >
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                          <span className="text-zinc-700">{speakerLabel}</span>
+                          {timestampLabel ? <span>[{timestampLabel}]</span> : null}
+                        </div>
+                        <p className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-800">
+                          {entry.text}
+                        </p>
+                      </article>
+                    );
+                  })}
                 </section>
-                <ScrollFade
-                  tone="background"
-                  showTop={transcriptScrollFade.showTop}
-                  showBottom={transcriptScrollFade.showBottom}
-                />
-              </div>
-            </div>
-          )}
+              )}
 
-          {snapshot.meetingNote ? (
-            <p className="text-sm text-rose-700">{snapshot.meetingNote}</p>
-          ) : null}
+              {snapshot.meetingNote ? (
+                <p className="pb-2 text-sm text-rose-700">{snapshot.meetingNote}</p>
+              ) : null}
+            </div>
+          </div>
+          <ScrollFade
+            tone="background"
+            showTop={transcriptScrollFade.showTop}
+            showBottom={transcriptScrollFade.showBottom}
+          />
         </div>
       </div>
       <DeleteMeetingDialog
