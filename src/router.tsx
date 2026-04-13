@@ -1095,7 +1095,7 @@ function MeetingScreen() {
         </div>
       </WindowDragRegion>
 
-      <div className="flex items-end justify-between gap-3">
+      <div className="flex items-end gap-3">
         <div className="flex min-w-0 items-end justify-start">
           <Button
             size="lg"
