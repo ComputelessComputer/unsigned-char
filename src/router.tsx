@@ -1549,7 +1549,7 @@ function MeetingScreen() {
         />
       ) : null}
 
-      <div className={cn("-mx-4 min-h-0 flex-1 pb-4", showDiarizationBottomBanner && "pb-24")}>
+      <div className={cn("-mx-4 min-h-0 flex-1", showDiarizationBottomBanner && "pb-24")}>
         <div className="relative h-full min-h-0">
           <div
             className="h-full overflow-y-auto"
@@ -1590,7 +1590,7 @@ function MeetingScreen() {
               ) : null}
 
               {transcriptEntries.length === 0 ? (
-                <div className="flex flex-1 pb-2">
+                <div className="flex flex-1">
                   <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
                     <p className="text-sm leading-6 text-zinc-600">{emptyTranscriptCopy}</p>
                   </Card>
