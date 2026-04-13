@@ -489,6 +489,7 @@ fn download_managed_model<R: tauri::Runtime>(
 ) -> Result<ManagedModelDownloadState, String> {
     let model_settings = effective_model_settings(&load_model_settings(&app)?);
     let selected_model_id = model_settings.selected_model_id();
+    let selected_spec = speech_model_spec(selected_model_id);
     let target_dir = managed_model_path_for(&app, selected_model_id)?;
     let shared = state.inner().managed_model_download.clone();
 
@@ -519,8 +520,28 @@ fn download_managed_model<R: tauri::Runtime>(
     );
 
     start_speech_model_download(selected_model_id.as_str())?;
+    let pending_state = ManagedModelDownloadState {
+        status: ManagedModelDownloadStatus::Downloading,
+        local_path: target_dir.display().to_string(),
+        current_file: Some(format!("Preparing {}...", selected_spec.label)),
+        bytes_downloaded: 0,
+        total_bytes: None,
+        error: None,
+    };
 
-    snapshot_managed_model_download_state(&app, &shared)
+    {
+        let mut download_state = shared
+            .lock()
+            .map_err(|_| "Failed to access model download state.".to_string())?;
+        *download_state = pending_state.clone();
+    }
+
+    let snapshot = snapshot_managed_model_download_state(&app, &shared)?;
+    if matches!(snapshot.status, ManagedModelDownloadStatus::Idle) {
+        return Ok(pending_state);
+    }
+
+    Ok(snapshot)
 }
 
 #[tauri::command]
