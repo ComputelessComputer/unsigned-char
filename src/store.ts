@@ -682,31 +682,40 @@ function transcriptEntriesSubstantiallyOverlap(left: TranscriptEntry, right: Tra
   return lcsLength / shorterLength >= 0.72;
 }
 
-function transcriptSourcePriority(source: TranscriptSource) {
-  if (source === "system") {
-    return 2;
+function transcriptEntriesCloselyMatchAcrossSources(left: TranscriptEntry, right: TranscriptEntry) {
+  const leftTokens = transcriptComparisonTokens(left.text);
+  const rightTokens = transcriptComparisonTokens(right.text);
+  const shorterLength = Math.min(leftTokens.length, rightTokens.length);
+  const longerLength = Math.max(leftTokens.length, rightTokens.length);
+
+  if (shorterLength < 6 || shorterLength / longerLength < 0.82) {
+    return false;
   }
 
-  if (source === "mixed") {
-    return 1;
-  }
-
-  return 0;
+  const lcsLength = longestCommonSubsequenceLength(leftTokens, rightTokens);
+  return lcsLength / longerLength >= 0.88;
 }
 
 function preferredTranscriptEntry(left: TranscriptEntry, right: TranscriptEntry) {
-  const leftPriority = transcriptSourcePriority(left.source);
-  const rightPriority = transcriptSourcePriority(right.source);
+  const leftLength = transcriptComparisonTokens(left.text).length;
+  const rightLength = transcriptComparisonTokens(right.text).length;
 
-  if (leftPriority !== rightPriority) {
-    const preferred = leftPriority > rightPriority ? left : right;
-    const fallback = preferred === left ? right : left;
-    const preferredLength = transcriptComparisonTokens(preferred.text).length;
-    const fallbackLength = transcriptComparisonTokens(fallback.text).length;
-    return preferredLength * 0.7 >= fallbackLength ? preferred : fallback;
+  if (leftLength !== rightLength) {
+    return rightLength > leftLength ? right : left;
   }
 
   return right.text.length > left.text.length ? right : left;
+}
+
+function preferredCrossSourceTranscriptEntry(left: TranscriptEntry, right: TranscriptEntry) {
+  const leftLength = transcriptComparisonTokens(left.text).length;
+  const rightLength = transcriptComparisonTokens(right.text).length;
+
+  if (rightLength >= leftLength * 1.2) {
+    return right;
+  }
+
+  return left;
 }
 
 function compactTranscriptEntries(entries: TranscriptEntry[]) {
@@ -734,11 +743,11 @@ function compactTranscriptEntries(entries: TranscriptEntry[]) {
         continue;
       }
 
-      if (!transcriptEntriesSubstantiallyOverlap(existing, candidate)) {
+      if (!transcriptEntriesCloselyMatchAcrossSources(existing, candidate)) {
         continue;
       }
 
-      compacted[index] = preferredTranscriptEntry(existing, candidate);
+      compacted[index] = preferredCrossSourceTranscriptEntry(existing, candidate);
       merged = true;
       break;
     }

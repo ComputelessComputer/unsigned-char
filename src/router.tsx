@@ -761,112 +761,114 @@ function HomeScreen() {
       <div className="relative -mx-4 min-h-0 flex-1">
         <div
           id="home-content"
-          className="h-full overflow-y-auto px-4 pt-4 pr-5 pb-4"
+          className="h-full overflow-y-auto"
           ref={attachHomeContentRef}
           onScroll={(event) => {
             handleHomeScroll(event);
             appStore.setHomeScrollTop(event.currentTarget.scrollTop);
           }}
         >
-          {snapshot.permissionNote ? (
-            <p className="mb-3 text-sm text-rose-700">{snapshot.permissionNote}</p>
-          ) : null}
+          <div className="px-4 pt-4 pb-4">
+            {snapshot.permissionNote ? (
+              <p className="mb-3 text-sm text-rose-700">{snapshot.permissionNote}</p>
+            ) : null}
 
-          {setupBanner ? (
-            <Card className="mb-4">
-              <CardHeader className="gap-1.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                  {setupBanner.kicker}
-                </p>
-                <CardTitle className="text-2xl">{setupBanner.title}</CardTitle>
-                <CardDescription>{setupBanner.copy}</CardDescription>
-              </CardHeader>
-              <CardPanel className="pt-4">
-                <p className="text-sm text-zinc-500">{setupBanner.detail}</p>
-                {setupBanner.localPath ? (
-                  <div className={cn("mt-4", insetPanelClass)}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                      Storage
-                    </p>
-                    <code className="mt-1 block break-all text-xs text-zinc-700">
-                      {setupBanner.localPath}
-                    </code>
-                  </div>
+            {setupBanner ? (
+              <Card className="mb-4">
+                <CardHeader className="gap-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                    {setupBanner.kicker}
+                  </p>
+                  <CardTitle className="text-2xl">{setupBanner.title}</CardTitle>
+                  <CardDescription>{setupBanner.copy}</CardDescription>
+                </CardHeader>
+                <CardPanel className="pt-4">
+                  <p className="text-sm text-zinc-500">{setupBanner.detail}</p>
+                  {setupBanner.localPath ? (
+                    <div className={cn("mt-4", insetPanelClass)}>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                        Storage
+                      </p>
+                      <code className="mt-1 block break-all text-xs text-zinc-700">
+                        {setupBanner.localPath}
+                      </code>
+                    </div>
+                  ) : null}
+                </CardPanel>
+                {showModelDownloadGauge ? (
+                  <CardFooter className="border-t-0 pt-0">
+                    <ModelDownloadGauge busy={snapshot.modelBusy} download={snapshot.modelDownload} />
+                  </CardFooter>
+                ) : setupBanner.actionLabel ? (
+                  <CardFooter className="border-t-0 pt-0">
+                    <Button
+                      disabled={snapshot.modelBusy}
+                      onClick={() => {
+                        void appStore.startManagedModelDownload();
+                      }}
+                    >
+                      <span className="text-white">
+                        {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
+                      </span>
+                    </Button>
+                  </CardFooter>
                 ) : null}
-              </CardPanel>
-              {showModelDownloadGauge ? (
-                <CardFooter className="border-t-0 pt-0">
-                  <ModelDownloadGauge busy={snapshot.modelBusy} download={snapshot.modelDownload} />
-                </CardFooter>
-              ) : setupBanner.actionLabel ? (
-                <CardFooter className="border-t-0 pt-0">
-                  <Button
-                    disabled={snapshot.modelBusy}
-                    onClick={() => {
-                      void appStore.startManagedModelDownload();
-                    }}
-                  >
-                    <span className="text-white">
-                      {snapshot.modelBusy ? "Starting download..." : setupBanner.actionLabel}
-                    </span>
-                  </Button>
-                </CardFooter>
-              ) : null}
-            </Card>
-          ) : meetings.length === 0 ? (
-            <Card>
-              <CardHeader className="items-center px-8 py-8 text-center">
-                <CardTitle>No meetings yet</CardTitle>
-                <CardDescription>
-                  Create a meeting from the button above and transcripts will show up here.
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {meetings.map((meeting) => {
-                const deleteDisabled = isMeetingDeleteDisabled(
-                  meeting,
-                  snapshot.transcriptionBusy,
-                  snapshot.transcriptionRunning,
-                  snapshot.recordingMeetingId,
-                );
+              </Card>
+            ) : meetings.length === 0 ? (
+              <Card>
+                <CardHeader className="items-center px-8 py-8 text-center">
+                  <CardTitle>No meetings yet</CardTitle>
+                  <CardDescription>
+                    Create a meeting from the button above and transcripts will show up here.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+              <div className="space-y-3">
+                {meetings.map((meeting) => {
+                  const deleteDisabled = isMeetingDeleteDisabled(
+                    meeting,
+                    snapshot.transcriptionBusy,
+                    snapshot.transcriptionRunning,
+                    snapshot.recordingMeetingId,
+                  );
 
-                return (
-                  <div key={meeting.id} className="relative">
-                    <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="absolute inset-0 z-10 h-auto w-full rounded-[calc(var(--radius)+2px)] border-transparent bg-transparent p-0 text-left shadow-none hover:bg-transparent data-pressed:bg-transparent"
-                        aria-label={`Open ${meeting.title}`}
-                        onClick={() => {
-                          navigate({
-                            to: "/meeting/$meetingId",
-                            params: { meetingId: meeting.id },
-                          });
-                        }}
-                        onContextMenu={(event) => {
-                          void showNativeContextMenu(
-                            getMeetingActionMenuItems(meeting, deleteDisabled, setMeetingPendingDelete),
-                            event,
-                          );
-                        }}
-                      />
-                      <CardPanel className="p-4">
-                        <div className="flex min-w-0 flex-col gap-1.5">
-                          <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
-                          <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
-                            {meeting.title}
-                          </h2>
-                        </div>
-                      </CardPanel>
-                    </Card>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  return (
+                    <div key={meeting.id} className="relative">
+                      <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="absolute inset-0 z-10 h-auto w-full rounded-[calc(var(--radius)+2px)] border-transparent bg-transparent p-0 text-left shadow-none hover:bg-transparent data-pressed:bg-transparent"
+                          aria-label={`Open ${meeting.title}`}
+                          onClick={() => {
+                            navigate({
+                              to: "/meeting/$meetingId",
+                              params: { meetingId: meeting.id },
+                            });
+                          }}
+                          onContextMenu={(event) => {
+                            void showNativeContextMenu(
+                              getMeetingActionMenuItems(meeting, deleteDisabled, setMeetingPendingDelete),
+                              event,
+                            );
+                          }}
+                        />
+                        <CardPanel className="p-4">
+                          <div className="flex min-w-0 flex-col gap-1.5">
+                            <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
+                            <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
+                              {meeting.title}
+                            </h2>
+                          </div>
+                        </CardPanel>
+                      </Card>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
         <ScrollFade
           className="mx-4"
@@ -1176,53 +1178,57 @@ function MeetingScreen() {
         </Tooltip>
       </div>
 
-      <div className="-mx-4 min-h-0 flex-1 px-4 pb-4 pr-5">
+      <div className="-mx-4 min-h-0 flex-1 pb-4">
         <div className="flex h-full min-h-0 flex-col gap-4">
           {showSummaryCard ? (
-            <Card>
-              <CardHeader className="flex-row items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <CardTitle>Summary</CardTitle>
-                  <CardDescription>
-                    Stored locally alongside the transcript export.
-                  </CardDescription>
-                </div>
-                <CardAction>
-                  <StatusBadge tone="ready">saved</StatusBadge>
-                </CardAction>
-              </CardHeader>
-              <CardPanel className="pt-0">
-                <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
-                  {meeting.summary}
-                </div>
-              </CardPanel>
-              <CardFooter className="justify-start">
-                <div className="text-xs leading-5 text-zinc-500">
-                  {meeting.summaryUpdatedAt ? (
-                    <span>
-                      {meeting.summaryProviderLabel ? `${meeting.summaryProviderLabel}` : "Summary"} ·{" "}
-                      {meeting.summaryModel ?? "model"} · Updated{" "}
-                      {formatDateTime(meeting.summaryUpdatedAt)}
-                    </span>
-                  ) : null}
-                </div>
-              </CardFooter>
-            </Card>
+            <div className="px-4">
+              <Card>
+                <CardHeader className="flex-row items-start justify-between gap-4">
+                  <div className="space-y-1">
+                    <CardTitle>Summary</CardTitle>
+                    <CardDescription>
+                      Stored locally alongside the transcript export.
+                    </CardDescription>
+                  </div>
+                  <CardAction>
+                    <StatusBadge tone="ready">saved</StatusBadge>
+                  </CardAction>
+                </CardHeader>
+                <CardPanel className="pt-0">
+                  <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
+                    {meeting.summary}
+                  </div>
+                </CardPanel>
+                <CardFooter className="justify-start">
+                  <div className="text-xs leading-5 text-zinc-500">
+                    {meeting.summaryUpdatedAt ? (
+                      <span>
+                        {meeting.summaryProviderLabel ? `${meeting.summaryProviderLabel}` : "Summary"} ·{" "}
+                        {meeting.summaryModel ?? "model"} · Updated{" "}
+                        {formatDateTime(meeting.summaryUpdatedAt)}
+                      </span>
+                    ) : null}
+                  </div>
+                </CardFooter>
+              </Card>
+            </div>
           ) : null}
 
           {transcriptEntries.length === 0 ? (
-            <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
-              <p className="text-sm leading-6 text-zinc-600">{emptyTranscriptCopy}</p>
-            </Card>
+            <div className="flex flex-1 px-4">
+              <Card className="flex min-h-[260px] flex-1 items-center justify-center border-dotted bg-[color:var(--secondary)] px-6 text-center">
+                <p className="text-sm leading-6 text-zinc-600">{emptyTranscriptCopy}</p>
+              </Card>
+            </div>
           ) : (
             <div className="min-h-[260px] flex-1 overflow-hidden">
               <div className="relative flex h-full min-h-0 flex-col">
                 <section
-                  className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-2"
+                  className="flex min-h-0 flex-1 flex-col overflow-y-auto"
                   ref={attachTranscriptRef}
                   onScroll={handleTranscriptScroll}
                 >
-                  <div className="space-y-5 pb-2">
+                  <div className="space-y-5 px-4 pb-2">
                     {transcriptEntries.map((entry, index) => {
                       const { speakerLabel, timestampLabel } = getTranscriptEntryMeta(
                         meeting,
