@@ -474,16 +474,25 @@ function DeleteMeetingDialog({
               saved markdown export.
             </CardDescription>
           </CardHeader>
-          <CardFooter className="justify-between gap-3">
-            <p className="text-sm text-zinc-500">
-              Press <Kbd className="mx-1 align-middle">Enter</Kbd> to confirm
-            </p>
+          <CardFooter className="justify-end gap-3">
             <div className="flex items-center gap-3">
               <Button variant="secondary" onClick={onCancel}>
                 Cancel
               </Button>
-              <Button variant="destructive" type="submit" autoFocus>
-                Delete
+              <Button
+                variant="destructive"
+                type="submit"
+                autoFocus
+                className="gap-2 text-white"
+                style={{ color: "#fff", WebkitTextFillColor: "#fff" }}
+              >
+                <span>Delete</span>
+                <Kbd
+                  className="border-white/20 bg-white/14 text-white shadow-none"
+                  style={{ color: "#fff", WebkitTextFillColor: "#fff" }}
+                >
+                  Enter
+                </Kbd>
               </Button>
             </div>
           </CardFooter>
@@ -1309,10 +1318,12 @@ function MeetingScreen() {
     snapshot.startMeetingBusy &&
     snapshot.recordingMeetingId === meeting.id &&
     !snapshot.transcriptionRunning;
+  const isStoppingMeeting =
+    snapshot.transcriptionStopping && snapshot.recordingMeetingId === meeting.id;
   const isMeetingListening =
-    snapshot.recordingMeetingId === meeting.id ||
-    (meeting.status === "live" && snapshot.transcriptionRunning);
-  const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
+    !isStoppingMeeting &&
+    (snapshot.recordingMeetingId === meeting.id ||
+      (meeting.status === "live" && snapshot.transcriptionRunning));
   const showDiarizationActivity =
     snapshot.diarizationMeetingId === meeting.id &&
     (snapshot.diarizationRunBusy || Boolean(snapshot.diarizationBannerMessage));
@@ -1326,6 +1337,8 @@ function MeetingScreen() {
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
   const summaryTooltipTitle = isGeneratingSummary
     ? "Generating summary"
+    : isStoppingMeeting
+      ? "Finishing transcript"
     : !summaryReady
       ? "AI summary setup required"
       : isMeetingListening
@@ -1337,6 +1350,8 @@ function MeetingScreen() {
             : "Generate summary";
   const summaryActionHint = isGeneratingSummary
     ? "Generating summary..."
+    : isStoppingMeeting
+      ? "Wait for the transcript to finish processing."
     : snapshot.summaryMeetingId !== null
       ? "Another summary is already running."
       : !summaryReady
@@ -1353,12 +1368,15 @@ function MeetingScreen() {
   const summaryActionDisabled =
     isGeneratingSummary ||
     snapshot.summaryMeetingId !== null ||
+    snapshot.transcriptionBusy ||
     !summaryReady ||
     isMeetingListening ||
     transcriptEntries.length === 0;
   const emptyTranscriptCopy =
     isStartingMeeting
       ? "Transcription is starting."
+      : isStoppingMeeting
+      ? "Finishing transcript."
       : meeting.status === "live" && snapshot.modelSettings?.processingMode === "batch"
       ? "Transcript will be generated after you stop the meeting."
       : "Transcript will appear here.";
@@ -1456,7 +1474,7 @@ function MeetingScreen() {
       <div className="shrink-0 grid min-w-0 grid-cols-2 gap-3">
         <Button
           size="lg"
-          variant={meeting.status === "live" ? "destructive" : "outline"}
+          variant={isStoppingMeeting ? "outline" : meeting.status === "live" ? "destructive" : "outline"}
           className="w-full min-w-0 justify-self-stretch"
           disabled={snapshot.transcriptionBusy}
           loading={isStoppingMeeting}
@@ -1464,12 +1482,10 @@ function MeetingScreen() {
             void appStore.toggleMeetingStatus(meeting.id);
           }}
         >
-          {meeting.status === "live" ? (
-            isStoppingMeeting
-              ? "Processing audio"
-              : isStartingMeeting
-                ? "Starting listening"
-                : "Stop listening"
+          {isStoppingMeeting ? (
+            "Finishing transcript"
+          ) : meeting.status === "live" ? (
+            isStartingMeeting ? "Starting listening" : "Stop listening"
           ) : (
             <>
               <LiveIndicator />
