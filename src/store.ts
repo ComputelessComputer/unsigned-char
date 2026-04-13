@@ -677,6 +677,70 @@ function transcriptComparisonTokens(text: string) {
   return normalized ? normalized.split(" ") : [];
 }
 
+function transcriptWordPairs(text: string) {
+  return collapseRepeatedTranscriptSpans(text)
+    .split(/\s+/)
+    .map((word) => ({
+      word,
+      token: normalizeTranscriptComparisonText(word),
+    }))
+    .filter((pair) => pair.word && pair.token);
+}
+
+function transcriptWords(text: string) {
+  return transcriptWordPairs(text).map((pair) => pair.word);
+}
+
+function tokenCharacterLength(tokens: string[]) {
+  return tokens.join("").length;
+}
+
+function commonPrefixLength(left: string[], right: string[]) {
+  const overlap = Math.min(left.length, right.length);
+  let length = 0;
+
+  while (length < overlap && left[length] === right[length]) {
+    length += 1;
+  }
+
+  return length;
+}
+
+function commonSuffixLength(left: string[], right: string[]) {
+  const overlap = Math.min(left.length, right.length);
+  let length = 0;
+
+  while (
+    length < overlap &&
+    left[left.length - 1 - length] === right[right.length - 1 - length]
+  ) {
+    length += 1;
+  }
+
+  return length;
+}
+
+function suffixPrefixOverlapLength(left: string[], right: string[]) {
+  const overlap = Math.min(left.length, right.length);
+
+  for (let size = overlap; size >= 1; size -= 1) {
+    let matches = true;
+
+    for (let index = 0; index < size; index += 1) {
+      if (left[left.length - size + index] !== right[index]) {
+        matches = false;
+        break;
+      }
+    }
+
+    if (matches) {
+      return size;
+    }
+  }
+
+  return 0;
+}
+
 function longestCommonSubsequenceLength(left: string[], right: string[]) {
   if (left.length === 0 || right.length === 0) {
     return 0;
@@ -795,12 +859,112 @@ function preferredCrossSourceTranscriptEntry(left: TranscriptEntry, right: Trans
   return left;
 }
 
+const TRANSCRIPT_SHARED_EDGE_MIN_TOKENS = 5;
+const TRANSCRIPT_SHARED_EDGE_MIN_CHARACTERS = 20;
+const TRANSCRIPT_SHARED_EDGE_MIN_REMAINDER_TOKENS = 4;
+const TRANSCRIPT_SHARED_EDGE_MIN_REMAINDER_CHARACTERS = 14;
+
+function isMeaningfulSharedTranscriptEdge(tokens: string[]) {
+  return (
+    tokens.length >= TRANSCRIPT_SHARED_EDGE_MIN_TOKENS &&
+    tokenCharacterLength(tokens) >= TRANSCRIPT_SHARED_EDGE_MIN_CHARACTERS
+  );
+}
+
+function hasMeaningfulTranscriptRemainder(tokens: string[]) {
+  return (
+    tokens.length >= TRANSCRIPT_SHARED_EDGE_MIN_REMAINDER_TOKENS ||
+    tokenCharacterLength(tokens) >= TRANSCRIPT_SHARED_EDGE_MIN_REMAINDER_CHARACTERS
+  );
+}
+
+function trimTranscriptEntryTokens(
+  entry: TranscriptEntry,
+  startTrim: number,
+  endTrim: number,
+) {
+  if (startTrim <= 0 && endTrim <= 0) {
+    return entry;
+  }
+
+  const words = transcriptWords(entry.text);
+  const start = Math.min(Math.max(0, startTrim), words.length);
+  const end = Math.max(start, words.length - Math.max(0, endTrim));
+  const trimmedWords = words.slice(start, end);
+
+  if (trimmedWords.length === words.length) {
+    return entry;
+  }
+
+  return createTranscriptEntry(trimmedWords.join(" "), entry.source);
+}
+
+function trimSharedSystemTranscriptEdges(left: TranscriptEntry, right: TranscriptEntry) {
+  if (left.source !== "system" && right.source !== "system") {
+    return { left, right };
+  }
+
+  const trimMicrophoneEdges = (microphone: TranscriptEntry, system: TranscriptEntry) => {
+    const microphoneTokens = transcriptWordPairs(microphone.text).map((pair) => pair.token);
+    const systemTokens = transcriptWordPairs(system.text).map((pair) => pair.token);
+
+    if (
+      microphoneTokens.length === 0 ||
+      systemTokens.length === 0 ||
+      !hasMeaningfulTranscriptRemainder(microphoneTokens)
+    ) {
+      return microphone;
+    }
+
+    const prefixTrim = Math.max(
+      commonPrefixLength(microphoneTokens, systemTokens),
+      suffixPrefixOverlapLength(systemTokens, microphoneTokens),
+    );
+    const shouldTrimPrefix =
+      isMeaningfulSharedTranscriptEdge(microphoneTokens.slice(0, prefixTrim)) &&
+      hasMeaningfulTranscriptRemainder(microphoneTokens.slice(prefixTrim));
+
+    const suffixTrim = Math.max(
+      suffixPrefixOverlapLength(microphoneTokens, systemTokens),
+      commonSuffixLength(microphoneTokens, systemTokens),
+    );
+    const suffixStart = Math.max(0, microphoneTokens.length - suffixTrim);
+    const shouldTrimSuffix =
+      isMeaningfulSharedTranscriptEdge(microphoneTokens.slice(suffixStart)) &&
+      hasMeaningfulTranscriptRemainder(microphoneTokens.slice(0, suffixStart));
+
+    return (
+      trimTranscriptEntryTokens(
+        microphone,
+        shouldTrimPrefix ? prefixTrim : 0,
+        shouldTrimSuffix ? suffixTrim : 0,
+      ) ?? null
+    );
+  };
+
+  if (left.source === "microphone" && right.source === "system") {
+    return {
+      left: trimMicrophoneEdges(left, right),
+      right,
+    };
+  }
+
+  if (left.source === "system" && right.source === "microphone") {
+    return {
+      left,
+      right: trimMicrophoneEdges(right, left),
+    };
+  }
+
+  return { left, right };
+}
+
 function compactTranscriptEntries(entries: TranscriptEntry[]) {
   const compacted: TranscriptEntry[] = [];
 
   for (const entry of entries) {
     const text = collapseRepeatedTranscriptSpans(entry.text);
-    const candidate = createTranscriptEntry(text, entry.source);
+    let candidate = createTranscriptEntry(text, entry.source);
     if (!candidate) {
       continue;
     }
@@ -820,13 +984,46 @@ function compactTranscriptEntries(entries: TranscriptEntry[]) {
         continue;
       }
 
-      if (!transcriptEntriesCloselyMatchAcrossSources(existing, candidate)) {
+      const trimmed = trimSharedSystemTranscriptEdges(existing, candidate);
+      if (trimmed.left !== existing) {
+        if (trimmed.left) {
+          compacted[index] = trimmed.left;
+        } else {
+          compacted.splice(index, 1);
+        }
+      }
+      if (!trimmed.right) {
+        merged = true;
+        candidate = null;
+        break;
+      }
+
+      candidate = trimmed.right;
+      const nextExisting = trimmed.left ?? null;
+      if (!nextExisting) {
         continue;
       }
 
-      compacted[index] = preferredCrossSourceTranscriptEntry(existing, candidate);
+      if (!transcriptEntriesCloselyMatchAcrossSources(nextExisting, candidate)) {
+        continue;
+      }
+
+      compacted[index] = preferredCrossSourceTranscriptEntry(nextExisting, candidate);
       merged = true;
+      candidate = null;
       break;
+    }
+
+    if (!candidate) {
+      continue;
+    }
+
+    const nextLastEntry = compacted[compacted.length - 1];
+    if (nextLastEntry && nextLastEntry.source === candidate.source) {
+      if (transcriptEntriesSubstantiallyOverlap(nextLastEntry, candidate)) {
+        compacted[compacted.length - 1] = preferredTranscriptEntry(nextLastEntry, candidate);
+        continue;
+      }
     }
 
     if (!merged) {
@@ -835,6 +1032,10 @@ function compactTranscriptEntries(entries: TranscriptEntry[]) {
   }
 
   return compacted;
+}
+
+function mergeTranscriptEntries(...groups: TranscriptEntry[][]) {
+  return compactTranscriptEntries(groups.flat());
 }
 
 function normalizeTranscriptEntries(value: unknown): TranscriptEntry[] {
@@ -1104,11 +1305,7 @@ export function getMeetingTranscriptEntries(meeting: Meeting) {
   const liveEntries =
     state.recordingMeetingId === meeting.id ? state.liveTranscriptEntries : [];
 
-  if (liveEntries.length > 0) {
-    entries.push(...liveEntries);
-  }
-
-  return entries;
+  return liveEntries.length > 0 ? mergeTranscriptEntries(entries, liveEntries) : entries;
 }
 
 export function getMeetingTranscriptLines(meeting: Meeting) {
@@ -1814,7 +2011,7 @@ function finalizeLiveTranscript(markDone = false) {
       if (mode === "batch") {
         transcript = entries;
       } else if (!sameTranscriptEntries(current.transcript.slice(-entries.length), entries)) {
-        transcript = [...current.transcript, ...entries];
+        transcript = mergeTranscriptEntries(current.transcript, entries);
       }
     }
 
