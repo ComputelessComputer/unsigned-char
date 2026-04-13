@@ -77,7 +77,21 @@ textarea {
   appearance: none;
 }
 
-button {
+button,
+a[href],
+summary,
+label[for],
+[role="button"]:not([aria-disabled="true"]),
+[role="switch"]:not([aria-disabled="true"]),
+input[type="button"]:not(:disabled),
+input[type="checkbox"]:not(:disabled),
+input[type="color"]:not(:disabled),
+input[type="file"]:not(:disabled),
+input[type="image"]:not(:disabled),
+input[type="radio"]:not(:disabled),
+input[type="range"]:not(:disabled),
+input[type="reset"]:not(:disabled),
+input[type="submit"]:not(:disabled) {
   cursor: pointer;
 }
 
