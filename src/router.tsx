@@ -70,6 +70,7 @@ import {
   formatClockSeconds,
   formatDateTime,
   getMeetingTranscriptEntries,
+  getMeetingSpeakerLabel,
   getTimezoneOptions,
   isSettingsWindow,
   requiresAppSetup,
@@ -237,25 +238,6 @@ function DiarizationActivityBanner({
   );
 }
 
-function formatTranscriptSpeakerLabel(speaker: string) {
-  const normalized = speaker.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
-
-  if (!normalized) {
-    return "Speaker";
-  }
-
-  const speakerNumberMatch = normalized.match(/^speaker\s*0*([0-9]+)$/i);
-  if (speakerNumberMatch) {
-    return `Speaker ${Number.parseInt(speakerNumberMatch[1], 10) + 1}`;
-  }
-
-  if (/^mic(rophone)?$/i.test(normalized)) {
-    return "Mic";
-  }
-
-  return normalized;
-}
-
 function formatTranscriptSourceLabel(source: TranscriptEntry["source"]) {
   if (source === "microphone") {
     return "Mic";
@@ -273,12 +255,14 @@ function getTranscriptEntryMeta(meeting: Meeting, entry: TranscriptEntry, index:
 
   if (segment) {
     return {
-      speakerLabel: formatTranscriptSpeakerLabel(segment.speaker),
+      speakerId: segment.speaker,
+      speakerLabel: getMeetingSpeakerLabel(meeting, segment.speaker),
       timestampLabel: formatClockSeconds(segment.startSeconds),
     };
   }
 
   return {
+    speakerId: null,
     speakerLabel: formatTranscriptSourceLabel(entry.source),
     timestampLabel: index === 0 ? formatClockSeconds(0) : null,
   };
@@ -1199,6 +1183,66 @@ function MeetingTitleField({
   );
 }
 
+function SpeakerLabelField({
+  meetingId,
+  speakerId,
+  speakerLabel,
+}: {
+  meetingId: string;
+  speakerId: string;
+  speakerLabel: string;
+}) {
+  const [draft, setDraft] = useState(speakerLabel);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const save = () => {
+    appStore.updateMeetingSpeakerLabel(meetingId, speakerId, draft);
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        value={draft}
+        autoFocus
+        spellCheck={false}
+        aria-label="Speaker label"
+        className="h-7 min-w-[7.5rem] rounded-[var(--radius-control-sm)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-2 text-[11px] font-semibold normal-case tracking-[0.04em] text-zinc-800 outline-none focus:ring-2 focus:ring-[color:var(--ring)]"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={save}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+            return;
+          }
+
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setDraft(speakerLabel);
+            setIsEditing(false);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="rounded-[var(--radius-control-sm)] px-1.5 py-1 -ml-1.5 text-zinc-700 normal-case tracking-[0.08em] transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+      aria-label={`Rename speaker ${speakerLabel}`}
+      title="Rename this speaker across the transcript"
+      onClick={() => {
+        setDraft(speakerLabel);
+        setIsEditing(true);
+      }}
+    >
+      {speakerLabel}
+    </button>
+  );
+}
+
 function MeetingScreen() {
   const snapshot = useAppState();
   const navigate = useNavigate();
@@ -1554,7 +1598,7 @@ function MeetingScreen() {
               ) : (
                 <section className="space-y-5 pb-2">
                   {transcriptEntries.map((entry, index) => {
-                    const { speakerLabel, timestampLabel } = getTranscriptEntryMeta(
+                    const { speakerId, speakerLabel, timestampLabel } = getTranscriptEntryMeta(
                       meeting,
                       entry,
                       index,
@@ -1566,7 +1610,17 @@ function MeetingScreen() {
                         className="space-y-2 border-b border-[color:var(--border)] pb-5 last:border-b-0 last:pb-0"
                       >
                         <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                          <span className="text-zinc-700">{speakerLabel}</span>
+                          {speakerId ? (
+                            <SpeakerLabelField
+                              meetingId={meeting.id}
+                              speakerId={speakerId}
+                              speakerLabel={speakerLabel}
+                            />
+                          ) : (
+                            <span className="text-zinc-700 normal-case tracking-[0.08em]">
+                              {speakerLabel}
+                            </span>
+                          )}
                           {timestampLabel ? <span>[{timestampLabel}]</span> : null}
                         </div>
                         <p className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-800">

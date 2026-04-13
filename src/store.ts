@@ -39,6 +39,7 @@ export type Meeting = {
   audioPath: string;
   requestedSpeakerCount: number | null;
   diarizationSegments: DiarizationSegment[];
+  speakerLabels: Record<string, string>;
   diarizationSpeakerCount: number;
   diarizationPipelineSource: string | null;
   diarizationRanAt: string | null;
@@ -558,6 +559,7 @@ function normalizeMeeting(value: unknown): Meeting | null {
     audioPath: typeof candidate.audioPath === "string" ? candidate.audioPath : "",
     requestedSpeakerCount: normalizeRequestedSpeakerCount(candidate.requestedSpeakerCount),
     diarizationSegments,
+    speakerLabels: normalizeSpeakerLabels(candidate.speakerLabels),
     diarizationSpeakerCount:
       typeof candidate.diarizationSpeakerCount === "number" &&
       Number.isFinite(candidate.diarizationSpeakerCount)
@@ -893,6 +895,61 @@ function normalizeDiarizationSegments(value: unknown): DiarizationSegment[] {
   });
 }
 
+function normalizeSpeakerId(value: string) {
+  return value.trim();
+}
+
+function normalizeSpeakerLabel(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function defaultSpeakerLabelForId(speaker: string) {
+  const normalizedSpeaker = normalizeSpeakerId(speaker);
+
+  if (!normalizedSpeaker) {
+    return "Speaker";
+  }
+
+  const generatedSpeakerMatch = normalizedSpeaker.match(/^speaker[_-]?0*([0-9]+)$/i);
+  if (generatedSpeakerMatch) {
+    return `Speaker ${Number.parseInt(generatedSpeakerMatch[1], 10) + 1}`;
+  }
+
+  if (/^mic(rophone)?$/i.test(normalizedSpeaker)) {
+    return "Mic";
+  }
+
+  return normalizedSpeaker;
+}
+
+function normalizeSpeakerLabels(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, string>>(
+    (speakerLabels, [speaker, label]) => {
+      if (typeof label !== "string") {
+        return speakerLabels;
+      }
+
+      const normalizedSpeaker = normalizeSpeakerId(speaker);
+      const normalizedLabel = normalizeSpeakerLabel(label);
+      if (!normalizedSpeaker || !normalizedLabel) {
+        return speakerLabels;
+      }
+
+      if (normalizedLabel === defaultSpeakerLabelForId(normalizedSpeaker)) {
+        return speakerLabels;
+      }
+
+      speakerLabels[normalizedSpeaker] = normalizedLabel;
+      return speakerLabels;
+    },
+    {},
+  );
+}
+
 function normalizeRequestedSpeakerCount(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return null;
@@ -965,6 +1022,16 @@ export function formatClockSeconds(seconds: number) {
   return `${minutes.toString().padStart(2, "0")}:${remainder.toString().padStart(2, "0")}`;
 }
 
+export function getMeetingSpeakerLabel(meeting: Meeting, speaker: string) {
+  const normalizedSpeaker = normalizeSpeakerId(speaker);
+
+  if (!normalizedSpeaker) {
+    return "Speaker";
+  }
+
+  return meeting.speakerLabels[normalizedSpeaker] ?? defaultSpeakerLabelForId(normalizedSpeaker);
+}
+
 function formatSpeakerTurnsMarkdown(meeting: Meeting) {
   if (meeting.diarizationSegments.length === 0) {
     return "";
@@ -972,7 +1039,7 @@ function formatSpeakerTurnsMarkdown(meeting: Meeting) {
 
   const lines = meeting.diarizationSegments.map((segment) => {
     const range = `${formatClockSeconds(segment.startSeconds)}-${formatClockSeconds(segment.endSeconds)}`;
-    return `- ${segment.speaker}: ${range}`;
+    return `- ${getMeetingSpeakerLabel(meeting, segment.speaker)}: ${range}`;
   });
 
   if (meeting.diarizationPipelineSource) {
@@ -1210,6 +1277,7 @@ function createMeeting(meetingId = crypto.randomUUID(), audioPath = "") {
     audioPath: audioPath.trim(),
     requestedSpeakerCount: null,
     diarizationSegments: [],
+    speakerLabels: {},
     diarizationSpeakerCount: 0,
     diarizationPipelineSource: null,
     diarizationRanAt: null,
@@ -2531,6 +2599,44 @@ function updateMeetingRequestedSpeakerCount(meetingId: string, value: string) {
   }));
 }
 
+function updateMeetingSpeakerLabel(meetingId: string, speaker: string, nextLabel: string) {
+  const normalizedSpeaker = normalizeSpeakerId(speaker);
+  const currentMeeting = getMeeting(meetingId);
+  if (
+    !currentMeeting ||
+    !normalizedSpeaker ||
+    !currentMeeting.diarizationSegments.some((segment) => segment.speaker === normalizedSpeaker)
+  ) {
+    return;
+  }
+
+  const normalizedLabel = normalizeSpeakerLabel(nextLabel);
+  const defaultLabel = defaultSpeakerLabelForId(normalizedSpeaker);
+  const currentOverride = currentMeeting.speakerLabels[normalizedSpeaker] ?? null;
+  const nextOverride =
+    normalizedLabel.length === 0 || normalizedLabel === defaultLabel ? null : normalizedLabel;
+
+  if (currentOverride === nextOverride) {
+    return;
+  }
+
+  updateMeeting(meetingId, (meeting) => {
+    const speakerLabels = { ...meeting.speakerLabels };
+
+    if (nextOverride) {
+      speakerLabels[normalizedSpeaker] = nextOverride;
+    } else {
+      delete speakerLabels[normalizedSpeaker];
+    }
+
+    return {
+      ...meeting,
+      speakerLabels,
+      updatedAt: new Date().toISOString(),
+    };
+  });
+}
+
 function setHomeScrollTop(homeScrollTop: number) {
   patch({ homeScrollTop });
 }
@@ -2788,6 +2894,7 @@ export const appStore = {
   updateMeetingTitle,
   updateMeetingAudioPath,
   updateMeetingRequestedSpeakerCount,
+  updateMeetingSpeakerLabel,
   setHomeScrollTop,
   setSelectedModel,
   setMainLanguage,
