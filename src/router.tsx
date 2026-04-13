@@ -579,11 +579,7 @@ function SelectOptionContent({ option }: { option: SearchableOption }) {
       {option.badges?.length ? (
         <span className="inline-flex shrink-0 items-center gap-1">
           {option.badges.map((badge) => (
-            <Badge
-              key={`${option.value}-${badge.label}`}
-              variant={badge.variant}
-              className="px-2 py-0.5 text-[10px]"
-            >
+            <Badge key={`${option.value}-${badge.label}`} variant={badge.variant}>
               {badge.label}
             </Badge>
           ))}
