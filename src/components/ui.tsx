@@ -3,7 +3,6 @@ import { useRender } from "@base-ui/react/use-render";
 import { cva } from "class-variance-authority";
 import {
   type HTMLAttributes,
-  type InputHTMLAttributes,
   type ReactElement,
   type ReactNode,
 } from "react";
@@ -11,6 +10,17 @@ import { cn } from "@/lib/utils";
 
 export { Button, type ButtonProps } from "./ui/button";
 export { cn };
+export {
+  Field,
+  FieldControl,
+  FieldDescription,
+  FieldError,
+  FieldItem,
+  FieldLabel,
+  FieldPrimitive,
+  FieldValidity,
+} from "./ui/field";
+export { Input, InputPrimitive, type InputProps } from "./ui/input";
 export {
   Select,
   SelectContent,
@@ -148,33 +158,6 @@ export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElemen
       {...props}
       className={cn(
         "flex flex-wrap items-center gap-3 border-t border-[color:var(--border)] px-5 py-4",
-        className,
-      )}
-    />
-  );
-}
-
-type InputSize = "default" | "sm" | "lg";
-
-const inputSizes = {
-  default: "h-10 px-3 text-sm",
-  sm: "h-9 px-3 text-sm",
-  lg: "h-11 px-4 text-sm",
-} satisfies Record<InputSize, string>;
-
-export function Input({
-  className,
-  uiSize = "default",
-  ...props
-}: InputHTMLAttributes<HTMLInputElement> & {
-  uiSize?: InputSize;
-}) {
-  return (
-    <input
-      {...props}
-      className={cn(
-        "w-full rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--input)] text-[color:var(--foreground)] shadow-[0_1px_0_rgba(255,255,255,0.85)] outline-none transition placeholder:text-[color:var(--muted-foreground)] focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]",
-        inputSizes[uiSize],
         className,
       )}
     />

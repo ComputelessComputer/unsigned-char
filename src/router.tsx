@@ -49,6 +49,8 @@ import {
   CardHeader,
   CardPanel,
   CardTitle,
+  Field,
+  FieldLabel,
   Input,
   Kbd,
   Select,
@@ -1812,22 +1814,22 @@ function SettingsScreen() {
                 </div>
               </CardHeader>
             <CardPanel className="grid gap-6 pt-0">
-              <div className="grid gap-3">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-zinc-950">Provider</p>
-                  {snapshot.summaryDraft.provider ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={snapshot.summaryBusy}
-                      onClick={() => {
-                        appStore.setSummaryProvider("");
-                      }}
-                    >
-                      Clear
-                    </Button>
-                  ) : null}
-                </div>
+                <Field className="gap-3">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <FieldLabel>Provider</FieldLabel>
+                    {snapshot.summaryDraft.provider ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={snapshot.summaryBusy}
+                        onClick={() => {
+                          appStore.setSummaryProvider("");
+                        }}
+                      >
+                        Clear
+                      </Button>
+                    ) : null}
+                  </div>
                   <SettingsSelect
                     ariaLabel="Summary provider"
                     value={snapshot.summaryDraft.provider}
@@ -1836,10 +1838,10 @@ function SettingsScreen() {
                     placeholder="Select provider"
                     disabled={snapshot.summaryBusy}
                   />
-                </div>
+                </Field>
 
-                <div className="grid gap-3">
-                  <p className="text-sm font-semibold text-zinc-950">Model</p>
+                <Field className="gap-3">
+                  <FieldLabel>Model</FieldLabel>
                   <Input
                     value={snapshot.summaryDraft.model}
                     onChange={(event) => {
@@ -1848,12 +1850,11 @@ function SettingsScreen() {
                     placeholder={selectedSummaryProvider?.modelPlaceholder ?? "Model id"}
                     disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <p className="text-sm font-semibold text-zinc-950">Base URL</p>
+                <Field>
+                  <FieldLabel>Base URL</FieldLabel>
                   <Input
-                    className="mt-3"
                     value={snapshot.summaryDraft.baseUrl}
                     onChange={(event) => {
                       appStore.setSummaryBaseUrl(event.target.value);
@@ -1861,11 +1862,11 @@ function SettingsScreen() {
                     placeholder={selectedSummaryProvider?.defaultBaseUrl || "https://example.com/v1"}
                     disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
                   />
-                </div>
+                </Field>
 
-                <div>
-                  <p className="text-sm font-semibold text-zinc-950">API key</p>
-                  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                <Field>
+                  <FieldLabel>API key</FieldLabel>
+                  <div className="flex w-full flex-col gap-3 sm:flex-row">
                     <Input
                       className="flex-1"
                       type="text"
@@ -1891,7 +1892,7 @@ function SettingsScreen() {
                       </Button>
                     ) : null}
                   </div>
-                </div>
+                </Field>
 
               </CardPanel>
               <CardFooter>
