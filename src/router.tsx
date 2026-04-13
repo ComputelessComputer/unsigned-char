@@ -1097,11 +1097,6 @@ function HomeScreen() {
               <div className="space-y-3">
                 {meetings.map((meeting) => {
                   const isCurrentMeeting = snapshot.recordingMeetingId === meeting.id;
-                  const inProgressLabel = snapshot.transcriptionStopping
-                    ? "Finishing"
-                    : snapshot.startMeetingBusy && !snapshot.transcriptionRunning
-                      ? "Starting"
-                      : "In progress";
                   const postProcessingLabel = getMeetingPostProcessingLabel(meeting, snapshot);
                   const deleteDisabled = isMeetingDeleteDisabled(
                     meeting,
@@ -1144,18 +1139,9 @@ function HomeScreen() {
                         <CardPanel className="p-4">
                           <div className="flex min-w-0 items-center justify-between gap-4">
                             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                              <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-zinc-600">
-                                <p className="min-w-0 truncate">{formatDateTime(meeting.createdAt)}</p>
-                                {isCurrentMeeting ? (
-                                  <Badge
-                                    variant="outline"
-                                    className="gap-1.5 rounded-full border-rose-200 bg-rose-50 px-2.5 text-[11px] font-semibold text-rose-700"
-                                  >
-                                    <LiveIndicator className="size-2.5" />
-                                    <span>{inProgressLabel}</span>
-                                  </Badge>
-                                ) : null}
-                              </div>
+                              <p className="min-w-0 truncate text-sm text-zinc-600">
+                                {formatDateTime(meeting.createdAt)}
+                              </p>
                               <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
                                 {meeting.title}
                               </h2>
