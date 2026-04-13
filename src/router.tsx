@@ -39,6 +39,9 @@ import {
   CardTitle,
   Input,
   ScrollFade,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
   cn,
 } from "./components/ui";
 import { useScrollFade } from "./hooks/useScrollFade";
@@ -984,6 +987,17 @@ function MeetingScreen() {
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
   const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
+  const summaryTooltipTitle = isGeneratingSummary
+    ? "Generating summary"
+    : !summaryReady
+      ? "AI summary setup required"
+      : isMeetingListening
+        ? "Stop listening first"
+        : transcriptEntries.length === 0
+          ? "Transcript required"
+          : meeting.summary
+            ? "Refresh summary"
+            : "Generate summary";
   const summaryActionHint = isGeneratingSummary
     ? "Generating summary..."
     : snapshot.summaryMeetingId !== null
@@ -1118,20 +1132,48 @@ function MeetingScreen() {
           </Button>
         </div>
 
-        <div className="inline-flex shrink-0" title={summaryActionHint} tabIndex={summaryActionDisabled ? 0 : undefined}>
-          <Button
-            size="lg"
-            variant="outline"
-            className="min-w-[176px]"
-            disabled={summaryActionDisabled}
-            loading={isGeneratingSummary}
-            onClick={() => {
-              void appStore.generateMeetingSummary(meeting.id);
-            }}
-          >
-            Generate summary
-          </Button>
-        </div>
+        <Tooltip>
+          {summaryActionDisabled ? (
+            <TooltipTrigger
+              render={<span className="inline-flex shrink-0" />}
+              tabIndex={0}
+              aria-label={summaryTooltipTitle}
+            >
+              <Button
+                size="lg"
+                variant="outline"
+                className="min-w-[176px]"
+                disabled
+                loading={isGeneratingSummary}
+              >
+                Generate summary
+              </Button>
+            </TooltipTrigger>
+          ) : (
+            <TooltipTrigger
+              render={
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="min-w-[176px]"
+                  onClick={() => {
+                    void appStore.generateMeetingSummary(meeting.id);
+                  }}
+                />
+              }
+            >
+              Generate summary
+            </TooltipTrigger>
+          )}
+          <TooltipPopup side="bottom" align="start">
+            <div className="space-y-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                {summaryTooltipTitle}
+              </p>
+              <p>{summaryActionHint}</p>
+            </div>
+          </TooltipPopup>
+        </Tooltip>
       </div>
 
       <div className="-mx-4 min-h-0 flex-1 px-4 pb-4 pr-5">

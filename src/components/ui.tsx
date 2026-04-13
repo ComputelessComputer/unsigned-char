@@ -7,6 +7,14 @@ import { cn } from "@/lib/utils";
 
 export { Button, type ButtonProps } from "./ui/button";
 export { cn };
+export {
+  Tooltip,
+  TooltipContent,
+  TooltipCreateHandle,
+  TooltipPopup,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 
 type BadgeVariant =
   | "default"
