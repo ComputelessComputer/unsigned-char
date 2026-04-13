@@ -9,7 +9,7 @@ import {
   useParams,
 } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, ChevronLeft, Ellipsis, Users } from "lucide-react";
+import { Bird, Bot, ChevronDown, ChevronLeft, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
 import {
   type KeyboardEvent,
   type MouseEvent,
@@ -20,7 +20,13 @@ import {
   useState,
 } from "react";
 
+import anthropicLogo from "./assets/provider-icons/anthropic.png";
 import brandWordmark from "./assets/brand-wordmark.svg";
+import googleLogo from "./assets/provider-icons/google.png";
+import lmStudioLogo from "./assets/provider-icons/lmstudio.png";
+import ollamaLogo from "./assets/provider-icons/ollama.png";
+import openAILogo from "./assets/provider-icons/openai.png";
+import openRouterLogo from "./assets/provider-icons/openrouter.png";
 import {
   NumberField,
   NumberFieldDecrement,
@@ -72,6 +78,7 @@ import {
 import {
   SUMMARY_PROVIDERS,
   getSummaryProviderDefinition,
+  type SummaryProviderId,
 } from "./lib/summary-providers";
 
 function IconChevronDown() {
@@ -482,6 +489,8 @@ type SearchableOption = {
   value: string;
   label: string;
   detail?: string;
+  icon?: "parakeet" | "omnilingual" | "qwen" | "cloud" | "local" | "custom" | "disabled";
+  logoSrc?: string;
   badges?: readonly {
     label: string;
     variant: "default" | "secondary" | "outline" | "success" | "warning" | "destructive" | "info";
@@ -489,12 +498,76 @@ type SearchableOption = {
   searchTerms?: readonly string[];
 };
 
+function SearchableOptionPrefix({
+  icon,
+  logoSrc,
+}: {
+  icon?: SearchableOption["icon"];
+  logoSrc?: string;
+}) {
+  if (logoSrc) {
+    return (
+      <span className="inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/5 bg-white p-1">
+        <img src={logoSrc} alt="" aria-hidden="true" className="size-4 object-contain" />
+      </span>
+    );
+  }
+
+  if (!icon) {
+    return null;
+  }
+
+  const iconClassName = "size-4";
+
+  const content = {
+    cloud: <Cloud className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+    custom: <PlugZap className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+    disabled: <PlugZap className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+    local: <Cpu className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+    omnilingual: <Globe2 className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+    parakeet: <Bird className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+    qwen: <Bot className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
+  } satisfies Record<NonNullable<SearchableOption["icon"]>, ReactNode>;
+
+  const toneClassName = {
+    cloud: "bg-sky-50 text-sky-700",
+    custom: "bg-zinc-100 text-zinc-700",
+    disabled: "bg-zinc-100 text-zinc-500",
+    local: "bg-emerald-50 text-emerald-700",
+    omnilingual: "bg-amber-50 text-amber-700",
+    parakeet: "bg-cyan-50 text-cyan-700",
+    qwen: "bg-violet-50 text-violet-700",
+  } satisfies Record<NonNullable<SearchableOption["icon"]>, string>;
+
+  return (
+    <span
+      className={cn(
+        "inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-black/5",
+        toneClassName[icon],
+      )}
+    >
+      {content[icon]}
+    </span>
+  );
+}
+
+const summaryProviderLogos: Partial<Record<SummaryProviderId, string>> = {
+  anthropic: anthropicLogo,
+  google_generative_ai: googleLogo,
+  lmstudio: lmStudioLogo,
+  ollama: ollamaLogo,
+  openai: openAILogo,
+  openrouter: openRouterLogo,
+};
+
 const summaryProviderOptions: readonly SearchableOption[] = [
-  { value: "", label: "Disabled", detail: "Off" },
-  ...SUMMARY_PROVIDERS.map((provider) => ({
+  { value: "", label: "Disabled", detail: "Off", icon: "disabled" },
+  ...SUMMARY_PROVIDERS.map((provider): SearchableOption => ({
     value: provider.id,
     label: provider.label,
     detail: provider.detail,
+    icon: provider.id === "custom" ? "custom" : undefined,
+    logoSrc: summaryProviderLogos[provider.id],
   })),
 ];
 
@@ -636,6 +709,7 @@ function SearchableSelect({
         }}
       >
         <span className="flex min-w-0 items-center gap-3">
+          <SearchableOptionPrefix icon={selectedOption?.icon} logoSrc={selectedOption?.logoSrc} />
           <span className={cn("truncate", !selectedOption && "text-zinc-500")}>
             {selectedOption ? selectedOption.label : placeholder}
           </span>
@@ -697,6 +771,7 @@ function SearchableSelect({
                   }}
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-3">
+                    <SearchableOptionPrefix icon={option.icon} logoSrc={option.logoSrc} />
                     <span className="min-w-0 flex-1 truncate">{option.label}</span>
                     {option.badges?.length ? (
                       <span className="shrink-0 items-center gap-1 inline-flex">
@@ -1586,10 +1661,16 @@ function SettingsScreen() {
   );
   const batchModelOptions = modelSettings.availableModels
     .filter((option) => option.processingMode === "batch")
-    .map((option) => ({
+    .map((option): SearchableOption => ({
       value: option.id,
       label: batchModelPickerLabel(option.id, option.label),
       detail: option.sizeLabel,
+      icon:
+        option.id === "parakeetBatch"
+          ? "parakeet"
+          : option.id === "omnilingual"
+            ? "omnilingual"
+            : "qwen",
       badges: batchModelPickerBadges(option.id),
       searchTerms:
         option.id === "parakeetBatch"
