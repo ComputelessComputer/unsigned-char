@@ -18,6 +18,12 @@
   --accent: #eef2f7;
   --accent-foreground: #18181b;
   --destructive: #e11d48;
+  --info: #0ea5e9;
+  --info-foreground: #0369a1;
+  --success: #10b981;
+  --success-foreground: #047857;
+  --warning: #f59e0b;
+  --warning-foreground: #b45309;
   --border: rgba(24, 24, 27, 0.08);
   --border-strong: rgba(24, 24, 27, 0.14);
   --input: rgba(255, 255, 255, 0.94);
@@ -124,6 +130,12 @@ code {
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

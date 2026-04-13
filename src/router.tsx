@@ -12,6 +12,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ChevronLeft, CircleAlert, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
 import {
+  type CSSProperties,
   type MouseEvent,
   type ReactNode,
   useCallback,
@@ -120,6 +121,9 @@ const AI_SUMMARIES_SETTINGS_SECTION = "ai-summaries";
 const AI_SUMMARIES_SETTINGS_SECTION_ID = "settings-ai-summaries";
 const TRANSCRIPTION_MODEL_SETTINGS_SECTION = "transcription-model";
 const TRANSCRIPTION_MODEL_SETTINGS_SECTION_ID = "settings-transcription-model";
+const MASKED_TEXT_INPUT_STYLE = {
+  WebkitTextSecurity: "disc",
+} as CSSProperties;
 
 const SETTINGS_SECTION_IDS = {
   [AI_SUMMARIES_SETTINGS_SECTION]: AI_SUMMARIES_SETTINGS_SECTION_ID,
@@ -633,7 +637,7 @@ function SelectOptionContent({ option }: { option: SearchableOption }) {
       {option.badges?.length ? (
         <span className="inline-flex shrink-0 items-center gap-1">
           {option.badges.map((badge) => (
-            <Badge key={`${option.value}-${badge.label}`} variant={badge.variant}>
+            <Badge key={`${option.value}-${badge.label}`} variant={badge.variant} size="sm">
               {badge.label}
             </Badge>
           ))}
@@ -1874,7 +1878,7 @@ function SettingsScreen() {
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row">
                     <Input
                       className="flex-1"
-                      type="password"
+                      type="text"
                       autoComplete="off"
                       spellCheck={false}
                       value={snapshot.summaryDraft.apiKey}
@@ -1882,6 +1886,7 @@ function SettingsScreen() {
                         appStore.setSummaryApiKey(event.target.value);
                       }}
                       placeholder={apiKeyPlaceholder}
+                      style={snapshot.summaryDraft.apiKey ? MASKED_TEXT_INPUT_STYLE : undefined}
                       disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
                     />
                     {snapshot.summaryDraft.apiKeyPresent ? (
