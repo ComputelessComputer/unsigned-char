@@ -583,29 +583,199 @@ function createTranscriptEntry(text: string, source: TranscriptSource): Transcri
   };
 }
 
+function normalizeTranscriptComparisonText(text: string) {
+  return text
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function collapseRepeatedTranscriptSpans(text: string) {
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    return "";
+  }
+
+  const words = normalizedText.split(/\s+/);
+  const comparableWords = words.map((word) => normalizeTranscriptComparisonText(word));
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (let size = Math.min(12, Math.floor(words.length / 2)); size >= 1; size -= 1) {
+      for (let start = 0; start + size * 2 <= words.length; start += 1) {
+        let matches = true;
+        for (let offset = 0; offset < size; offset += 1) {
+          if (comparableWords[start + offset] !== comparableWords[start + size + offset]) {
+            matches = false;
+            break;
+          }
+        }
+
+        if (!matches) {
+          continue;
+        }
+
+        const repeatedSpanLength = comparableWords
+          .slice(start, start + size)
+          .join(" ")
+          .replace(/\s+/g, "").length;
+        if (size === 1 && repeatedSpanLength < 3) {
+          continue;
+        }
+
+        words.splice(start + size, size);
+        comparableWords.splice(start + size, size);
+        changed = true;
+        break;
+      }
+
+      if (changed) {
+        break;
+      }
+    }
+  }
+
+  return words.join(" ").trim();
+}
+
+function transcriptComparisonTokens(text: string) {
+  const normalized = normalizeTranscriptComparisonText(collapseRepeatedTranscriptSpans(text));
+  return normalized ? normalized.split(" ") : [];
+}
+
+function longestCommonSubsequenceLength(left: string[], right: string[]) {
+  if (left.length === 0 || right.length === 0) {
+    return 0;
+  }
+
+  const previous = new Array<number>(right.length + 1).fill(0);
+  const current = new Array<number>(right.length + 1).fill(0);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      current[rightIndex] =
+        left[leftIndex - 1] === right[rightIndex - 1]
+          ? previous[rightIndex - 1] + 1
+          : Math.max(previous[rightIndex], current[rightIndex - 1]);
+    }
+
+    previous.splice(0, previous.length, ...current);
+    current.fill(0);
+  }
+
+  return previous[right.length];
+}
+
+function transcriptEntriesSubstantiallyOverlap(left: TranscriptEntry, right: TranscriptEntry) {
+  const leftTokens = transcriptComparisonTokens(left.text);
+  const rightTokens = transcriptComparisonTokens(right.text);
+  const shorterLength = Math.min(leftTokens.length, rightTokens.length);
+
+  if (shorterLength < 6) {
+    return false;
+  }
+
+  const lcsLength = longestCommonSubsequenceLength(leftTokens, rightTokens);
+  return lcsLength / shorterLength >= 0.72;
+}
+
+function transcriptSourcePriority(source: TranscriptSource) {
+  if (source === "system") {
+    return 2;
+  }
+
+  if (source === "mixed") {
+    return 1;
+  }
+
+  return 0;
+}
+
+function preferredTranscriptEntry(left: TranscriptEntry, right: TranscriptEntry) {
+  const leftPriority = transcriptSourcePriority(left.source);
+  const rightPriority = transcriptSourcePriority(right.source);
+
+  if (leftPriority !== rightPriority) {
+    const preferred = leftPriority > rightPriority ? left : right;
+    const fallback = preferred === left ? right : left;
+    const preferredLength = transcriptComparisonTokens(preferred.text).length;
+    const fallbackLength = transcriptComparisonTokens(fallback.text).length;
+    return preferredLength * 0.7 >= fallbackLength ? preferred : fallback;
+  }
+
+  return right.text.length > left.text.length ? right : left;
+}
+
+function compactTranscriptEntries(entries: TranscriptEntry[]) {
+  const compacted: TranscriptEntry[] = [];
+
+  for (const entry of entries) {
+    const text = collapseRepeatedTranscriptSpans(entry.text);
+    const candidate = createTranscriptEntry(text, entry.source);
+    if (!candidate) {
+      continue;
+    }
+
+    const lastEntry = compacted[compacted.length - 1];
+    if (lastEntry && lastEntry.source === candidate.source) {
+      if (transcriptEntriesSubstantiallyOverlap(lastEntry, candidate)) {
+        compacted[compacted.length - 1] = preferredTranscriptEntry(lastEntry, candidate);
+        continue;
+      }
+    }
+
+    let merged = false;
+    for (let index = compacted.length - 1; index >= Math.max(0, compacted.length - 3); index -= 1) {
+      const existing = compacted[index];
+      if (existing.source === candidate.source) {
+        continue;
+      }
+
+      if (!transcriptEntriesSubstantiallyOverlap(existing, candidate)) {
+        continue;
+      }
+
+      compacted[index] = preferredTranscriptEntry(existing, candidate);
+      merged = true;
+      break;
+    }
+
+    if (!merged) {
+      compacted.push(candidate);
+    }
+  }
+
+  return compacted;
+}
+
 function normalizeTranscriptEntries(value: unknown): TranscriptEntry[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
-  return value.flatMap((entry) => {
-    if (typeof entry === "string") {
-      const normalized = createTranscriptEntry(entry, "mixed");
+  return compactTranscriptEntries(
+    value.flatMap((entry) => {
+      if (typeof entry === "string") {
+        const normalized = createTranscriptEntry(entry, "mixed");
+        return normalized ? [normalized] : [];
+      }
+
+      if (!entry || typeof entry !== "object") {
+        return [];
+      }
+
+      const candidate = entry as Record<string, unknown>;
+      if (typeof candidate.text !== "string" || !isTranscriptSource(candidate.source)) {
+        return [];
+      }
+
+      const normalized = createTranscriptEntry(candidate.text, candidate.source);
       return normalized ? [normalized] : [];
-    }
-
-    if (!entry || typeof entry !== "object") {
-      return [];
-    }
-
-    const candidate = entry as Record<string, unknown>;
-    if (typeof candidate.text !== "string" || !isTranscriptSource(candidate.source)) {
-      return [];
-    }
-
-    const normalized = createTranscriptEntry(candidate.text, candidate.source);
-    return normalized ? [normalized] : [];
-  });
+    }),
+  );
 }
 
 function normalizeDiarizationSegments(value: unknown): DiarizationSegment[] {
