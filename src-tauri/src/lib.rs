@@ -791,47 +791,51 @@ async fn generate_transcript_summary<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-fn run_local_diarization<R: tauri::Runtime>(
+async fn run_local_diarization<R: tauri::Runtime>(
     _app: tauri::AppHandle<R>,
     input: RunLocalDiarizationInput,
 ) -> Result<LocalDiarizationResult, String> {
-    info!(
-        audio_path = %input.audio_path,
-        speaker_count = ?input.speaker_count,
-        "Starting built-in diarization run",
-    );
+    tauri::async_runtime::spawn_blocking(move || {
+        info!(
+            audio_path = %input.audio_path,
+            speaker_count = ?input.speaker_count,
+            "Starting built-in diarization run",
+        );
 
-    if let Some(speaker_count) = input.speaker_count {
-        if speaker_count == 0 {
-            return Err("Speaker count must be at least 1.".to_string());
+        if let Some(speaker_count) = input.speaker_count {
+            if speaker_count == 0 {
+                return Err("Speaker count must be at least 1.".to_string());
+            }
         }
-    }
 
-    let resolved_audio_path = resolve_audio_file_path(&input.audio_path)?;
-    let result = speech_diarize_audio_file(&resolved_audio_path)?;
+        let resolved_audio_path = resolve_audio_file_path(&input.audio_path)?;
+        let result = speech_diarize_audio_file(&resolved_audio_path)?;
 
-    info!(
-        audio_path = %resolved_audio_path.display(),
-        speaker_count = result.speaker_count,
-        segments = result.segments.len(),
-        pipeline_source = %result.pipeline_source,
-        "Finished built-in diarization run",
-    );
+        info!(
+            audio_path = %resolved_audio_path.display(),
+            speaker_count = result.speaker_count,
+            segments = result.segments.len(),
+            pipeline_source = %result.pipeline_source,
+            "Finished built-in diarization run",
+        );
 
-    Ok(LocalDiarizationResult {
-        audio_path: resolved_audio_path.display().to_string(),
-        pipeline_source: result.pipeline_source,
-        speaker_count: result.speaker_count,
-        segments: result
-            .segments
-            .into_iter()
-            .map(|segment| DiarizationSegment {
-                speaker: segment.speaker,
-                start_seconds: segment.start_seconds,
-                end_seconds: segment.end_seconds,
-            })
-            .collect(),
+        Ok(LocalDiarizationResult {
+            audio_path: resolved_audio_path.display().to_string(),
+            pipeline_source: result.pipeline_source,
+            speaker_count: result.speaker_count,
+            segments: result
+                .segments
+                .into_iter()
+                .map(|segment| DiarizationSegment {
+                    speaker: segment.speaker,
+                    start_seconds: segment.start_seconds,
+                    end_seconds: segment.end_seconds,
+                })
+                .collect(),
+        })
     })
+    .await
+    .map_err(|error| format!("Failed to join diarization task: {error}"))?
 }
 
 #[tauri::command]
@@ -991,34 +995,41 @@ async fn start_live_transcription<R: tauri::Runtime>(
 }
 
 #[tauri::command]
-fn live_transcription_state<R: tauri::Runtime>(
+async fn live_transcription_state<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<LiveTranscriptionState, String> {
     let transcription = state.inner().transcription.clone();
-    let snapshot = transcription
-        .lock()
-        .map_err(|_| "Failed to access transcription state.".to_string())?
-        .state()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let snapshot = transcription
+            .lock()
+            .map_err(|_| "Failed to access transcription state.".to_string())?
+            .state()?;
 
-    if !snapshot.running {
-        refresh_selected_model_preload(&app, &transcription);
-    }
+        if !snapshot.running {
+            refresh_selected_model_preload(&app, &transcription);
+        }
 
-    Ok(snapshot)
+        Ok(snapshot)
+    })
+    .await
+    .map_err(|error| format!("Failed to join transcription state task: {error}"))?
 }
 
 #[tauri::command]
-fn request_stop_live_transcription(
+async fn request_stop_live_transcription(
     state: State<'_, AppState>,
 ) -> Result<LiveTranscriptionState, String> {
     info!("Requesting live transcription shutdown");
-    state
-        .inner()
-        .transcription
-        .lock()
-        .map_err(|_| "Failed to access transcription state.".to_string())?
-        .request_stop()
+    let transcription = state.inner().transcription.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        transcription
+            .lock()
+            .map_err(|_| "Failed to access transcription state.".to_string())?
+            .request_stop()
+    })
+    .await
+    .map_err(|error| format!("Failed to join transcription stop task: {error}"))?
 }
 
 fn refresh_selected_model_preload<R: tauri::Runtime>(
