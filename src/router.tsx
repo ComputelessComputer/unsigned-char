@@ -400,28 +400,11 @@ function isMeetingDeleteDisabled(
   );
 }
 
-function isMeetingDiarizationDisabled(
-  meeting: Meeting,
-  transcriptionBusy: boolean,
-  transcriptionRunning: boolean,
-  recordingMeetingId: string | null,
-  diarizationRunBusy: boolean,
-) {
-  return (
-    diarizationRunBusy ||
-    transcriptionBusy ||
-    !meeting.audioPath.trim() ||
-    recordingMeetingId === meeting.id ||
-    (meeting.status === "live" && transcriptionRunning)
-  );
-}
-
 type DeleteMeetingRequest = Pick<Meeting, "id" | "title">;
 
 function getMeetingActionMenuItems(
   meeting: Meeting,
   deleteDisabled: boolean,
-  diarizationDisabled: boolean,
   onDeleteRequested: (meeting: DeleteMeetingRequest) => void,
 ): MenuItemDef[] {
   return [
@@ -430,14 +413,6 @@ function getMeetingActionMenuItems(
       text: "Show in Finder",
       action: () => {
         void appStore.revealMeetingExportInFinder(meeting.id);
-      },
-    },
-    {
-      id: `rerun-meeting-diarization-${meeting.id}`,
-      text: "Diarize again",
-      disabled: diarizationDisabled,
-      action: () => {
-        void appStore.runMeetingDiarization(meeting.id);
       },
     },
     { separator: true },
@@ -1125,13 +1100,6 @@ function HomeScreen() {
                     snapshot.transcriptionRunning,
                     snapshot.recordingMeetingId,
                   );
-                  const diarizationDisabled = isMeetingDiarizationDisabled(
-                    meeting,
-                    snapshot.transcriptionBusy,
-                    snapshot.transcriptionRunning,
-                    snapshot.recordingMeetingId,
-                    snapshot.diarizationRunBusy,
-                  );
 
                   return (
                     <div key={meeting.id} className="relative">
@@ -1139,7 +1107,7 @@ function HomeScreen() {
                         className={cn(
                           "transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]",
                           isCurrentMeeting &&
-                            "border-rose-200 bg-[linear-gradient(180deg,rgba(255,241,242,0.96)_0%,rgba(255,255,255,0.98)_100%)] shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(244,63,94,0.12)]",
+                            "border-rose-400/90 bg-[linear-gradient(180deg,rgba(255,247,248,0.98)_0%,rgba(255,255,255,1)_100%)] shadow-[0_0_0_1px_rgba(251,113,133,0.6),0_0_0_7px_rgba(244,63,94,0.12),0_20px_42px_rgba(244,63,94,0.2)] hover:shadow-[0_0_0_1px_rgba(251,113,133,0.72),0_0_0_10px_rgba(244,63,94,0.16),0_24px_52px_rgba(244,63,94,0.24)]",
                         )}
                       >
                         <Button
@@ -1158,7 +1126,6 @@ function HomeScreen() {
                               getMeetingActionMenuItems(
                                 meeting,
                                 deleteDisabled,
-                                diarizationDisabled,
                                 setMeetingPendingDelete,
                               ),
                               event,
@@ -1369,13 +1336,6 @@ function MeetingScreen() {
     snapshot.transcriptionRunning,
     snapshot.recordingMeetingId,
   );
-  const diarizationDisabled = isMeetingDiarizationDisabled(
-    meeting,
-    snapshot.transcriptionBusy,
-    snapshot.transcriptionRunning,
-    snapshot.recordingMeetingId,
-    snapshot.diarizationRunBusy,
-  );
   const isStartingMeeting =
     meeting.status === "live" &&
     snapshot.startMeetingBusy &&
@@ -1482,7 +1442,6 @@ function MeetingScreen() {
                   getMeetingActionMenuItems(
                     meeting,
                     deleteDisabled,
-                    diarizationDisabled,
                     setMeetingPendingDelete,
                   ),
                   {
@@ -1699,19 +1658,23 @@ function MeetingScreen() {
                         key={`${meeting.id}-${index}-${entry.source}-${entry.text.slice(0, 12)}`}
                         className="space-y-2 border-b border-[color:var(--border)] pb-5 last:border-b-0 last:pb-0"
                       >
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                          {speakerId ? (
-                            <SpeakerLabelField
-                              meetingId={meeting.id}
-                              speakerId={speakerId}
-                              speakerLabel={speakerLabel}
-                            />
-                          ) : (
-                            <span className="text-zinc-700 normal-case tracking-[0.08em]">
-                              {speakerLabel}
-                            </span>
-                          )}
-                          {timestampLabel ? <span>[{timestampLabel}]</span> : null}
+                        <div className="flex items-center justify-between gap-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                          <div className="min-w-0">
+                            {speakerId ? (
+                              <SpeakerLabelField
+                                meetingId={meeting.id}
+                                speakerId={speakerId}
+                                speakerLabel={speakerLabel}
+                              />
+                            ) : (
+                              <span className="text-zinc-700 normal-case tracking-[0.08em]">
+                                {speakerLabel}
+                              </span>
+                            )}
+                          </div>
+                          {timestampLabel ? (
+                            <span className="shrink-0 text-zinc-400">{timestampLabel}</span>
+                          ) : null}
                         </div>
                         <p className="whitespace-pre-wrap text-[15px] leading-8 text-zinc-800">
                           {entry.text}
