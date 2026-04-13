@@ -848,7 +848,7 @@ function RootLayout() {
   return (
     <div
       className={cn(
-        "relative isolate flex min-h-screen w-full flex-col text-zinc-900",
+        "relative isolate flex h-full min-h-0 w-full flex-col text-zinc-900",
         isSettingsWindow && "bg-[linear-gradient(180deg,#fcfcfa_0%,var(--background)_48%,#f2f4f8_100%)]",
       )}
     >
@@ -888,7 +888,7 @@ function HomeScreen() {
 
   return (
     <section className={cn("mx-auto flex max-w-[780px] flex-col gap-4", windowShellHeightClass)}>
-      <WindowDragRegion className="flex items-center justify-between gap-4">
+      <WindowDragRegion className="shrink-0 flex items-center justify-between gap-4">
         <BrandWordmark className="relative -top-1 shrink-0" />
         <div data-window-drag="false">
           <Button
@@ -1187,7 +1187,7 @@ function MeetingScreen() {
 
   return (
     <section className={cn("mx-auto flex max-w-[760px] flex-col gap-5", windowShellHeightClass)}>
-      <WindowDragRegion className="flex flex-col gap-5">
+      <WindowDragRegion className="shrink-0 flex flex-col gap-5">
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
           <div data-window-drag="false">
             <Button
@@ -1270,7 +1270,7 @@ function MeetingScreen() {
         </div>
       </WindowDragRegion>
 
-      <div className="flex items-end gap-3">
+      <div className="shrink-0 flex items-end gap-3">
         <div className="flex min-w-0 items-end justify-start">
           <Button
             size="lg"
