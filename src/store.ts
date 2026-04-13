@@ -213,6 +213,7 @@ type AppState = {
   diarizationRunBusy: boolean;
   diarizationMeetingId: string | null;
   diarizationIndicatorMinimized: boolean;
+  diarizationBannerMessage: string | null;
   summaryMeetingId: string | null;
   meetingNote: string;
   homeScrollTop: number;
@@ -350,6 +351,7 @@ let state: AppState = {
   diarizationRunBusy: false,
   diarizationMeetingId: null,
   diarizationIndicatorMinimized: false,
+  diarizationBannerMessage: null,
   summaryMeetingId: null,
   meetingNote: "",
   homeScrollTop: 0,
@@ -376,6 +378,18 @@ function setDiarizationIndicatorMinimized(minimized: boolean) {
   }
 
   patch({ diarizationIndicatorMinimized: minimized });
+}
+
+function dismissDiarizationBanner(meetingId?: string | null) {
+  if (meetingId && state.diarizationMeetingId !== meetingId) {
+    return;
+  }
+
+  patch({
+    diarizationMeetingId: null,
+    diarizationIndicatorMinimized: false,
+    diarizationBannerMessage: null,
+  });
 }
 
 function subscribe(listener: () => void) {
@@ -1187,6 +1201,12 @@ function discardMeeting(meetingId: string) {
     liveTranscriptEntries: clearedRecordingMeeting ? [] : state.liveTranscriptEntries,
     liveTranscriptionMode: clearedRecordingMeeting ? null : state.liveTranscriptionMode,
     meetingNote: deletedActiveMeeting ? "" : state.meetingNote,
+    diarizationMeetingId:
+      state.diarizationMeetingId === meetingId ? null : state.diarizationMeetingId,
+    diarizationIndicatorMinimized:
+      state.diarizationMeetingId === meetingId ? false : state.diarizationIndicatorMinimized,
+    diarizationBannerMessage:
+      state.diarizationMeetingId === meetingId ? null : state.diarizationBannerMessage,
   };
   persistMeetings();
   emit();
@@ -2017,6 +2037,7 @@ async function toggleMeetingStatus(meetingId: string) {
       return;
     }
 
+    dismissDiarizationBanner(meeting.id);
     await ensureModelReady();
     await prepareMeetingPermissions();
     await stopActiveRecordingIfNeeded(meeting.id);
@@ -2051,6 +2072,7 @@ async function runMeetingDiarization(
     diarizationRunBusy: true,
     diarizationMeetingId: meetingId,
     diarizationIndicatorMinimized: false,
+    diarizationBannerMessage: null,
     meetingNote: "",
   });
 
@@ -2076,18 +2098,26 @@ async function runMeetingDiarization(
       updatedAt: new Date().toISOString(),
     }));
 
+    const completionMessage =
+      result.segments.length === 0
+        ? options.automatic
+          ? "Auto-diarization finished, but no speaker turns were detected."
+          : "Diarization finished, but no speaker turns were detected."
+        : options.automatic
+          ? `Auto-diarized ${result.speakerCount} speakers across ${result.segments.length} segments.`
+          : `Detected ${result.speakerCount} speakers across ${result.segments.length} segments.`;
+
     patch({
-      meetingNote:
-        result.segments.length === 0
-          ? options.automatic
-            ? "Auto-diarization finished, but no speaker turns were detected."
-            : "Diarization finished, but no speaker turns were detected."
-          : options.automatic
-            ? `Auto-diarized ${result.speakerCount} speakers across ${result.segments.length} segments.`
-            : `Detected ${result.speakerCount} speakers across ${result.segments.length} segments.`,
+      diarizationMeetingId: meetingId,
+      diarizationIndicatorMinimized: false,
+      diarizationBannerMessage: completionMessage,
+      meetingNote: "",
     });
   } catch (error) {
     patch({
+      diarizationMeetingId: null,
+      diarizationIndicatorMinimized: false,
+      diarizationBannerMessage: null,
       meetingNote:
         error instanceof Error
           ? options.automatic
@@ -2098,8 +2128,14 @@ async function runMeetingDiarization(
   } finally {
     patch({
       diarizationRunBusy: false,
-      diarizationMeetingId: null,
-      diarizationIndicatorMinimized: false,
+      diarizationMeetingId:
+        state.diarizationBannerMessage && state.diarizationMeetingId === meetingId
+          ? meetingId
+          : state.diarizationMeetingId,
+      diarizationIndicatorMinimized:
+        state.diarizationBannerMessage && state.diarizationMeetingId === meetingId
+          ? false
+          : state.diarizationIndicatorMinimized,
     });
     void drainAutoDiarizationQueue();
   }
@@ -2154,6 +2190,8 @@ async function deleteMeeting(meetingId: string) {
       state.diarizationMeetingId === meetingId ? null : state.diarizationMeetingId,
     diarizationIndicatorMinimized:
       state.diarizationMeetingId === meetingId ? false : state.diarizationIndicatorMinimized,
+    diarizationBannerMessage:
+      state.diarizationMeetingId === meetingId ? null : state.diarizationBannerMessage,
   };
   persistMeetings();
   emit();
@@ -2696,6 +2734,7 @@ export const appStore = {
   startMeeting,
   toggleMeetingStatus,
   runMeetingDiarization,
+  dismissDiarizationBanner,
   setDiarizationIndicatorMinimized,
   revealMeetingExportInFinder,
   deleteMeeting,

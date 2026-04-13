@@ -166,15 +166,21 @@ function LiveIndicator({ className }: { className?: string }) {
 }
 
 function DiarizationActivityBanner({
+  message,
   minimized,
+  phase,
+  onClose,
   onExpand,
   onMinimize,
 }: {
+  message: string | null;
   minimized: boolean;
+  phase: "running" | "done";
+  onClose: () => void;
   onExpand: () => void;
   onMinimize: () => void;
 }) {
-  if (minimized) {
+  if (phase === "running" && minimized) {
     return (
       <Button
         size="icon-xl"
@@ -187,40 +193,59 @@ function DiarizationActivityBanner({
     );
   }
 
+  const completion = phase === "done";
+
   return (
     <Card className="overflow-visible border-zinc-900/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,244,245,0.98))]">
       <CardHeader className="flex-row items-start justify-between gap-4 pb-3">
         <div className="space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary" size="sm">
-              Background task
+            <Badge variant={completion ? "success" : "secondary"} size="sm">
+              {completion ? "Completed" : "Background task"}
             </Badge>
-            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
-              <Spinner className="size-3.5 text-zinc-700" />
-              <span>Running now</span>
-            </div>
+            {completion ? (
+              <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
+                Speaker turns updated
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
+                <Spinner className="size-3.5 text-zinc-700" />
+                <span>Running now</span>
+              </div>
+            )}
           </div>
-          <CardTitle className="text-base">Speaker identification is happening</CardTitle>
+          <CardTitle className="text-base">
+            {completion ? "Speaker identification finished" : "Speaker identification is happening"}
+          </CardTitle>
           <CardDescription>
-            unsigned char is mapping this transcript to speakers in the background. You can keep
-            reading while it finishes.
+            {completion && message
+              ? message
+              : "unsigned char is mapping this transcript to speakers in the background. You can keep reading while it finishes."}
           </CardDescription>
         </div>
         <div data-window-drag="false">
           <Button
             variant="ghost"
             size="icon-sm"
-            aria-label="Minimize speaker identification progress"
-            onClick={onMinimize}
+            aria-label={
+              completion
+                ? "Dismiss speaker identification notice"
+                : "Minimize speaker identification progress"
+            }
+            onClick={completion ? onClose : onMinimize}
           >
-            <ChevronDown className="size-4" strokeWidth={1.8} />
+            {completion ? <IconClose /> : <ChevronDown className="size-4" strokeWidth={1.8} />}
           </Button>
         </div>
       </CardHeader>
       <CardFooter className="justify-between gap-3 bg-black/[0.02] text-sm text-zinc-600">
         <div className="flex items-center gap-2 text-zinc-700">
           <Users className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
-          <span>Speaker turns will appear here once identification is complete.</span>
+          <span>
+            {completion
+              ? "Speaker labels are now attached to the transcript below."
+              : "Speaker turns will appear here once identification is complete."}
+          </span>
         </div>
       </CardFooter>
     </Card>
@@ -1216,9 +1241,12 @@ function MeetingScreen() {
     (meeting.status === "live" && snapshot.transcriptionRunning);
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
   const showDiarizationActivity =
-    snapshot.diarizationRunBusy && snapshot.diarizationMeetingId === meeting.id;
+    snapshot.diarizationMeetingId === meeting.id &&
+    (snapshot.diarizationRunBusy || Boolean(snapshot.diarizationBannerMessage));
+  const diarizationBannerPhase =
+    snapshot.diarizationRunBusy && snapshot.diarizationMeetingId === meeting.id ? "running" : "done";
   const diarizationIndicatorMinimized =
-    showDiarizationActivity && snapshot.diarizationIndicatorMinimized;
+    showDiarizationActivity && diarizationBannerPhase === "running" && snapshot.diarizationIndicatorMinimized;
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
   const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
@@ -1346,12 +1374,12 @@ function MeetingScreen() {
         </div>
       </WindowDragRegion>
 
-      <div className="shrink-0 flex items-end gap-3">
-        <div className="flex min-w-0 items-end justify-start">
+      <div className="shrink-0 flex min-w-0 items-end gap-3">
+        <div className="flex min-w-0 flex-1 items-end justify-start">
           <Button
             size="lg"
             variant={meeting.status === "live" ? "destructive" : "outline"}
-            className="min-w-[190px]"
+            className="w-full min-w-0"
             disabled={snapshot.transcriptionBusy}
             loading={isStoppingMeeting}
             onClick={() => {
@@ -1373,64 +1401,71 @@ function MeetingScreen() {
           </Button>
         </div>
 
-        <Tooltip>
-          {summaryActionDisabled ? (
-            <TooltipTrigger
-              render={<span className="inline-flex shrink-0" />}
-              tabIndex={0}
-              aria-label={summaryTooltipTitle}
-            >
-              <Button
-                size="lg"
-                variant="outline"
-                className="min-w-[176px]"
-                disabled
-                loading={isGeneratingSummary}
+        <div className="min-w-0 flex-1">
+          <Tooltip>
+            {summaryActionDisabled ? (
+              <TooltipTrigger
+                render={<span className="flex w-full min-w-0" />}
+                tabIndex={0}
+                aria-label={summaryTooltipTitle}
               >
-                Generate summary
-              </Button>
-            </TooltipTrigger>
-          ) : (
-            <TooltipTrigger
-              render={
                 <Button
                   size="lg"
                   variant="outline"
-                  className="min-w-[176px]"
-                  onClick={() => {
-                    void appStore.generateMeetingSummary(meeting.id);
-                  }}
-                />
-              }
-            >
-              Generate summary
-            </TooltipTrigger>
-          )}
-          <TooltipPopup side="bottom" align="start">
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
-                {summaryTooltipTitle}
-              </p>
-              <p>{summaryActionHint}</p>
-              <Button
-                size="xs"
-                variant="secondary"
-                className="w-full justify-center border-white/10 bg-white/10 text-white hover:bg-white/16 data-pressed:bg-white/14"
-                onClick={() => {
-                  void appStore.openSettingsWindow(AI_SUMMARIES_SETTINGS_SECTION);
-                }}
+                  className="w-full min-w-0"
+                  disabled
+                  loading={isGeneratingSummary}
+                >
+                  Generate summary
+                </Button>
+              </TooltipTrigger>
+            ) : (
+              <TooltipTrigger
+                render={
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full min-w-0"
+                    onClick={() => {
+                      void appStore.generateMeetingSummary(meeting.id);
+                    }}
+                  />
+                }
               >
-                Open preferences
-              </Button>
-            </div>
-          </TooltipPopup>
-        </Tooltip>
+                Generate summary
+              </TooltipTrigger>
+            )}
+            <TooltipPopup side="bottom" align="start">
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                  {summaryTooltipTitle}
+                </p>
+                <p>{summaryActionHint}</p>
+                <Button
+                  size="xs"
+                  variant="secondary"
+                  className="w-full justify-center border-white/10 bg-white/10 text-white hover:bg-white/16 data-pressed:bg-white/14"
+                  onClick={() => {
+                    void appStore.openSettingsWindow(AI_SUMMARIES_SETTINGS_SECTION);
+                  }}
+                >
+                  Open preferences
+                </Button>
+              </div>
+            </TooltipPopup>
+          </Tooltip>
+        </div>
       </div>
 
       {showDiarizationActivity ? (
         <div className="shrink-0">
           <DiarizationActivityBanner
+            message={snapshot.diarizationBannerMessage}
             minimized={diarizationIndicatorMinimized}
+            phase={diarizationBannerPhase}
+            onClose={() => {
+              appStore.dismissDiarizationBanner(meeting.id);
+            }}
             onMinimize={() => {
               appStore.setDiarizationIndicatorMinimized(true);
             }}
