@@ -1272,9 +1272,10 @@ function SpeakerLabelField({
   return (
     <button
       type="button"
-      className="rounded-[var(--radius-control-sm)] px-1.5 py-1 -ml-1.5 text-zinc-700 normal-case tracking-[0.08em] transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
+      className="-ml-1.5 inline-flex h-7 min-w-0 items-center rounded-[var(--radius-control-sm)] bg-transparent px-1.5 py-1 text-left text-[11px] font-semibold text-zinc-700 normal-case tracking-[0.08em] transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]"
       aria-label={`Rename speaker ${speakerLabel}`}
       title="Rename this speaker across the transcript"
+      style={draftWidth}
       onClick={() => {
         setDraft(speakerLabel);
         setIsEditing(true);
