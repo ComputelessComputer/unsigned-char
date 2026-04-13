@@ -400,6 +400,24 @@ function isMeetingDeleteDisabled(
   );
 }
 
+type AppSnapshot = ReturnType<typeof useAppState>;
+
+function getMeetingPostProcessingLabel(meeting: Meeting, snapshot: AppSnapshot) {
+  if (snapshot.transcriptionStopping && snapshot.recordingMeetingId === meeting.id) {
+    return "Finishing transcript";
+  }
+
+  if (snapshot.diarizationRunBusy && snapshot.diarizationMeetingId === meeting.id) {
+    return "Post-processing speakers";
+  }
+
+  if (snapshot.summaryMeetingId === meeting.id) {
+    return "Generating summary";
+  }
+
+  return null;
+}
+
 type DeleteMeetingRequest = Pick<Meeting, "id" | "title">;
 
 function getMeetingActionMenuItems(
@@ -450,8 +468,7 @@ function DeleteMeetingDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="delete-meeting-title"
-        aria-describedby="delete-meeting-description"
-        className="w-full max-w-md"
+        className="w-full max-w-sm"
         onClick={(event) => event.stopPropagation()}
       >
         <form
@@ -460,35 +477,26 @@ function DeleteMeetingDialog({
             onConfirm(meeting.id);
           }}
         >
-          <CardHeader>
-            <CardTitle id="delete-meeting-title">Delete meeting?</CardTitle>
-            <CardDescription id="delete-meeting-description">
-              Delete &quot;{meeting.title}&quot; from unsigned {"{char}"}? This also removes its
-              saved markdown export.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter className="justify-end gap-3">
-            <div className="flex items-center gap-3">
-              <Button variant="secondary" onClick={onCancel}>
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                type="submit"
-                autoFocus
-                className="gap-2 text-white"
+          <div className="flex items-center justify-between gap-4 px-5 py-4">
+            <CardTitle id="delete-meeting-title" className="text-base">
+              Delete this?
+            </CardTitle>
+            <Button
+              variant="destructive"
+              type="submit"
+              autoFocus
+              className="shrink-0 gap-2 text-white"
+              style={{ color: "#fff", WebkitTextFillColor: "#fff" }}
+            >
+              <span>Yes</span>
+              <Kbd
+                className="border-white/20 bg-white/14 text-white shadow-none"
                 style={{ color: "#fff", WebkitTextFillColor: "#fff" }}
               >
-                <span>Delete</span>
-                <Kbd
-                  className="border-white/20 bg-white/14 text-white shadow-none"
-                  style={{ color: "#fff", WebkitTextFillColor: "#fff" }}
-                >
-                  Enter
-                </Kbd>
-              </Button>
-            </div>
-          </CardFooter>
+                ⏎
+              </Kbd>
+            </Button>
+          </div>
         </form>
       </Card>
     </div>
@@ -1094,6 +1102,7 @@ function HomeScreen() {
                     : snapshot.startMeetingBusy && !snapshot.transcriptionRunning
                       ? "Starting"
                       : "In progress";
+                  const postProcessingLabel = getMeetingPostProcessingLabel(meeting, snapshot);
                   const deleteDisabled = isMeetingDeleteDisabled(
                     meeting,
                     snapshot.transcriptionBusy,
@@ -1133,22 +1142,35 @@ function HomeScreen() {
                           }}
                         />
                         <CardPanel className="p-4">
-                          <div className="flex min-w-0 flex-col gap-1.5">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-zinc-600">
-                              <p className="min-w-0 truncate">{formatDateTime(meeting.createdAt)}</p>
-                              {isCurrentMeeting ? (
-                                <Badge
-                                  variant="outline"
-                                  className="gap-1.5 rounded-full border-rose-200 bg-rose-50 px-2.5 text-[11px] font-semibold text-rose-700"
-                                >
-                                  <LiveIndicator className="size-2.5" />
-                                  <span>{inProgressLabel}</span>
-                                </Badge>
-                              ) : null}
+                          <div className="flex min-w-0 items-center justify-between gap-4">
+                            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-zinc-600">
+                                <p className="min-w-0 truncate">{formatDateTime(meeting.createdAt)}</p>
+                                {isCurrentMeeting ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="gap-1.5 rounded-full border-rose-200 bg-rose-50 px-2.5 text-[11px] font-semibold text-rose-700"
+                                  >
+                                    <LiveIndicator className="size-2.5" />
+                                    <span>{inProgressLabel}</span>
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
+                                {meeting.title}
+                              </h2>
                             </div>
-                            <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
-                              {meeting.title}
-                            </h2>
+
+                            {postProcessingLabel ? (
+                              <div
+                                aria-label={postProcessingLabel}
+                                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
+                                role="status"
+                                title={postProcessingLabel}
+                              >
+                                <Spinner className="size-4" aria-hidden="true" />
+                              </div>
+                            ) : null}
                           </div>
                         </CardPanel>
                       </Card>
