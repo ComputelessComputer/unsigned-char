@@ -23,9 +23,10 @@ use asr::{
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
 use speech_models::{
-    detect_device_profile, effective_transcription_mode, meeting_audio_file_name,
-    model_path_is_ready, normalize_batch_model, recommend_model, selected_model, speech_model_spec,
-    DeviceProfileState, SpeechModelId, TranscriptionMode,
+    detect_device_profile, effective_transcription_mode, fallback_batch_model_without_mlx,
+    meeting_audio_file_name, mlx_runtime_is_available, model_path_is_ready, normalize_batch_model,
+    recommend_model, selected_model, speech_model_spec, DeviceProfileState, SpeechModelId,
+    TranscriptionMode,
 };
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -359,9 +360,34 @@ impl StoredModelSettings {
     fn batch_model_id(&self) -> SpeechModelId {
         normalize_batch_model(self.batch_model_id.unwrap_or_default())
     }
+}
 
-    fn selected_model_id(&self) -> SpeechModelId {
-        selected_model(self.processing_mode(), self.batch_model_id())
+#[derive(Clone, Copy)]
+struct EffectiveModelSettings {
+    processing_mode: TranscriptionMode,
+    batch_model_id: SpeechModelId,
+    requested_batch_model_id: SpeechModelId,
+}
+
+impl EffectiveModelSettings {
+    fn processing_mode(self) -> TranscriptionMode {
+        self.processing_mode
+    }
+
+    fn batch_model_id(self) -> SpeechModelId {
+        self.batch_model_id
+    }
+
+    fn requested_batch_model_id(self) -> SpeechModelId {
+        self.requested_batch_model_id
+    }
+
+    fn selected_model_id(self) -> SpeechModelId {
+        selected_model(self.processing_mode, self.batch_model_id)
+    }
+
+    fn uses_mlx_fallback(self) -> bool {
+        self.batch_model_id != self.requested_batch_model_id
     }
 }
 
@@ -527,7 +553,9 @@ fn download_managed_model<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<ManagedModelDownloadState, String> {
-    let model_settings = effective_model_settings(&load_model_settings(&app)?);
+    let general_settings = load_general_settings(&app)?;
+    let model_settings =
+        effective_model_settings(&app, &load_model_settings(&app)?, &general_settings)?;
     let selected_model_id = model_settings.selected_model_id();
     let selected_spec = speech_model_spec(selected_model_id);
     let target_dir = managed_model_path_for(&app, selected_model_id)?;
@@ -588,7 +616,9 @@ fn download_managed_model<R: tauri::Runtime>(
 fn reveal_managed_model_in_finder<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<(), String> {
-    let model_settings = effective_model_settings(&load_model_settings(&app)?);
+    let general_settings = load_general_settings(&app)?;
+    let model_settings =
+        effective_model_settings(&app, &load_model_settings(&app)?, &general_settings)?;
     let selected_model_id = model_settings.selected_model_id();
     let target_dir = managed_model_path_for(&app, selected_model_id)?;
     if !target_dir.exists() {
@@ -608,7 +638,9 @@ fn delete_managed_model<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<ManagedModelDownloadState, String> {
-    let model_settings = effective_model_settings(&load_model_settings(&app)?);
+    let general_settings = load_general_settings(&app)?;
+    let model_settings =
+        effective_model_settings(&app, &load_model_settings(&app)?, &general_settings)?;
     let selected_model_id = model_settings.selected_model_id();
     let target_dir = managed_model_path_for(&app, selected_model_id)?;
     let shared = state.inner().managed_model_download.clone();
@@ -931,8 +963,9 @@ async fn start_live_transcription<R: tauri::Runtime>(
     let transcription = state.inner().transcription.clone();
     info!(meeting_id = %meeting_id, "Starting live transcription session");
     tauri::async_runtime::spawn_blocking(move || {
-        let model_settings = effective_model_settings(&load_model_settings(&app)?);
         let general_settings = load_general_settings(&app)?;
+        let model_settings =
+            effective_model_settings(&app, &load_model_settings(&app)?, &general_settings)?;
         let selected_model_id = model_settings.selected_model_id();
         let model_path = resolve_selected_model_path(&app, &model_settings)?;
         let recording_path = meeting_audio_path(&app, &meeting_id)?;
@@ -992,8 +1025,11 @@ fn refresh_selected_model_preload<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     transcription: &Arc<Mutex<TranscriptionManager>>,
 ) {
-    let selected_model_id = load_model_settings(app)
-        .map(|settings| effective_model_settings(&settings).selected_model_id());
+    let selected_model_id = load_general_settings(app).and_then(|general_settings| {
+        load_model_settings(app)
+            .and_then(|settings| effective_model_settings(app, &settings, &general_settings))
+            .map(EffectiveModelSettings::selected_model_id)
+    });
 
     if let Ok(mut manager) = transcription.lock() {
         match selected_model_id {
@@ -1159,44 +1195,58 @@ fn show_settings_window<R: tauri::Runtime>(
     Ok(())
 }
 
-fn effective_model_settings(settings: &StoredModelSettings) -> StoredModelSettings {
-    let batch_model_id = settings.batch_model_id();
+fn effective_model_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &StoredModelSettings,
+    general_settings: &StoredGeneralSettings,
+) -> Result<EffectiveModelSettings, String> {
+    let requested_batch_model_id = settings.batch_model_id();
+    let batch_model_id =
+        resolve_supported_batch_model(app, requested_batch_model_id, general_settings)?;
 
-    StoredModelSettings {
-        processing_mode: Some(effective_transcription_mode(
-            settings.processing_mode(),
-            batch_model_id,
-        )),
-        batch_model_id: Some(batch_model_id),
-    }
+    Ok(EffectiveModelSettings {
+        processing_mode: effective_transcription_mode(settings.processing_mode(), batch_model_id),
+        batch_model_id,
+        requested_batch_model_id,
+    })
 }
 
 fn build_model_settings_state<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &StoredModelSettings,
 ) -> Result<ModelSettingsState, String> {
-    let settings = effective_model_settings(settings);
     let general_settings = load_general_settings(app)?;
+    let settings = effective_model_settings(app, settings, &general_settings)?;
     let device_profile = detect_device_profile();
-    let recommendation = recommend_model(
+    let mlx_runtime_available = mlx_runtime_is_available();
+    let mut recommendation = recommend_model(
         &device_profile,
         &selected_model_languages(&general_settings),
         settings.processing_mode(),
     );
+    if recommendation.model_id.uses_mlx() && !mlx_runtime_available {
+        let requested_recommendation_model_id = recommendation.model_id;
+        let fallback_model_id =
+            resolve_supported_batch_model(app, recommendation.model_id, &general_settings)?;
+        recommendation.model_id = fallback_model_id;
+        recommendation.reason = format!(
+            "{} needs the MLX metal bundle, which is missing in this build. unsigned char recommends {} instead.",
+            speech_model_spec(requested_recommendation_model_id).label,
+            speech_model_spec(fallback_model_id).label
+        );
+    }
     let selected_model_id = settings.selected_model_id();
     let selected_spec = speech_model_spec(selected_model_id);
     let selected_model_path = managed_model_path_for(app, selected_model_id)?;
     let selected_ready = model_path_is_ready(selected_model_id, &selected_model_path);
-    let selected_model_status = build_selected_model_status(
-        selected_spec.label,
-        settings.processing_mode(),
-        selected_ready,
-    );
+    let selected_model_status = build_selected_model_status(settings, selected_ready);
 
     let mut available_models = Vec::with_capacity(SpeechModelId::ALL.len());
     for model_id in SpeechModelId::ALL {
         let spec = speech_model_spec(model_id);
         let local_path = managed_model_path_for(app, model_id)?;
+        let ready = model_path_is_ready(model_id, &local_path)
+            && (!model_id.uses_mlx() || mlx_runtime_available);
         available_models.push(SpeechModelOptionState {
             id: spec.id,
             label: spec.label,
@@ -1204,7 +1254,7 @@ fn build_model_settings_state<R: tauri::Runtime>(
             processing_mode: spec.processing_mode,
             repo: spec.repo,
             local_path: local_path.display().to_string(),
-            ready: model_path_is_ready(model_id, &local_path),
+            ready,
             languages_label: spec.languages_label,
             size_label: spec.size_label,
             recommended: model_id == recommendation.model_id,
@@ -1666,7 +1716,9 @@ fn snapshot_managed_model_download_state<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     shared: &Arc<Mutex<ManagedModelDownloadState>>,
 ) -> Result<ManagedModelDownloadState, String> {
-    let model_settings = effective_model_settings(&load_model_settings(app)?);
+    let general_settings = load_general_settings(app)?;
+    let model_settings =
+        effective_model_settings(app, &load_model_settings(app)?, &general_settings)?;
     let selected_model_id = model_settings.selected_model_id();
     let local_path = managed_model_path_for(app, selected_model_id)?;
     let speech_state = speech_model_download_state(selected_model_id.as_str())?;
@@ -1744,7 +1796,7 @@ fn expand_home_path(raw_path: &str) -> PathBuf {
 
 fn resolve_selected_model_path<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    settings: &StoredModelSettings,
+    settings: &EffectiveModelSettings,
 ) -> Result<PathBuf, String> {
     let selected_model_id = settings.selected_model_id();
     let selected_spec = speech_model_spec(selected_model_id);
@@ -1773,16 +1825,66 @@ fn selected_model_languages(settings: &StoredGeneralSettings) -> Vec<String> {
     languages
 }
 
-fn build_selected_model_status(
-    label: &str,
-    processing_mode: TranscriptionMode,
-    ready: bool,
-) -> String {
+fn resolve_supported_batch_model<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    requested_batch_model_id: SpeechModelId,
+    general_settings: &StoredGeneralSettings,
+) -> Result<SpeechModelId, String> {
+    if !requested_batch_model_id.uses_mlx() || mlx_runtime_is_available() {
+        return Ok(requested_batch_model_id);
+    }
+
+    let preferred_fallback =
+        fallback_batch_model_without_mlx(&selected_model_languages(general_settings));
+    if is_model_ready_for_app(app, preferred_fallback)? {
+        return Ok(preferred_fallback);
+    }
+
+    let alternate_fallback = match preferred_fallback {
+        SpeechModelId::ParakeetBatch => SpeechModelId::Omnilingual,
+        _ => SpeechModelId::ParakeetBatch,
+    };
+    if is_model_ready_for_app(app, alternate_fallback)? {
+        return Ok(alternate_fallback);
+    }
+
+    Ok(preferred_fallback)
+}
+
+fn is_model_ready_for_app<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    model_id: SpeechModelId,
+) -> Result<bool, String> {
+    let path = managed_model_path_for(app, model_id)?;
+    Ok(model_path_is_ready(model_id, &path))
+}
+
+fn build_selected_model_status(settings: EffectiveModelSettings, ready: bool) -> String {
+    let label = speech_model_spec(settings.selected_model_id()).label;
+    if settings.uses_mlx_fallback() {
+        let requested_label = speech_model_spec(settings.requested_batch_model_id()).label;
+        let detail = if ready {
+            format!("{label} is ready for local transcription.")
+        } else {
+            match settings.processing_mode() {
+                TranscriptionMode::Realtime => {
+                    format!("Download {label} before starting live transcription.")
+                }
+                TranscriptionMode::Batch => {
+                    format!("Download {label} before post-meeting batch transcription can run.")
+                }
+            }
+        };
+
+        return format!(
+            "{requested_label} needs the MLX metal bundle, which is missing in this build. {detail}"
+        );
+    }
     if ready {
         return format!("{label} is ready for local transcription.");
     }
 
-    match processing_mode {
+    match settings.processing_mode() {
         TranscriptionMode::Realtime => {
             format!("Download {label} before starting live transcription.")
         }

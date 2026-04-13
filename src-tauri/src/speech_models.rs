@@ -1,4 +1,9 @@
-use std::{collections::BTreeSet, path::Path, process::Command};
+use std::{
+    collections::BTreeSet,
+    env,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -95,6 +100,10 @@ impl SpeechModelId {
 
     pub fn supports_realtime(self) -> bool {
         matches!(self, Self::ParakeetStreaming | Self::ParakeetBatch)
+    }
+
+    pub fn uses_mlx(self) -> bool {
+        matches!(self, Self::Qwen3Small | Self::Qwen3Large)
     }
 }
 
@@ -273,6 +282,20 @@ pub fn recommend_model(
     }
 }
 
+pub fn fallback_batch_model_without_mlx(languages: &[String]) -> SpeechModelId {
+    if unsupported_parakeet_languages(&normalized_language_roots(languages)).is_empty() {
+        SpeechModelId::ParakeetBatch
+    } else {
+        SpeechModelId::Omnilingual
+    }
+}
+
+pub fn mlx_runtime_is_available() -> bool {
+    mlx_runtime_search_paths()
+        .into_iter()
+        .any(|path| path.exists())
+}
+
 pub fn model_path_is_ready(model_id: SpeechModelId, path: &Path) -> bool {
     match model_id {
         SpeechModelId::ParakeetStreaming | SpeechModelId::ParakeetBatch => required_files_present(
@@ -385,4 +408,36 @@ fn sanitize_path_component(value: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn mlx_runtime_search_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    let Ok(current_exe) = env::current_exe() else {
+        return paths;
+    };
+    let Some(binary_dir) = current_exe.parent() else {
+        return paths;
+    };
+
+    paths.push(binary_dir.join("mlx.metallib"));
+    paths.push(binary_dir.join("Resources/default.metallib"));
+    paths.push(binary_dir.join("Resources/mlx.metallib"));
+    paths.push(binary_dir.join("mlx-swift_Cmlx.bundle/default.metallib"));
+
+    if let Some(contents_dir) = binary_dir.parent() {
+        paths.push(contents_dir.join("Resources/default.metallib"));
+        paths.push(contents_dir.join("Resources/mlx.metallib"));
+        paths.push(contents_dir.join("Resources/mlx-swift_Cmlx.bundle/default.metallib"));
+    }
+
+    if let Some(app_dir) = current_exe
+        .ancestors()
+        .find(|ancestor| ancestor.extension().and_then(|value| value.to_str()) == Some("app"))
+    {
+        paths.push(app_dir.join("mlx-swift_Cmlx.bundle/default.metallib"));
+        paths.push(app_dir.join("Contents/Resources/mlx-swift_Cmlx.bundle/default.metallib"));
+    }
+
+    paths
 }
