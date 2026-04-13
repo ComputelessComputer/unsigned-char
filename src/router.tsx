@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ArrowUpRight, ChevronLeft, CircleAlert, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
+import { ChevronLeft, CircleAlert, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
 import {
   type MouseEvent,
   type ReactNode,
@@ -506,7 +506,6 @@ const insetPanelClass =
 const windowShellHeightClass = "h-full";
 const appWindow = getCurrentWindow();
 const isMainWindow = appWindow.label === "main";
-const CHAR_WEBSITE_HOST = "char.com";
 
 function MainWindowCharBanner() {
   const [dismissed, setDismissed] = useState(false);
@@ -517,18 +516,8 @@ function MainWindowCharBanner() {
 
   return (
     <div className="px-4 pt-3 pb-4">
-      <div className="relative mx-auto max-w-[780px]">
-        <Button
-          type="button"
-          aria-label={`Open ${CHAR_WEBSITE_HOST}`}
-          data-window-drag="false"
-          className="h-auto w-full items-center justify-between gap-4 rounded-[calc(var(--radius)+2px)] border-zinc-950 bg-zinc-950 px-4 py-4 pr-14 text-left text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)] hover:bg-zinc-900 data-pressed:bg-zinc-900"
-          onClick={() => {
-            void invoke("open_char_website").catch((error) => {
-              console.error("Failed to open Char website", error);
-            });
-          }}
-        >
+      <div className="mx-auto max-w-[780px] rounded-[calc(var(--radius)+2px)] border border-zinc-950 bg-zinc-950 px-4 py-4 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)]">
+        <div className="min-w-0">
           <span className="min-w-0">
             <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
               Better transcription
@@ -537,25 +526,32 @@ function MainWindowCharBanner() {
               If you want better transcription, start using Char.
             </span>
           </span>
-          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/8 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-white/80">
-            <span>{CHAR_WEBSITE_HOST}</span>
-            <ArrowUpRight className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
-          </span>
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Dismiss Char banner"
-          data-window-drag="false"
-          className="absolute top-3 right-3 border border-white/10 bg-white/6 text-white/70 shadow-none hover:bg-white/12 hover:text-white data-pressed:bg-white/10"
-          onClick={(event) => {
-            event.stopPropagation();
-            setDismissed(true);
-          }}
-        >
-          <IconClose />
-        </Button>
+          <div className="mt-4 flex items-center gap-2" data-window-drag="false">
+            <Button
+              type="button"
+              size="sm"
+              className="border-white bg-white text-zinc-950 shadow-none hover:bg-zinc-100 data-pressed:bg-zinc-100"
+              onClick={() => {
+                void invoke("open_char_website").catch((error) => {
+                  console.error("Failed to open Char website", error);
+                });
+              }}
+            >
+              Start using
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="px-1 text-white/45 shadow-none hover:bg-transparent hover:text-white/70 data-pressed:bg-transparent data-pressed:text-white/70"
+              onClick={() => {
+                setDismissed(true);
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   );
