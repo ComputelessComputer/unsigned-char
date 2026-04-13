@@ -9,13 +9,13 @@ import {
   useParams,
 } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronDown, ChevronLeft, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
+import { ChevronLeft, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
 import {
-  type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useState,
 } from "react";
@@ -48,7 +48,12 @@ import {
   CardTitle,
   Input,
   Kbd,
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
   ScrollFade,
+  Switch,
   Tooltip,
   TooltipPopup,
   TooltipTrigger,
@@ -83,10 +88,6 @@ import {
   getSummaryProviderDefinition,
   type SummaryProviderId,
 } from "./lib/summary-providers";
-
-function IconChevronDown() {
-  return <ChevronDown className="size-4 opacity-60" strokeWidth={1.5} aria-hidden="true" />;
-}
 
 function IconBack() {
   return <ChevronLeft className="size-5" strokeWidth={1.5} aria-hidden="true" />;
@@ -288,37 +289,28 @@ function ProcessingModeToggle({
   const realtimeEnabled = supported && value === "realtime";
   const interactionDisabled = disabled || !supported;
   const unsupportedTooltip = "This model is only available for batch processing.";
+  const switchId = useId();
+  const descriptionId = `${switchId}-description`;
 
   const control = (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={realtimeEnabled}
-      disabled={interactionDisabled}
+    <div
       className={cn(
-        "flex w-full items-center justify-between gap-4 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-4 py-4 text-left shadow-[0_1px_0_rgba(255,255,255,0.85)] transition",
-        "hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]",
-        disabled && "cursor-not-allowed opacity-60",
-        !supported && "cursor-not-allowed hover:bg-[color:var(--card)]",
+        "flex w-full items-center justify-between gap-4 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-4 py-4 shadow-[0_1px_0_rgba(255,255,255,0.85)]",
+        interactionDisabled && "opacity-60",
       )}
-      onClick={() => {
-        if (interactionDisabled) {
-          return;
-        }
-
-        onChange(realtimeEnabled ? "batch" : "realtime");
-      }}
     >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-semibold text-zinc-950">Realtime transcription</p>
+          <span className="text-sm font-semibold text-zinc-950">
+            Realtime transcription
+          </span>
           {supported ? (
             <Badge variant={realtimeEnabled ? "info" : "outline"}>
               {realtimeEnabled ? "On" : "Off"}
             </Badge>
           ) : null}
         </div>
-        <p className="mt-1 text-sm leading-6 text-zinc-600">
+        <p id={descriptionId} className="mt-1 text-sm leading-6 text-zinc-600">
           {!supported
             ? "Processed after the meeting ends."
             : realtimeEnabled
@@ -327,25 +319,18 @@ function ProcessingModeToggle({
         </p>
       </div>
 
-      <span
-        aria-hidden="true"
-        className={cn(
-          "relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors",
-          realtimeEnabled
-            ? "border-sky-200 bg-sky-500/90"
-            : supported
-              ? "border-[color:var(--border-strong)] bg-[color:var(--secondary)]"
-              : "border-zinc-200 bg-zinc-100",
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 size-6 rounded-full bg-white shadow-[0_1px_3px_rgba(15,23,42,0.24)] transition-transform",
-            realtimeEnabled ? "translate-x-[1.25rem]" : "translate-x-0.5",
-          )}
-        />
-      </span>
-    </button>
+      <Switch
+        id={switchId}
+        checked={realtimeEnabled}
+        aria-describedby={descriptionId}
+        aria-label="Realtime transcription"
+        disabled={interactionDisabled}
+        onCheckedChange={(checked) => {
+          onChange(checked ? "realtime" : "batch");
+        }}
+        className={cn(!supported && "bg-zinc-200 data-[checked]:bg-zinc-200")}
+      />
+    </div>
   );
 
   if (!supported) {
@@ -582,6 +567,37 @@ function SearchableOptionPrefix({
   );
 }
 
+function SelectOptionContent({ option }: { option: SearchableOption }) {
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
+      <SearchableOptionPrefix
+        icon={option.icon}
+        logoSrc={option.logoSrc}
+        logoClassName={option.logoClassName}
+      />
+      <span className="min-w-0 flex-1 truncate">{option.label}</span>
+      {option.badges?.length ? (
+        <span className="inline-flex shrink-0 items-center gap-1">
+          {option.badges.map((badge) => (
+            <Badge
+              key={`${option.value}-${badge.label}`}
+              variant={badge.variant}
+              className="px-2 py-0.5 text-[10px]"
+            >
+              {badge.label}
+            </Badge>
+          ))}
+        </span>
+      ) : null}
+      {option.detail ? (
+        <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
+          {option.detail}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 const summaryProviderLogos: Partial<Record<SummaryProviderId, string>> = {
   anthropic: anthropicLogo,
   google_generative_ai: googleLogo,
@@ -647,13 +663,12 @@ function WindowDragRegion({
   );
 }
 
-function SearchableSelect({
+function SettingsSelect({
   ariaLabel,
   value,
   onChange,
   options,
   placeholder,
-  searchPlaceholder,
   disabled = false,
   className,
 }: {
@@ -662,203 +677,41 @@ function SearchableSelect({
   onChange: (value: string) => void;
   options: readonly SearchableOption[];
   placeholder: string;
-  searchPlaceholder: string;
   disabled?: boolean;
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-
   const selectedOption = options.find((option) => option.value === value);
-  const filteredOptions = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) {
-      return options;
-    }
-
-    return options.filter((option) => {
-      const haystack = [
-        option.label,
-        option.detail ?? "",
-        option.value,
-        ...(option.badges?.map((badge) => badge.label) ?? []),
-        ...(option.searchTerms ?? []),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
-  }, [options, query]);
-
-  const close = () => {
-    setOpen(false);
-    setQuery("");
-    setActiveIndex(0);
-  };
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((index) => Math.min(index + 1, filteredOptions.length - 1));
-      return;
-    }
-
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((index) => Math.max(index - 1, 0));
-      return;
-    }
-
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const option = filteredOptions[activeIndex];
-      if (!option) {
-        return;
-      }
-
-      onChange(option.value);
-      close();
-      return;
-    }
-
-    if (event.key === "Escape") {
-      event.preventDefault();
-      close();
-    }
-  };
 
   return (
-    <div
-      className={cn("relative w-full min-w-0", className)}
-      onBlurCapture={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          return;
+    <Select
+      value={value}
+      disabled={disabled}
+      onValueChange={(nextValue) => {
+        if (typeof nextValue === "string") {
+          onChange(nextValue);
         }
-
-        close();
       }}
     >
-      <Button
-        type="button"
-        role="combobox"
-        variant="outline"
-        size="lg"
-        aria-expanded={open}
+      <SelectTrigger
         aria-label={ariaLabel}
-        disabled={disabled}
-        className="flex min-h-11 w-full min-w-0 max-w-full justify-between px-4 text-left font-normal"
-        onClick={() => {
-          if (disabled) {
-            return;
-          }
-
-          setOpen((current) => !current);
-          setQuery("");
-          setActiveIndex(0);
-        }}
+        size="lg"
+        className={cn("min-w-0", className)}
       >
-        <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-          <SearchableOptionPrefix
-            icon={selectedOption?.icon}
-            logoSrc={selectedOption?.logoSrc}
-            logoClassName={selectedOption?.logoClassName}
-          />
-          <span className={cn("min-w-0 flex-1 truncate", !selectedOption && "text-zinc-500")}>
-            {selectedOption ? selectedOption.label : placeholder}
-          </span>
-          {selectedOption?.badges?.length ? (
-            <span className="shrink-0 items-center gap-1 inline-flex">
-              {selectedOption.badges.map((badge) => (
-                <Badge
-                  key={`${selectedOption.value}-${badge.label}`}
-                  variant={badge.variant}
-                  className="px-2 py-0.5 text-[10px]"
-                >
-                  {badge.label}
-                </Badge>
-              ))}
-            </span>
-          ) : null}
-          {selectedOption?.detail ? (
-            <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
-              {selectedOption.detail}
-            </span>
-          ) : null}
-        </span>
-        <IconChevronDown />
-      </Button>
+        {selectedOption ? (
+          <SelectOptionContent option={selectedOption} />
+        ) : (
+          <span className="text-zinc-500">{placeholder}</span>
+        )}
+      </SelectTrigger>
 
-      {open ? (
-        <Card className="absolute inset-x-0 top-[calc(100%+8px)] z-20 p-2">
-          <Input
-            autoFocus
-            uiSize="sm"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setActiveIndex(0);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={searchPlaceholder}
-            className="mb-2"
-          />
-          <div className="max-h-60 overflow-y-auto">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((option, index) => (
-                <Button
-                  key={option.value}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-auto w-full rounded-[var(--radius-control-sm)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
-                    index === activeIndex
-                      ? "bg-zinc-100 hover:bg-zinc-100 data-pressed:bg-zinc-100"
-                      : "hover:bg-zinc-50 data-pressed:bg-zinc-50",
-                  )}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    onChange(option.value);
-                    close();
-                  }}
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-3">
-                    <SearchableOptionPrefix
-                      icon={option.icon}
-                      logoSrc={option.logoSrc}
-                      logoClassName={option.logoClassName}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                    {option.badges?.length ? (
-                      <span className="shrink-0 items-center gap-1 inline-flex">
-                        {option.badges.map((badge) => (
-                          <Badge
-                            key={`${option.value}-${badge.label}`}
-                            variant={badge.variant}
-                            className="px-2 py-0.5 text-[10px]"
-                          >
-                            {badge.label}
-                          </Badge>
-                        ))}
-                      </span>
-                    ) : null}
-                    {option.detail ? (
-                      <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
-                        {option.detail}
-                      </span>
-                    ) : null}
-                  </span>
-                </Button>
-              ))
-            ) : (
-              <div className="px-3 py-2 text-sm text-zinc-500">No results found.</div>
-            )}
-          </div>
-        </Card>
-      ) : null}
-    </div>
+      <SelectPopup>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value} label={option.label}>
+            <SelectOptionContent option={option} />
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
   );
 }
 
@@ -1794,20 +1647,19 @@ function SettingsScreen() {
               <CardPanel className="grid gap-6 pt-0">
                 <div className="grid gap-3">
                   <p className="text-sm font-semibold text-zinc-950">Main language</p>
-                  <SearchableSelect
+                  <SettingsSelect
                     ariaLabel="Main language"
                     value={snapshot.generalDraft.mainLanguage}
                     onChange={appStore.setMainLanguage}
                     options={LANGUAGE_OPTIONS}
                     placeholder="Select language"
-                    searchPlaceholder="Search language..."
                     disabled={snapshot.generalBusy}
                   />
                 </div>
 
                 <div className="grid gap-3">
                   <p className="text-sm font-semibold text-zinc-950">Timezone</p>
-                  <SearchableSelect
+                  <SettingsSelect
                     ariaLabel="Timezone"
                     value={snapshot.generalDraft.timezone || systemTimezone}
                     onChange={(nextValue) => {
@@ -1815,7 +1667,6 @@ function SettingsScreen() {
                     }}
                     options={timezoneOptions}
                     placeholder={`System default (${systemTimezone})`}
-                    searchPlaceholder="Search timezone..."
                     disabled={snapshot.generalBusy}
                   />
                 </div>
@@ -1852,7 +1703,7 @@ function SettingsScreen() {
                         void appStore.startManagedModelDownload();
                       }}
                     >
-                      Download model
+                      <span className="text-white">Download model</span>
                     </Button>
                     <p className="text-sm font-medium text-zinc-900">to start using.</p>
                   </div>
@@ -1862,7 +1713,7 @@ function SettingsScreen() {
                   <p className="text-sm font-semibold text-zinc-950">Model</p>
                   <div className="space-y-3">
                     <div className="flex items-start gap-3">
-                      <SearchableSelect
+                      <SettingsSelect
                         ariaLabel="Model"
                         value={snapshot.modelSettings.batchModelId}
                         onChange={(nextValue) => {
@@ -1870,7 +1721,6 @@ function SettingsScreen() {
                         }}
                         options={batchModelOptions}
                         placeholder="Select model"
-                        searchPlaceholder="Search model..."
                         disabled={snapshot.modelBusy || downloadStatus === "downloading"}
                         className="min-w-0 flex-1"
                       />
@@ -1910,13 +1760,12 @@ function SettingsScreen() {
               <CardPanel className="grid gap-6 pt-0">
                 <div className="grid gap-3">
                   <p className="text-sm font-semibold text-zinc-950">Provider</p>
-                  <SearchableSelect
+                  <SettingsSelect
                     ariaLabel="Summary provider"
                     value={snapshot.summaryDraft.provider}
                     onChange={appStore.setSummaryProvider}
                     options={summaryProviderOptions}
                     placeholder="Select provider"
-                    searchPlaceholder="Search provider..."
                     disabled={snapshot.summaryBusy}
                   />
                 </div>

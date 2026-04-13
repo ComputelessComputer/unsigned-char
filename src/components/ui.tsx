@@ -8,6 +8,18 @@ import { cn } from "@/lib/utils";
 export { Button, type ButtonProps } from "./ui/button";
 export { cn };
 export {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectGroupLabel,
+  SelectItem,
+  SelectLabel,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+export { Switch, SwitchThumb } from "./ui/switch";
+export {
   Tooltip,
   TooltipContent,
   TooltipCreateHandle,
