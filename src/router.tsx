@@ -1661,7 +1661,7 @@ function SettingsScreen() {
 
   if (!snapshot.generalSettings || !snapshot.summarySettings || !snapshot.modelSettings) {
     return (
-      <section className={cn("mx-auto flex items-center", settingsContentWidthClass, settingsShellHeightClass)}>
+      <section className={cn("mx-auto flex min-w-0 items-center", settingsContentWidthClass, settingsShellHeightClass)}>
         {settingsTitle}
         <Card className="w-full">
           <CardHeader className="px-8 py-8">
@@ -1747,11 +1747,11 @@ function SettingsScreen() {
         : "Optional API key";
 
   return (
-    <section className={cn("flex min-h-0 flex-col", settingsShellHeightClass)}>
+    <section className={cn("flex min-h-0 min-w-0 flex-col overflow-x-hidden", settingsShellHeightClass)}>
       {settingsTitle}
-      <div className="relative -mx-4 min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-x-hidden">
         <div
-          className="h-full overflow-y-auto"
+          className="h-full overflow-x-hidden overflow-y-auto"
           onScroll={(event) => {
             if (!isSettingsWindow) {
               return;
@@ -1760,7 +1760,7 @@ function SettingsScreen() {
             setSettingsScrollTop(event.currentTarget.scrollTop);
           }}
         >
-          <div className={cn("mx-auto flex flex-col gap-6", settingsContentWidthClass, settingsContentInsetClass)}>
+          <div className={cn("mx-auto flex min-w-0 flex-col gap-6", settingsContentWidthClass, settingsContentInsetClass)}>
             <Card className="overflow-visible">
               <CardHeader className="pb-2">
                 <CardTitle>General</CardTitle>
