@@ -1694,17 +1694,19 @@ function SettingsScreen() {
               <CardPanel className="grid gap-6 pt-0">
                 {!modelReady && !showModelDownloadGauge ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="warning">Download required</Badge>
-                    <Button
-                      size="sm"
-                      className="shrink-0"
-                      disabled={snapshot.modelBusy}
-                      onClick={() => {
-                        void appStore.startManagedModelDownload();
-                      }}
-                    >
-                      <span className="text-white">Download model</span>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <SettingsStatusDot active={false} label="Model download required" />
+                      <Button
+                        size="sm"
+                        className="shrink-0"
+                        disabled={snapshot.modelBusy}
+                        onClick={() => {
+                          void appStore.startManagedModelDownload();
+                        }}
+                      >
+                        <span className="text-white">Download model</span>
+                      </Button>
+                    </div>
                     <p className="text-sm font-medium text-zinc-900">to start using.</p>
                   </div>
                 ) : null}
