@@ -3,6 +3,7 @@ name = "unsigned-char"
 version = "0.1.0"
 description = "A local-first meeting transcription desktop shell"
 authors = ["John Jeong"]
+license = "MIT"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
