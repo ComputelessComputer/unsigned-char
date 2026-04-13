@@ -7,6 +7,7 @@ mod speech_models;
 use std::{
     env,
     path::{Component, Path, PathBuf},
+    process::Command,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -21,8 +22,8 @@ use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
 use speech_models::{
     detect_device_profile, effective_transcription_mode, meeting_audio_file_name,
-    model_path_is_ready, normalize_batch_model, recommend_model, selected_model,
-    speech_model_spec, DeviceProfileState, SpeechModelId, TranscriptionMode,
+    model_path_is_ready, normalize_batch_model, recommend_model, selected_model, speech_model_spec,
+    DeviceProfileState, SpeechModelId, TranscriptionMode,
 };
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -39,6 +40,7 @@ const LEGACY_MODEL_SETTINGS_FILE: &str = "model-settings.json";
 const LEGACY_DIARIZATION_SETTINGS_FILE: &str = "diarization-settings.json";
 const OPEN_SETTINGS_MENU_ID: &str = "open-settings";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
+const CHAR_WEBSITE_URL: &str = "https://char.com";
 const PYANNOTE_PROVIDER_LABEL: &str = "pyannote.audio";
 const PYANNOTE_PIPELINE_REPO: &str = "pyannote/speaker-diarization-community-1";
 const HUGGING_FACE_TOKEN_ENV: &str = "HF_TOKEN";
@@ -475,6 +477,18 @@ fn open_settings_window<R: tauri::Runtime>(
     section: Option<String>,
 ) -> Result<(), String> {
     show_settings_window(&app, section.as_deref()).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn open_char_website() -> Result<(), String> {
+    let result = open_external_url(CHAR_WEBSITE_URL);
+
+    match &result {
+        Ok(()) => info!(url = CHAR_WEBSITE_URL, "Opened external URL"),
+        Err(message) => error!(url = CHAR_WEBSITE_URL, %message, "Failed to open external URL"),
+    }
+
+    result
 }
 
 #[tauri::command]
@@ -2037,12 +2051,12 @@ fn build_selected_model_status(
     }
 
     match processing_mode {
-        TranscriptionMode::Realtime => format!(
-            "Download {label} before starting live transcription."
-        ),
-        TranscriptionMode::Batch => format!(
-            "Download {label} before post-meeting batch transcription can run."
-        ),
+        TranscriptionMode::Realtime => {
+            format!("Download {label} before starting live transcription.")
+        }
+        TranscriptionMode::Batch => {
+            format!("Download {label} before post-meeting batch transcription can run.")
+        }
     }
 }
 
@@ -2542,6 +2556,40 @@ fn yaml_optional_string(value: Option<&str>) -> String {
         .unwrap_or_else(|| "null".to_string())
 }
 
+fn open_external_url(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return Command::new("open")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to open {url}: {error}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        return Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to open {url}: {error}"));
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        return Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("Failed to open {url}: {error}"));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]
+    {
+        Err(format!("Opening {url} is not supported on this platform."))
+    }
+}
+
 fn sanitize_path_component(input: &str) -> String {
     let mut output = String::with_capacity(input.len());
     let mut last_was_dash = false;
@@ -2587,6 +2635,7 @@ pub fn run() {
             request_permission,
             open_permission_settings,
             open_settings_window,
+            open_char_website,
             model_settings_state,
             managed_model_download_state,
             download_managed_model,

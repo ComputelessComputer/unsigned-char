@@ -8,8 +8,9 @@ import {
   useNavigate,
   useParams,
 } from "@tanstack/react-router";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, CircleAlert, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
 import {
   type MouseEvent,
   type ReactNode,
@@ -501,8 +502,43 @@ function DeleteMeetingDialog({
 
 const insetPanelClass =
   "rounded-[calc(var(--radius)-4px)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-4 py-3";
-const windowShellHeightClass = "h-[calc(100vh-2.5rem)]";
+const windowShellHeightClass = "h-full";
 const appWindow = getCurrentWindow();
+const isMainWindow = appWindow.label === "main";
+const CHAR_WEBSITE_HOST = "char.com";
+
+function MainWindowCharBanner() {
+  return (
+    <div className="px-4 pt-3 pb-4">
+      <div className="mx-auto max-w-[780px]">
+        <Button
+          type="button"
+          aria-label={`Open ${CHAR_WEBSITE_HOST}`}
+          data-window-drag="false"
+          className="h-auto w-full items-center justify-between gap-4 rounded-[calc(var(--radius)+2px)] border-zinc-950 bg-zinc-950 px-4 py-4 text-left text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)] hover:bg-zinc-900 data-pressed:bg-zinc-900"
+          onClick={() => {
+            void invoke("open_char_website").catch((error) => {
+              console.error("Failed to open Char website", error);
+            });
+          }}
+        >
+          <span className="min-w-0">
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+              Better transcription
+            </span>
+            <span className="mt-1 block text-sm font-medium leading-5 text-white">
+              If you want better transcription, start using Char.
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/12 bg-white/8 px-3 py-1 text-xs font-semibold tracking-[0.08em] text-white/80">
+            <span>{CHAR_WEBSITE_HOST}</span>
+            <ArrowUpRight className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
+          </span>
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 type SearchableOption = {
   value: string;
@@ -881,18 +917,19 @@ function RootLayout() {
   return (
     <div
       className={cn(
-        "relative isolate min-h-screen w-full text-zinc-900",
+        "relative isolate flex min-h-screen w-full flex-col text-zinc-900",
         isSettingsWindow && "bg-[linear-gradient(180deg,#fcfcfa_0%,var(--background)_48%,#f2f4f8_100%)]",
       )}
     >
       {isSettingsWindow ? (
         <WindowDragRegion className="absolute inset-x-0 top-0 z-20 h-10 w-full" />
       ) : (
-        <WindowDragRegion className="h-10 w-full" />
+        <WindowDragRegion className="h-10 w-full shrink-0" />
       )}
-      <div className={cn(isSettingsWindow ? "px-0" : "px-4")}>
+      <div className={cn("min-h-0 flex-1", isSettingsWindow ? "px-0" : "px-4")}>
         <Outlet />
       </div>
+      {isMainWindow ? <MainWindowCharBanner /> : null}
     </div>
   );
 }
@@ -1690,7 +1727,11 @@ function SettingsScreen() {
                 {!modelReady && !showModelDownloadGauge ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="flex items-center gap-2">
-                      <SettingsStatusDot active={false} label="Model download required" />
+                      <CircleAlert
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-rose-500"
+                        strokeWidth={2}
+                      />
                       <Button
                         size="sm"
                         className="shrink-0"
