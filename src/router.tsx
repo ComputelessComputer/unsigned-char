@@ -425,41 +425,43 @@ function MainWindowCharBanner() {
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-4 pb-4">
-      <div className="pointer-events-auto mx-auto max-w-[780px] rounded-[calc(var(--radius)+2px)] border border-zinc-950 bg-zinc-950 px-4 py-4 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)]">
-        <div className="min-w-0">
-          <span className="min-w-0">
-            <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
-              Better transcription
+    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40">
+      <div className="mx-auto w-full max-w-[780px]">
+        <div className="pointer-events-auto rounded-[calc(var(--radius)+2px)] border border-zinc-950 bg-zinc-950 px-4 py-4 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)]">
+          <div className="min-w-0">
+            <span className="min-w-0">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                Better transcription
+              </span>
+              <span className="mt-1 block text-sm font-medium leading-5 text-white">
+                If you want better transcription, start using Char.
+              </span>
             </span>
-            <span className="mt-1 block text-sm font-medium leading-5 text-white">
-              If you want better transcription, start using Char.
-            </span>
-          </span>
-          <div className="mt-4 flex items-center gap-2" data-window-drag="false">
-            <button
-              type="button"
-              className="inline-flex h-8 items-center justify-center rounded-[var(--radius-control)] border border-white bg-white px-3 text-sm font-medium shadow-none transition-colors hover:bg-zinc-100 active:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950"
-              style={{ color: "#18181b", WebkitTextFillColor: "#18181b" }}
-              onClick={() => {
-                void invoke("open_char_website").catch((error) => {
-                  console.error("Failed to open Char website", error);
-                });
-              }}
-            >
-              Start using
-            </button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="px-1 text-white/45 shadow-none hover:bg-transparent hover:text-white/70 data-pressed:bg-transparent data-pressed:text-white/70"
-              onClick={() => {
-                setDismissed(true);
-              }}
-            >
-              Dismiss
-            </Button>
+            <div className="mt-4 flex items-center gap-2" data-window-drag="false">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-[var(--radius-control)] border border-white bg-white px-3 text-sm font-medium shadow-none transition-colors hover:bg-zinc-100 active:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950"
+                style={{ color: "#18181b", WebkitTextFillColor: "#18181b" }}
+                onClick={() => {
+                  void invoke("open_char_website").catch((error) => {
+                    console.error("Failed to open Char website", error);
+                  });
+                }}
+              >
+                Start using
+              </button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="px-1 text-white/45 shadow-none hover:bg-transparent hover:text-white/70 data-pressed:bg-transparent data-pressed:text-white/70"
+                onClick={() => {
+                  setDismissed(true);
+                }}
+              >
+                Dismiss
+              </Button>
+            </div>
           </div>
         </div>
       </div>
