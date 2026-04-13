@@ -994,7 +994,7 @@ function MeetingScreen() {
 
       <div className="flex items-end justify-between gap-4">
         <NumberField
-          className="w-full max-w-[200px] shrink-0"
+          className="w-full max-w-[172px] shrink-0"
           disabled={snapshot.transcriptionBusy || snapshot.diarizationRunBusy}
           min={1}
           step={1}
@@ -1006,17 +1006,17 @@ function MeetingScreen() {
             );
           }}
         >
-          <NumberFieldGroup className="h-10">
-            <NumberFieldDecrement className="w-10" />
-            <div className="grid min-w-0 flex-1 grid-cols-[auto_auto] items-center justify-center gap-1.5 border-x border-[color:var(--border)] px-2.5 text-zinc-500">
-              <Users className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+          <NumberFieldGroup className="h-9">
+            <NumberFieldDecrement className="w-9" />
+            <div className="grid min-w-0 flex-1 grid-cols-[auto_auto] items-center justify-center gap-1 border-x border-[color:var(--border)] px-2 text-zinc-500">
+              <Users className="size-3.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
               <NumberFieldInput
                 placeholder="Auto"
                 aria-label="Participants"
-                className="w-[3rem] min-w-0 flex-none border-0 bg-transparent px-0 text-center placeholder:text-center"
+                className="w-[2.5rem] min-w-0 flex-none border-0 bg-transparent px-0 text-center text-sm placeholder:text-center"
               />
             </div>
-            <NumberFieldIncrement className="w-10" />
+            <NumberFieldIncrement className="w-9" />
           </NumberFieldGroup>
         </NumberField>
 
