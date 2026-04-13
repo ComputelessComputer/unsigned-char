@@ -25,6 +25,7 @@ import anthropicLogo from "./assets/provider-icons/anthropic.png";
 import brandWordmark from "./assets/brand-wordmark.svg";
 import googleLogo from "./assets/provider-icons/google.png";
 import lmStudioLogo from "./assets/provider-icons/lmstudio.png";
+import metaLogo from "./assets/provider-icons/meta.png";
 import nvidiaLogo from "./assets/provider-icons/nvidia.png";
 import ollamaLogo from "./assets/provider-icons/ollama.png";
 import openAILogo from "./assets/provider-icons/openai.png";
@@ -508,14 +509,20 @@ const isMainWindow = appWindow.label === "main";
 const CHAR_WEBSITE_HOST = "char.com";
 
 function MainWindowCharBanner() {
+  const [dismissed, setDismissed] = useState(false);
+
+  if (dismissed) {
+    return null;
+  }
+
   return (
     <div className="px-4 pt-3 pb-4">
-      <div className="mx-auto max-w-[780px]">
+      <div className="relative mx-auto max-w-[780px]">
         <Button
           type="button"
           aria-label={`Open ${CHAR_WEBSITE_HOST}`}
           data-window-drag="false"
-          className="h-auto w-full items-center justify-between gap-4 rounded-[calc(var(--radius)+2px)] border-zinc-950 bg-zinc-950 px-4 py-4 text-left text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)] hover:bg-zinc-900 data-pressed:bg-zinc-900"
+          className="h-auto w-full items-center justify-between gap-4 rounded-[calc(var(--radius)+2px)] border-zinc-950 bg-zinc-950 px-4 py-4 pr-14 text-left text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)] hover:bg-zinc-900 data-pressed:bg-zinc-900"
           onClick={() => {
             void invoke("open_char_website").catch((error) => {
               console.error("Failed to open Char website", error);
@@ -534,6 +541,20 @@ function MainWindowCharBanner() {
             <span>{CHAR_WEBSITE_HOST}</span>
             <ArrowUpRight className="size-3.5" strokeWidth={1.8} aria-hidden="true" />
           </span>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Dismiss Char banner"
+          data-window-drag="false"
+          className="absolute top-3 right-3 border border-white/10 bg-white/6 text-white/70 shadow-none hover:bg-white/12 hover:text-white data-pressed:bg-white/10"
+          onClick={(event) => {
+            event.stopPropagation();
+            setDismissed(true);
+          }}
+        >
+          <IconClose />
         </Button>
       </div>
     </div>
@@ -646,12 +667,14 @@ const summaryProviderLogoClassNames: Partial<Record<SummaryProviderId, string>> 
 };
 
 const batchModelLogos: Partial<Record<SpeechModelId, string>> = {
+  omnilingual: metaLogo,
   parakeetBatch: nvidiaLogo,
   qwen3Large: qwenLogo,
   qwen3Small: qwenLogo,
 };
 
 const batchModelLogoClassNames: Partial<Record<SpeechModelId, string>> = {
+  omnilingual: "size-6",
   parakeetBatch: "size-6",
   qwen3Large: "size-6",
   qwen3Small: "size-6",
@@ -1628,6 +1651,8 @@ function SettingsScreen() {
       searchTerms:
         option.id === "parakeetBatch"
           ? [option.label, "Parakeet Streaming", "streaming", "realtime", option.languagesLabel, "NVIDIA"]
+          : option.id === "omnilingual"
+            ? [option.languagesLabel, "Meta", "facebookresearch", "Omnilingual ASR"]
           : option.id.startsWith("qwen")
             ? [option.languagesLabel, "Qwen"]
             : [option.languagesLabel],
