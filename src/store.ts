@@ -19,6 +19,7 @@ export type OnboardingState = {
   reference: string;
   permissions: Record<PermissionKind, PermissionStatus>;
   ready: boolean;
+  runningInsideAppBundle: boolean;
 };
 
 export type TranscriptSource = "microphone" | "system" | "mixed";
@@ -1519,6 +1520,22 @@ function permissionLabel(permission: PermissionKind) {
   return permission === "microphone" ? "Microphone" : "System audio";
 }
 
+function permissionHostHint(permission: PermissionKind) {
+  if (state.onboarding?.runningInsideAppBundle !== false) {
+    return "";
+  }
+
+  return ` If no ${permissionLabel(permission).toLowerCase()} prompt appears, macOS may be treating the app that launched \`bun desktop:dev\` as the permission host instead of unsigned char. Check Warp, Ghostty, or Terminal, or run \`bun desktop\`.`;
+}
+
+function permissionDeniedMessage(permission: PermissionKind) {
+  return `${permissionLabel(permission)} access is off. Enable it in System Settings and try again.${permissionHostHint(permission)}`;
+}
+
+function permissionPendingMessage(permission: PermissionKind) {
+  return `${permissionLabel(permission)} permission request did not finish. Try again and allow access when prompted.${permissionHostHint(permission)}`;
+}
+
 async function requestPermissionForMeeting(permission: PermissionKind) {
   await refreshPermissions(true);
   const status = state.onboarding?.permissions[permission];
@@ -1528,7 +1545,7 @@ async function requestPermissionForMeeting(permission: PermissionKind) {
 
   if (status === "denied") {
     await invoke("open_permission_settings", { permission });
-    throw new Error(`${permissionLabel(permission)} access is off. Enable it in System Settings and try again.`);
+    throw new Error(permissionDeniedMessage(permission));
   }
 
   await invoke("request_permission", { permission });
@@ -1544,7 +1561,11 @@ async function requestPermissionForMeeting(permission: PermissionKind) {
   const nextStatus = state.onboarding?.permissions[permission];
   if (nextStatus === "denied") {
     await invoke("open_permission_settings", { permission });
-    throw new Error(`${permissionLabel(permission)} access is required to start a meeting.`);
+    throw new Error(permissionDeniedMessage(permission));
+  }
+
+  if (nextStatus !== "authorized") {
+    throw new Error(permissionPendingMessage(permission));
   }
 }
 

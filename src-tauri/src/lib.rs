@@ -60,6 +60,7 @@ struct OnboardingState {
     reference: String,
     permissions: PermissionSnapshot,
     ready: bool,
+    running_inside_app_bundle: bool,
 }
 
 #[derive(Deserialize)]
@@ -444,6 +445,14 @@ fn onboarding_state<R: tauri::Runtime>(
             .unwrap_or_else(|| model_settings.selected_model_local_path.clone()),
         ready: permissions.ready() && model_settings.selected_ready,
         permissions,
+        running_inside_app_bundle: is_running_inside_app_bundle(),
+    })
+}
+
+fn is_running_inside_app_bundle() -> bool {
+    env::current_exe().ok().is_some_and(|path| {
+        path.ancestors()
+            .any(|ancestor| ancestor.extension().and_then(|ext| ext.to_str()) == Some("app"))
     })
 }
 
