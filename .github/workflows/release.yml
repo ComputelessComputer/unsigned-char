@@ -89,6 +89,11 @@ jobs:
           cert_id="$(echo "$cert_info" | awk -F'"' '{print $2}')"
           echo "identity=$cert_id" >> "$GITHUB_OUTPUT"
 
+      - name: Reset SwiftPM artifacts
+        run: |
+          rm -rf "$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+          rm -rf src-tauri/swift-permissions/.build
+
       - name: Build signed release bundles
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
