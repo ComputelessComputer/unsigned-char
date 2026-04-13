@@ -965,8 +965,8 @@ function MeetingScreen() {
     (meeting.status === "live" && snapshot.transcriptionRunning);
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
-  const showSummaryCard =
-    !isMeetingListening && Boolean(meeting.summary || (summaryReady && transcriptLines.length > 0));
+  const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
+  const showSummaryAction = !isMeetingListening && summaryReady && transcriptLines.length > 0;
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
   const emptyTranscriptCopy =
     meeting.status === "live" && snapshot.modelSettings?.processingMode === "batch"
@@ -1087,37 +1087,19 @@ function MeetingScreen() {
                 <div className="space-y-1">
                   <CardTitle>Summary</CardTitle>
                   <CardDescription>
-                    {meeting.summary
-                      ? "Stored locally alongside the transcript export."
-                      : summaryReady
-                        ? "Generate a concise summary from the current transcript."
-                        : snapshot.summarySettings?.status ??
-                          "Configure an LLM provider in Settings to summarize transcripts."}
+                    Stored locally alongside the transcript export.
                   </CardDescription>
                 </div>
-                {meeting.summary ? (
-                  <CardAction>
-                    <StatusBadge tone="ready">saved</StatusBadge>
-                  </CardAction>
-                ) : null}
+                <CardAction>
+                  <StatusBadge tone="ready">saved</StatusBadge>
+                </CardAction>
               </CardHeader>
               <CardPanel className="pt-0">
-                {meeting.summary ? (
-                  <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
-                    {meeting.summary}
-                  </div>
-                ) : (
-                  <div
-                    className={cn(
-                      "rounded-[calc(var(--radius)-4px)] border border-dotted border-[color:var(--border-strong)] bg-[color:var(--secondary)] px-4 py-4 text-sm leading-6 text-zinc-600",
-                    )}
-                  >
-                    Transcript summaries are generated on demand and saved back into the meeting
-                    export.
-                  </div>
-                )}
+                <div className={cn(insetPanelClass, "whitespace-pre-wrap text-sm leading-6 text-zinc-800")}>
+                  {meeting.summary}
+                </div>
               </CardPanel>
-              <CardFooter className="justify-between">
+              <CardFooter className="justify-start">
                 <div className="text-xs leading-5 text-zinc-500">
                   {meeting.summaryUpdatedAt ? (
                     <span>
@@ -1125,33 +1107,25 @@ function MeetingScreen() {
                       {meeting.summaryModel ?? "model"} · Updated{" "}
                       {formatDateTime(meeting.summaryUpdatedAt)}
                     </span>
-                  ) : (
-                    <span>{transcriptLines.length} transcript {transcriptLines.length === 1 ? "line" : "lines"}</span>
-                  )}
-                </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  {!summaryReady ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        navigate({ to: "/settings" });
-                      }}
-                    >
-                      Open settings
-                    </Button>
                   ) : null}
-                  <Button
-                    disabled={!summaryReady || transcriptLines.length === 0 || snapshot.summaryMeetingId !== null}
-                    loading={isGeneratingSummary}
-                    onClick={() => {
-                      void appStore.generateMeetingSummary(meeting.id);
-                    }}
-                  >
-                    {meeting.summary ? "Regenerate summary" : "Generate summary"}
-                  </Button>
                 </div>
               </CardFooter>
             </Card>
+          ) : null}
+
+          {showSummaryAction ? (
+            <div className="flex justify-start">
+              <Button
+                size="sm"
+                disabled={snapshot.summaryMeetingId !== null}
+                loading={isGeneratingSummary}
+                onClick={() => {
+                  void appStore.generateMeetingSummary(meeting.id);
+                }}
+              >
+                Generate summary
+              </Button>
+            </div>
           ) : null}
 
           {transcriptLines.length === 0 ? (
