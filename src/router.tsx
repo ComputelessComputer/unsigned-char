@@ -1457,7 +1457,7 @@ function MeetingScreen() {
         <Button
           size="lg"
           variant={meeting.status === "live" ? "destructive" : "outline"}
-          className="w-full min-w-0"
+          className="w-full min-w-0 justify-self-stretch"
           disabled={snapshot.transcriptionBusy}
           loading={isStoppingMeeting}
           onClick={() => {
@@ -1481,14 +1481,14 @@ function MeetingScreen() {
         <Tooltip>
           {summaryActionDisabled ? (
             <TooltipTrigger
-              render={<span className="block w-full min-w-0" />}
+              render={<span className="block w-full min-w-0 justify-self-stretch" />}
               tabIndex={0}
               aria-label={summaryTooltipTitle}
             >
               <Button
                 size="lg"
                 variant="outline"
-                className="w-full min-w-0"
+                className="w-full min-w-0 justify-self-stretch"
                 disabled
                 loading={isGeneratingSummary}
               >
@@ -1501,7 +1501,7 @@ function MeetingScreen() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full min-w-0"
+                  className="w-full min-w-0 justify-self-stretch"
                   onClick={() => {
                     void appStore.generateMeetingSummary(meeting.id);
                   }}
