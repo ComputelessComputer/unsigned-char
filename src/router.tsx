@@ -1746,59 +1746,63 @@ function SettingsScreen() {
                   />
                 </Field>
 
-                <Field className="gap-3">
-                  <FieldLabel>Model</FieldLabel>
-                  <Input
-                    value={snapshot.summaryDraft.model}
-                    onChange={(event) => {
-                      appStore.setSummaryModel(event.target.value);
-                    }}
-                    placeholder={selectedSummaryProvider?.modelPlaceholder ?? "Model id"}
-                    disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel>Base URL</FieldLabel>
-                  <Input
-                    value={snapshot.summaryDraft.baseUrl}
-                    onChange={(event) => {
-                      appStore.setSummaryBaseUrl(event.target.value);
-                    }}
-                    placeholder={selectedSummaryProvider?.defaultBaseUrl || "https://example.com/v1"}
-                    disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
-                  />
-                </Field>
-
-                <Field>
-                  <FieldLabel>API key</FieldLabel>
-                  <div className="flex w-full flex-col gap-3 sm:flex-row">
-                    <Input
-                      className="flex-1"
-                      type="text"
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={snapshot.summaryDraft.apiKey}
-                      onChange={(event) => {
-                        appStore.setSummaryApiKey(event.target.value);
-                      }}
-                      placeholder={apiKeyPlaceholder}
-                      style={snapshot.summaryDraft.apiKey ? MASKED_TEXT_INPUT_STYLE : undefined}
-                      disabled={snapshot.summaryBusy || !snapshot.summaryDraft.provider}
-                    />
-                    {snapshot.summaryDraft.apiKeyPresent ? (
-                      <Button
-                        variant="secondary"
-                        disabled={snapshot.summaryBusy}
-                        onClick={() => {
-                          void appStore.removeSummaryApiKey();
+                {snapshot.summaryDraft.provider ? (
+                  <>
+                    <Field className="gap-3">
+                      <FieldLabel>Model</FieldLabel>
+                      <Input
+                        value={snapshot.summaryDraft.model}
+                        onChange={(event) => {
+                          appStore.setSummaryModel(event.target.value);
                         }}
-                      >
-                        Remove saved key
-                      </Button>
-                    ) : null}
-                  </div>
-                </Field>
+                        placeholder={selectedSummaryProvider?.modelPlaceholder ?? "Model id"}
+                        disabled={snapshot.summaryBusy}
+                      />
+                    </Field>
+
+                    <Field>
+                      <FieldLabel>Base URL</FieldLabel>
+                      <Input
+                        value={snapshot.summaryDraft.baseUrl}
+                        onChange={(event) => {
+                          appStore.setSummaryBaseUrl(event.target.value);
+                        }}
+                        placeholder={selectedSummaryProvider?.defaultBaseUrl || "https://example.com/v1"}
+                        disabled={snapshot.summaryBusy}
+                      />
+                    </Field>
+
+                    <Field>
+                      <FieldLabel>API key</FieldLabel>
+                      <div className="flex w-full flex-col gap-3 sm:flex-row">
+                        <Input
+                          className="flex-1"
+                          type="text"
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={snapshot.summaryDraft.apiKey}
+                          onChange={(event) => {
+                            appStore.setSummaryApiKey(event.target.value);
+                          }}
+                          placeholder={apiKeyPlaceholder}
+                          style={snapshot.summaryDraft.apiKey ? MASKED_TEXT_INPUT_STYLE : undefined}
+                          disabled={snapshot.summaryBusy}
+                        />
+                        {snapshot.summaryDraft.apiKeyPresent ? (
+                          <Button
+                            variant="secondary"
+                            disabled={snapshot.summaryBusy}
+                            onClick={() => {
+                              void appStore.removeSummaryApiKey();
+                            }}
+                          >
+                            Remove saved key
+                          </Button>
+                        ) : null}
+                      </div>
+                    </Field>
+                  </>
+                ) : null}
 
               </CardPanel>
               <CardFooter>
