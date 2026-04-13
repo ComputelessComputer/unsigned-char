@@ -626,7 +626,6 @@ const batchModelLogoClassNames: Partial<Record<SpeechModelId, string>> = {
 };
 
 const summaryProviderOptions: readonly SearchableOption[] = [
-  { value: "", label: "Disabled", detail: "Off", icon: "disabled" },
   ...SUMMARY_PROVIDERS.map((provider): SearchableOption => ({
     value: provider.id,
     label: provider.label,
@@ -1759,9 +1758,23 @@ function SettingsScreen() {
                   <SettingsStatusDot active={summaryStatusActive} label={summaryStatusLabel} />
                 </div>
               </CardHeader>
-              <CardPanel className="grid gap-6 pt-0">
-                <div className="grid gap-3">
+            <CardPanel className="grid gap-6 pt-0">
+              <div className="grid gap-3">
+                <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-zinc-950">Provider</p>
+                  {snapshot.summaryDraft.provider ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={snapshot.summaryBusy}
+                      onClick={() => {
+                        appStore.setSummaryProvider("");
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
                   <SettingsSelect
                     ariaLabel="Summary provider"
                     value={snapshot.summaryDraft.provider}
