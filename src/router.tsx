@@ -165,6 +165,18 @@ function LiveIndicator({ className }: { className?: string }) {
   );
 }
 
+function BottomBannerShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40">
+      <div className="mx-auto w-full max-w-[780px]">
+        <div className="pointer-events-auto rounded-[calc(var(--radius)+2px)] border border-zinc-950 bg-zinc-950 px-4 py-4 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DiarizationActivityBanner({
   message,
   minimized,
@@ -194,39 +206,22 @@ function DiarizationActivityBanner({
   }
 
   const completion = phase === "done";
+  const bannerCopy = completion
+    ? message ?? "Speaker identification finished."
+    : "Speaker identification in progress.";
 
   return (
-    <Card className="overflow-visible border-zinc-900/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,244,245,0.98))]">
-      <CardHeader className="flex-row items-start justify-between gap-4 pb-3">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={completion ? "success" : "secondary"} size="sm">
-              {completion ? "Completed" : "Background task"}
-            </Badge>
-            {completion ? (
-              <div className="text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
-                Speaker turns updated
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
-                <Spinner className="size-3.5 text-zinc-700" />
-                <span>Running now</span>
-              </div>
-            )}
-          </div>
-          <CardTitle className="text-base">
-            {completion ? "Speaker identification finished" : "Speaker identification is happening"}
-          </CardTitle>
-          <CardDescription>
-            {completion && message
-              ? message
-              : "unsigned char is mapping this transcript to speakers in the background. You can keep reading while it finishes."}
-          </CardDescription>
+    <BottomBannerShell>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          {!completion ? <Spinner className="size-4 shrink-0 text-white/80" /> : null}
+          <p className="min-w-0 text-sm font-medium leading-5 text-white">{bannerCopy}</p>
         </div>
         <div data-window-drag="false">
           <Button
             variant="ghost"
             size="icon-sm"
+            className="text-white/45 shadow-none hover:bg-transparent hover:text-white/70 data-pressed:bg-transparent data-pressed:text-white/70"
             aria-label={
               completion
                 ? "Dismiss speaker identification notice"
@@ -237,18 +232,8 @@ function DiarizationActivityBanner({
             {completion ? <IconClose /> : <ChevronDown className="size-4" strokeWidth={1.8} />}
           </Button>
         </div>
-      </CardHeader>
-      <CardFooter className="justify-between gap-3 bg-black/[0.02] text-sm text-zinc-600">
-        <div className="flex items-center gap-2 text-zinc-700">
-          <Users className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
-          <span>
-            {completion
-              ? "Speaker labels are now attached to the transcript below."
-              : "Speaker turns will appear here once identification is complete."}
-          </span>
-        </div>
-      </CardFooter>
-    </Card>
+      </div>
+    </BottomBannerShell>
   );
 }
 
@@ -531,54 +516,54 @@ const appWindow = getCurrentWindow();
 const isMainWindow = appWindow.label === "main";
 
 function MainWindowCharBanner() {
+  const snapshot = useAppState();
   const [dismissed, setDismissed] = useState(false);
+  const diarizationActive =
+    snapshot.diarizationMeetingId !== null &&
+    (snapshot.diarizationRunBusy || Boolean(snapshot.diarizationBannerMessage));
 
-  if (dismissed) {
+  if (dismissed || diarizationActive) {
     return null;
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40">
-      <div className="mx-auto w-full max-w-[780px]">
-        <div className="pointer-events-auto rounded-[calc(var(--radius)+2px)] border border-zinc-950 bg-zinc-950 px-4 py-4 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)]">
-          <div className="min-w-0">
-            <span className="min-w-0">
-              <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
-                Better transcription
-              </span>
-              <span className="mt-1 block text-sm font-medium leading-5 text-white">
-                If you want better transcription, start using Char.
-              </span>
-            </span>
-            <div className="mt-4 flex items-center gap-2" data-window-drag="false">
-              <button
-                type="button"
-                className="inline-flex h-8 items-center justify-center rounded-[var(--radius-control)] border border-white bg-white px-3 text-sm font-medium shadow-none transition-colors hover:bg-zinc-100 active:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950"
-                style={{ color: "#18181b", WebkitTextFillColor: "#18181b" }}
-                onClick={() => {
-                  void invoke("open_char_website").catch((error) => {
-                    console.error("Failed to open Char website", error);
-                  });
-                }}
-              >
-                Start using
-              </button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="px-1 text-white/45 shadow-none hover:bg-transparent hover:text-white/70 data-pressed:bg-transparent data-pressed:text-white/70"
-                onClick={() => {
-                  setDismissed(true);
-                }}
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
+    <BottomBannerShell>
+      <div className="min-w-0">
+        <span className="min-w-0">
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+            Better transcription
+          </span>
+          <span className="mt-1 block text-sm font-medium leading-5 text-white">
+            If you want better transcription, start using Char.
+          </span>
+        </span>
+        <div className="mt-4 flex items-center gap-2" data-window-drag="false">
+          <button
+            type="button"
+            className="inline-flex h-8 items-center justify-center rounded-[var(--radius-control)] border border-white bg-white px-3 text-sm font-medium shadow-none transition-colors hover:bg-zinc-100 active:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950"
+            style={{ color: "#18181b", WebkitTextFillColor: "#18181b" }}
+            onClick={() => {
+              void invoke("open_char_website").catch((error) => {
+                console.error("Failed to open Char website", error);
+              });
+            }}
+          >
+            Start using
+          </button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="px-1 text-white/45 shadow-none hover:bg-transparent hover:text-white/70 data-pressed:bg-transparent data-pressed:text-white/70"
+            onClick={() => {
+              setDismissed(true);
+            }}
+          >
+            Dismiss
+          </Button>
         </div>
       </div>
-    </div>
+    </BottomBannerShell>
   );
 }
 
@@ -1291,6 +1276,7 @@ function MeetingScreen() {
     snapshot.diarizationRunBusy && snapshot.diarizationMeetingId === meeting.id ? "running" : "done";
   const diarizationIndicatorMinimized =
     showDiarizationActivity && diarizationBannerPhase === "running" && snapshot.diarizationIndicatorMinimized;
+  const showDiarizationBottomBanner = showDiarizationActivity && !diarizationIndicatorMinimized;
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
   const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
@@ -1503,25 +1489,23 @@ function MeetingScreen() {
       </div>
 
       {showDiarizationActivity ? (
-        <div className="shrink-0">
-          <DiarizationActivityBanner
-            message={snapshot.diarizationBannerMessage}
-            minimized={diarizationIndicatorMinimized}
-            phase={diarizationBannerPhase}
-            onClose={() => {
-              appStore.dismissDiarizationBanner(meeting.id);
-            }}
-            onMinimize={() => {
-              appStore.setDiarizationIndicatorMinimized(true);
-            }}
-            onExpand={() => {
-              appStore.setDiarizationIndicatorMinimized(false);
-            }}
-          />
-        </div>
+        <DiarizationActivityBanner
+          message={snapshot.diarizationBannerMessage}
+          minimized={diarizationIndicatorMinimized}
+          phase={diarizationBannerPhase}
+          onClose={() => {
+            appStore.dismissDiarizationBanner(meeting.id);
+          }}
+          onMinimize={() => {
+            appStore.setDiarizationIndicatorMinimized(true);
+          }}
+          onExpand={() => {
+            appStore.setDiarizationIndicatorMinimized(false);
+          }}
+        />
       ) : null}
 
-      <div className="-mx-4 min-h-0 flex-1 pb-4">
+      <div className={cn("-mx-4 min-h-0 flex-1 pb-4", showDiarizationBottomBanner && "pb-24")}>
         <div className="relative h-full min-h-0">
           <div
             className="h-full overflow-y-auto"
