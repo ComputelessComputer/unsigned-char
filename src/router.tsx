@@ -962,7 +962,24 @@ function HomeScreen() {
   const snapshot = useAppState();
   const navigate = useNavigate();
   const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
-  const meetings = sortedMeetings(snapshot.meetings);
+  const meetings = useMemo(() => {
+    const nextMeetings = sortedMeetings(snapshot.meetings);
+    const activeMeetingId = snapshot.recordingMeetingId;
+
+    if (!activeMeetingId) {
+      return nextMeetings;
+    }
+
+    const activeMeetingIndex = nextMeetings.findIndex((meeting) => meeting.id === activeMeetingId);
+
+    if (activeMeetingIndex <= 0) {
+      return nextMeetings;
+    }
+
+    const [activeMeeting] = nextMeetings.splice(activeMeetingIndex, 1);
+    nextMeetings.unshift(activeMeeting);
+    return nextMeetings;
+  }, [snapshot.meetings, snapshot.recordingMeetingId]);
   const setupBanner = currentSetupBannerContent(snapshot);
   const showModelDownloadGauge =
     snapshot.modelBusy || snapshot.modelDownload?.status === "downloading";
@@ -1078,6 +1095,12 @@ function HomeScreen() {
             ) : (
               <div className="space-y-3">
                 {meetings.map((meeting) => {
+                  const isCurrentMeeting = snapshot.recordingMeetingId === meeting.id;
+                  const inProgressLabel = snapshot.transcriptionStopping
+                    ? "Finishing"
+                    : snapshot.startMeetingBusy && !snapshot.transcriptionRunning
+                      ? "Starting"
+                      : "In progress";
                   const deleteDisabled = isMeetingDeleteDisabled(
                     meeting,
                     snapshot.transcriptionBusy,
@@ -1094,12 +1117,18 @@ function HomeScreen() {
 
                   return (
                     <div key={meeting.id} className="relative">
-                      <Card className="transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]">
+                      <Card
+                        className={cn(
+                          "transition hover:-translate-y-px hover:shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(15,23,42,0.1)]",
+                          isCurrentMeeting &&
+                            "border-rose-200 bg-[linear-gradient(180deg,rgba(255,241,242,0.96)_0%,rgba(255,255,255,0.98)_100%)] shadow-[0_1px_2px_rgba(15,23,42,0.08),0_22px_46px_rgba(244,63,94,0.12)]",
+                        )}
+                      >
                         <Button
                           type="button"
                           variant="ghost"
                           className="absolute inset-0 z-10 h-auto w-full rounded-[calc(var(--radius)+2px)] border-transparent bg-transparent p-0 text-left shadow-none hover:bg-transparent data-pressed:bg-transparent"
-                          aria-label={`Open ${meeting.title}`}
+                          aria-label={`Open ${meeting.title}${isCurrentMeeting ? ", currently in progress" : ""}`}
                           onClick={() => {
                             navigate({
                               to: "/meeting/$meetingId",
@@ -1120,7 +1149,18 @@ function HomeScreen() {
                         />
                         <CardPanel className="p-4">
                           <div className="flex min-w-0 flex-col gap-1.5">
-                            <p className="text-sm text-zinc-600">{formatDateTime(meeting.createdAt)}</p>
+                            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-zinc-600">
+                              <p className="min-w-0 truncate">{formatDateTime(meeting.createdAt)}</p>
+                              {isCurrentMeeting ? (
+                                <Badge
+                                  variant="outline"
+                                  className="gap-1.5 rounded-full border-rose-200 bg-rose-50 px-2.5 text-[11px] font-semibold text-rose-700"
+                                >
+                                  <LiveIndicator className="size-2.5" />
+                                  <span>{inProgressLabel}</span>
+                                </Badge>
+                              ) : null}
+                            </div>
                             <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
                               {meeting.title}
                             </h2>
