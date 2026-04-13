@@ -210,6 +210,14 @@ function StatusBadge({
   );
 }
 
+function modelCapabilityLabel(processingMode: "realtime" | "batch") {
+  return processingMode === "realtime" ? "Realtime" : "Batch only";
+}
+
+function modelCapabilityBadgeVariant(processingMode: "realtime" | "batch") {
+  return processingMode === "realtime" ? "info" : "outline";
+}
+
 function getModelDownloadProgressPercent(download: ManagedModelDownloadState | null) {
   if (!download?.totalBytes || download.totalBytes <= 0) {
     return null;
@@ -1539,6 +1547,37 @@ function SettingsScreen() {
                     searchPlaceholder="Search model..."
                     disabled={snapshot.modelBusy || downloadStatus === "downloading"}
                   />
+                </div>
+
+                <div className={cn(insetPanelClass, "space-y-3")}>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                      Available models
+                    </p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-600">
+                      Realtime uses streaming-capable models. Batch runs after the meeting ends.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    {modelSettings.availableModels.map((option) => (
+                      <div
+                        key={option.id}
+                        className="rounded-[calc(var(--radius)-6px)] border border-[color:var(--border)] bg-white/70 px-3 py-3"
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-zinc-950">{option.label}</p>
+                          <Badge variant={modelCapabilityBadgeVariant(option.processingMode)}>
+                            {modelCapabilityLabel(option.processingMode)}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-zinc-600">{option.detail}</p>
+                        <p className="mt-1 text-sm text-zinc-500">
+                          {option.languagesLabel} · {option.sizeLabel}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className={cn(insetPanelClass, "space-y-3")}>
