@@ -85,6 +85,10 @@ export type DeviceProfile = {
   memoryGb: number;
 };
 
+export function batchModelSupportsRealtime(modelId: SpeechModelId) {
+  return modelId === "parakeetBatch";
+}
+
 export type ManagedModelDownloadStatus = "idle" | "downloading" | "ready" | "error";
 
 export type ManagedModelDownloadState = {
@@ -2355,7 +2359,13 @@ function setBatchModel(batchModelId: SpeechModelId) {
     return;
   }
 
-  void saveModelSettings({ batchModelId });
+  void saveModelSettings({
+    batchModelId,
+    processingMode:
+      state.modelSettings.processingMode === "realtime" && !batchModelSupportsRealtime(batchModelId)
+        ? "batch"
+        : state.modelSettings.processingMode,
+  });
 }
 
 function setMainLanguage(mainLanguage: string) {

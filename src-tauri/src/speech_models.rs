@@ -56,6 +56,10 @@ impl SpeechModelId {
     pub fn is_batch_capable(self) -> bool {
         !matches!(self, Self::ParakeetStreaming)
     }
+
+    pub fn supports_realtime(self) -> bool {
+        matches!(self, Self::ParakeetStreaming | Self::ParakeetBatch)
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -83,9 +87,22 @@ pub struct ModelRecommendation {
 }
 
 pub fn selected_model(mode: TranscriptionMode, batch_model_id: SpeechModelId) -> SpeechModelId {
-    match mode {
+    match effective_transcription_mode(mode, batch_model_id) {
         TranscriptionMode::Realtime => SpeechModelId::ParakeetStreaming,
         TranscriptionMode::Batch => normalize_batch_model(batch_model_id),
+    }
+}
+
+pub fn effective_transcription_mode(
+    mode: TranscriptionMode,
+    batch_model_id: SpeechModelId,
+) -> TranscriptionMode {
+    let batch_model_id = normalize_batch_model(batch_model_id);
+
+    if matches!(mode, TranscriptionMode::Realtime) && !batch_model_id.supports_realtime() {
+        TranscriptionMode::Batch
+    } else {
+        mode
     }
 }
 

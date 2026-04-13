@@ -50,6 +50,7 @@ import { useScrollFade } from "./hooks/useScrollFade";
 import {
   LANGUAGE_OPTIONS,
   appStore,
+  batchModelSupportsRealtime,
   currentSetupBannerContent,
   formatClockSeconds,
   formatDateTime,
@@ -260,26 +261,30 @@ function ProcessingModeToggle({
   value,
   onChange,
   disabled = false,
+  supported = true,
 }: {
   value: "realtime" | "batch";
   onChange: (value: "realtime" | "batch") => void;
   disabled?: boolean;
+  supported?: boolean;
 }) {
-  const realtimeEnabled = value === "realtime";
+  const realtimeEnabled = supported && value === "realtime";
+  const interactionDisabled = disabled || !supported;
 
   return (
     <button
       type="button"
       role="switch"
       aria-checked={realtimeEnabled}
-      disabled={disabled}
+      disabled={interactionDisabled}
       className={cn(
         "flex w-full items-center justify-between gap-4 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-4 py-4 text-left shadow-[0_1px_0_rgba(255,255,255,0.85)] transition",
         "hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]",
         disabled && "cursor-not-allowed opacity-60",
+        !supported && "cursor-not-allowed",
       )}
       onClick={() => {
-        if (disabled) {
+        if (interactionDisabled) {
           return;
         }
 
@@ -289,14 +294,16 @@ function ProcessingModeToggle({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold text-zinc-950">Realtime transcription</p>
-          <Badge variant={realtimeEnabled ? "info" : "outline"}>
-            {realtimeEnabled ? "On" : "Off"}
+          <Badge variant={supported ? (realtimeEnabled ? "info" : "outline") : "outline"}>
+            {supported ? (realtimeEnabled ? "On" : "Off") : "Batch only"}
           </Badge>
         </div>
         <p className="mt-1 text-sm leading-6 text-zinc-600">
-          {realtimeEnabled
-            ? "Streaming in real time while you record."
-            : "Processed after the meeting ends."}
+          {!supported
+            ? "This model runs after the meeting ends."
+            : realtimeEnabled
+              ? "Streaming in real time while you record."
+              : "Processed after the meeting ends."}
         </p>
       </div>
 
@@ -1599,6 +1606,7 @@ function SettingsScreen() {
           ? [option.label, "Parakeet Streaming", "streaming", "realtime", option.languagesLabel]
           : [option.languagesLabel],
     }));
+  const selectedBatchSupportsRealtime = batchModelSupportsRealtime(modelSettings.batchModelId);
   const recommendedModel = modelSettings.availableModels.find(
     (option) => option.id === modelSettings.recommendedModelId,
   );
@@ -1696,26 +1704,27 @@ function SettingsScreen() {
               </CardHeader>
               <CardPanel className="grid gap-6 pt-0">
                 <div className="grid gap-3">
-                  <p className="text-sm font-semibold text-zinc-950">Realtime</p>
-                  <ProcessingModeToggle
-                    value={snapshot.modelSettings.processingMode}
-                    onChange={appStore.setProcessingMode}
-                    disabled={snapshot.modelBusy || downloadStatus === "downloading"}
-                  />
-                </div>
-
-                <div className="grid gap-3">
-                  <p className="text-sm font-semibold text-zinc-950">Batch model</p>
+                  <p className="text-sm font-semibold text-zinc-950">Model</p>
                   <SearchableSelect
-                    ariaLabel="Batch model"
+                    ariaLabel="Model"
                     value={snapshot.modelSettings.batchModelId}
                     onChange={(nextValue) => {
                       appStore.setBatchModel(nextValue as typeof snapshot.modelSettings.batchModelId);
                     }}
                     options={batchModelOptions}
-                    placeholder="Select batch model"
+                    placeholder="Select model"
                     searchPlaceholder="Search model..."
                     disabled={snapshot.modelBusy || downloadStatus === "downloading"}
+                  />
+                </div>
+
+                <div className="grid gap-3">
+                  <p className="text-sm font-semibold text-zinc-950">Realtime</p>
+                  <ProcessingModeToggle
+                    value={snapshot.modelSettings.processingMode}
+                    onChange={appStore.setProcessingMode}
+                    disabled={snapshot.modelBusy || downloadStatus === "downloading"}
+                    supported={selectedBatchSupportsRealtime}
                   />
                 </div>
 
@@ -1761,21 +1770,6 @@ function SettingsScreen() {
                     <p className="text-sm text-zinc-500">{setupBanner.detail}</p>
                   ) : null}
                 </div>
-
-                <p className="text-sm leading-6 text-zinc-600">
-                  Model id: <code>{snapshot.modelSettings.selectedModelRepo}</code>
-                </p>
-
-                {(snapshot.modelDownload?.localPath || snapshot.modelSettings.selectedModelLocalPath) ? (
-                  <div className={cn(insetPanelClass)}>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                      Storage
-                    </p>
-                    <code className="mt-1 block break-all text-xs text-zinc-700">
-                      {snapshot.modelDownload?.localPath || snapshot.modelSettings.selectedModelLocalPath}
-                    </code>
-                  </div>
-                ) : null}
               </CardPanel>
               {!modelReady ? (
                 <CardFooter className="border-t-0 pt-0">

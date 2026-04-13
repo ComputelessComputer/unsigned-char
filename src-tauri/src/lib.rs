@@ -20,9 +20,9 @@ use asr::{
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
 use speech_models::{
-    detect_device_profile, meeting_audio_file_name, model_path_is_ready, normalize_batch_model,
-    recommend_model, selected_model, speech_model_spec, DeviceProfileState, SpeechModelId,
-    TranscriptionMode,
+    detect_device_profile, effective_transcription_mode, meeting_audio_file_name,
+    model_path_is_ready, normalize_batch_model, recommend_model, selected_model,
+    speech_model_spec, DeviceProfileState, SpeechModelId, TranscriptionMode,
 };
 use tauri::{
     menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
@@ -331,9 +331,14 @@ struct LocalDiarizationResult {
 
 impl StoredModelSettings {
     fn from_input(input: SaveModelSettingsInput) -> Result<Self, String> {
+        let batch_model_id = normalize_batch_model(input.batch_model_id);
+
         Ok(Self {
-            processing_mode: Some(input.processing_mode),
-            batch_model_id: Some(normalize_batch_model(input.batch_model_id)),
+            processing_mode: Some(effective_transcription_mode(
+                input.processing_mode,
+                batch_model_id,
+            )),
+            batch_model_id: Some(batch_model_id),
         })
     }
 
@@ -1170,9 +1175,14 @@ fn show_settings_window<R: tauri::Runtime>(
 }
 
 fn effective_model_settings(settings: &StoredModelSettings) -> StoredModelSettings {
+    let batch_model_id = settings.batch_model_id();
+
     StoredModelSettings {
-        processing_mode: Some(settings.processing_mode()),
-        batch_model_id: Some(settings.batch_model_id()),
+        processing_mode: Some(effective_transcription_mode(
+            settings.processing_mode(),
+            batch_model_id,
+        )),
+        batch_model_id: Some(batch_model_id),
     }
 }
 
