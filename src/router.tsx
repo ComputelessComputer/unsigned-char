@@ -847,11 +847,7 @@ function RootLayout() {
       )}
     >
       {isSettingsWindow ? (
-        <WindowDragRegion className="absolute inset-x-0 top-0 z-20 flex h-10 w-full items-center justify-center px-16">
-          <span className="pointer-events-none max-w-full select-none truncate text-[15px] font-semibold tracking-[-0.01em] text-zinc-800/90">
-            Settings
-          </span>
-        </WindowDragRegion>
+        <WindowDragRegion className="absolute inset-x-0 top-0 z-20 h-10 w-full" />
       ) : (
         <WindowDragRegion className="h-10 w-full" />
       )}
@@ -1449,11 +1445,24 @@ function SettingsScreen() {
   const [targetSettingsSection, setTargetSettingsSection] = useState<string | null>(() =>
     readTargetSettingsSection(),
   );
+  const [settingsScrollTop, setSettingsScrollTop] = useState(0);
   const settingsLoadNote =
     snapshot.permissionNote || snapshot.generalNote || snapshot.summaryNote;
   const settingsContentWidthClass = isSettingsWindow ? "max-w-[640px]" : "max-w-[760px]";
   const settingsShellHeightClass = isSettingsWindow ? "h-screen" : windowShellHeightClass;
   const settingsContentInsetClass = isSettingsWindow ? "px-5 pt-12 pb-6" : "px-5 pt-5 pb-6";
+  const settingsTitleOpacity = isSettingsWindow ? Math.max(0, 1 - settingsScrollTop / 24) : 1;
+  const settingsTitle = isSettingsWindow ? (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-x-0 top-0 z-30 flex h-10 items-center justify-center px-16"
+      style={{ opacity: settingsTitleOpacity }}
+    >
+      <span className="max-w-full select-none truncate text-[15px] font-semibold tracking-[-0.01em] text-zinc-800/90">
+        Settings
+      </span>
+    </div>
+  ) : null;
 
   useEffect(() => {
     const syncTargetSection = () => {
@@ -1485,6 +1494,7 @@ function SettingsScreen() {
   if (!snapshot.generalSettings || !snapshot.summarySettings || !snapshot.modelSettings) {
     return (
       <section className={cn("mx-auto flex items-center", settingsContentWidthClass, settingsShellHeightClass)}>
+        {settingsTitle}
         <Card className="w-full">
           <CardHeader className="px-8 py-8">
             <CardTitle>{settingsLoadNote ? "Could not load settings" : "Loading preferences..."}</CardTitle>
@@ -1562,8 +1572,18 @@ function SettingsScreen() {
 
   return (
     <section className={cn("flex min-h-0 flex-col", settingsShellHeightClass)}>
+      {settingsTitle}
       <div className="relative -mx-4 min-h-0 flex-1">
-        <div className="h-full overflow-y-auto">
+        <div
+          className="h-full overflow-y-auto"
+          onScroll={(event) => {
+            if (!isSettingsWindow) {
+              return;
+            }
+
+            setSettingsScrollTop(event.currentTarget.scrollTop);
+          }}
+        >
           <div className={cn("mx-auto flex flex-col gap-6", settingsContentWidthClass, settingsContentInsetClass)}>
             <Card id={AI_SUMMARIES_SETTINGS_SECTION_ID} className="overflow-visible">
               <CardHeader className="pb-2">
