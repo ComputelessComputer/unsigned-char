@@ -522,6 +522,7 @@ type SearchableOption = {
   detail?: string;
   icon?: "parakeet" | "omnilingual" | "qwen" | "cloud" | "local" | "custom" | "disabled";
   logoSrc?: string;
+  logoClassName?: string;
   badges?: readonly {
     label: string;
     variant: "default" | "secondary" | "outline" | "success" | "warning" | "destructive" | "info";
@@ -532,15 +533,20 @@ type SearchableOption = {
 function SearchableOptionPrefix({
   icon,
   logoSrc,
+  logoClassName,
 }: {
   icon?: SearchableOption["icon"];
   logoSrc?: string;
+  logoClassName?: string;
 }) {
   if (logoSrc) {
     return (
-      <span className="inline-flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full border border-black/5 bg-white p-1">
-        <img src={logoSrc} alt="" aria-hidden="true" className="size-4 object-contain" />
-      </span>
+      <img
+        src={logoSrc}
+        alt=""
+        aria-hidden="true"
+        className={cn("size-7 shrink-0 object-contain", logoClassName)}
+      />
     );
   }
 
@@ -548,7 +554,7 @@ function SearchableOptionPrefix({
     return null;
   }
 
-  const iconClassName = "size-4";
+  const iconClassName = "size-5";
 
   const content = {
     cloud: <Cloud className={iconClassName} strokeWidth={1.8} aria-hidden="true" />,
@@ -561,22 +567,17 @@ function SearchableOptionPrefix({
   } satisfies Record<NonNullable<SearchableOption["icon"]>, ReactNode>;
 
   const toneClassName = {
-    cloud: "bg-sky-50 text-sky-700",
-    custom: "bg-zinc-100 text-zinc-700",
-    disabled: "bg-zinc-100 text-zinc-500",
-    local: "bg-emerald-50 text-emerald-700",
-    omnilingual: "bg-amber-50 text-amber-700",
-    parakeet: "bg-cyan-50 text-cyan-700",
-    qwen: "bg-violet-50 text-violet-700",
+    cloud: "text-sky-700",
+    custom: "text-zinc-700",
+    disabled: "text-zinc-500",
+    local: "text-emerald-700",
+    omnilingual: "text-amber-700",
+    parakeet: "text-cyan-700",
+    qwen: "text-violet-700",
   } satisfies Record<NonNullable<SearchableOption["icon"]>, string>;
 
   return (
-    <span
-      className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-black/5",
-        toneClassName[icon],
-      )}
-    >
+    <span className={cn("inline-flex size-7 shrink-0 items-center justify-center", toneClassName[icon])}>
       {content[icon]}
     </span>
   );
@@ -591,6 +592,12 @@ const summaryProviderLogos: Partial<Record<SummaryProviderId, string>> = {
   openrouter: openRouterLogo,
 };
 
+const summaryProviderLogoClassNames: Partial<Record<SummaryProviderId, string>> = {
+  lmstudio: "size-6",
+  ollama: "size-6",
+  openrouter: "size-6",
+};
+
 const summaryProviderOptions: readonly SearchableOption[] = [
   { value: "", label: "Disabled", detail: "Off", icon: "disabled" },
   ...SUMMARY_PROVIDERS.map((provider): SearchableOption => ({
@@ -599,6 +606,7 @@ const summaryProviderOptions: readonly SearchableOption[] = [
     detail: provider.detail,
     icon: provider.id === "custom" ? "custom" : undefined,
     logoSrc: summaryProviderLogos[provider.id],
+    logoClassName: summaryProviderLogoClassNames[provider.id],
   })),
 ];
 
@@ -740,7 +748,11 @@ function SearchableSelect({
         }}
       >
         <span className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden">
-          <SearchableOptionPrefix icon={selectedOption?.icon} logoSrc={selectedOption?.logoSrc} />
+          <SearchableOptionPrefix
+            icon={selectedOption?.icon}
+            logoSrc={selectedOption?.logoSrc}
+            logoClassName={selectedOption?.logoClassName}
+          />
           <span className={cn("min-w-0 flex-1 truncate", !selectedOption && "text-zinc-500")}>
             {selectedOption ? selectedOption.label : placeholder}
           </span>
@@ -802,7 +814,11 @@ function SearchableSelect({
                   }}
                 >
                   <span className="flex min-w-0 flex-1 items-center gap-3">
-                    <SearchableOptionPrefix icon={option.icon} logoSrc={option.logoSrc} />
+                    <SearchableOptionPrefix
+                      icon={option.icon}
+                      logoSrc={option.logoSrc}
+                      logoClassName={option.logoClassName}
+                    />
                     <span className="min-w-0 flex-1 truncate">{option.label}</span>
                     {option.badges?.length ? (
                       <span className="shrink-0 items-center gap-1 inline-flex">
