@@ -1278,6 +1278,70 @@ function SettingsScreen() {
         <div className="h-full overflow-y-auto">
           <div className={cn("mx-auto flex flex-col gap-6 px-5 pt-5 pb-6", settingsContentWidthClass)}>
             <Card className="overflow-visible">
+              <CardHeader>
+                <CardTitle>Preferences</CardTitle>
+                <CardDescription>Language and timeline defaults for the local app.</CardDescription>
+              </CardHeader>
+              <CardPanel className="grid gap-6 pt-0">
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),180px] md:items-center">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-950">Main language</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-600">
+                      Language for summaries, chats, and AI-generated responses
+                    </p>
+                  </div>
+                  <SearchableSelect
+                    ariaLabel="Main language"
+                    value={snapshot.generalDraft.mainLanguage}
+                    onChange={appStore.setMainLanguage}
+                    options={LANGUAGE_OPTIONS}
+                    placeholder="Select language"
+                    searchPlaceholder="Search language..."
+                    disabled={snapshot.generalBusy}
+                  />
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),220px] md:items-center">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-950">Timezone</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-600">
+                      Override the timezone used for the sidebar timeline
+                    </p>
+                  </div>
+                  <SearchableSelect
+                    ariaLabel="Timezone"
+                    value={snapshot.generalDraft.timezone || systemTimezone}
+                    onChange={(nextValue) => {
+                      appStore.setTimezone(nextValue === systemTimezone ? "" : nextValue);
+                    }}
+                    options={timezoneOptions}
+                    placeholder={`System default (${systemTimezone})`}
+                    searchPlaceholder="Search timezone..."
+                    disabled={snapshot.generalBusy}
+                  />
+                </div>
+
+                <div>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-950">Spoken languages</p>
+                    <p className="mt-1 text-sm leading-6 text-zinc-600">
+                      Add other languages you use other than the main language
+                    </p>
+                  </div>
+                  <div className="mt-4">
+                    <SpokenLanguagesCombobox
+                      mainLanguage={snapshot.generalDraft.mainLanguage}
+                      value={snapshot.generalDraft.spokenLanguages}
+                      disabled={snapshot.generalBusy}
+                      onAdd={appStore.addSpokenLanguage}
+                      onRemove={appStore.removeSpokenLanguage}
+                    />
+                  </div>
+                </div>
+              </CardPanel>
+            </Card>
+
+            <Card className="overflow-visible">
               <CardHeader className="flex-row items-start justify-between gap-4">
                 <div className="space-y-1">
                   <CardTitle>Transcription model</CardTitle>
@@ -1536,70 +1600,6 @@ function SettingsScreen() {
                   Save summary settings
                 </Button>
               </CardFooter>
-            </Card>
-
-            <Card className="overflow-visible">
-              <CardHeader>
-                <CardTitle>Preferences</CardTitle>
-                <CardDescription>Language and timeline defaults for the local app.</CardDescription>
-              </CardHeader>
-              <CardPanel className="grid gap-6 pt-0">
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),180px] md:items-center">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-950">Main language</p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-600">
-                      Language for summaries, chats, and AI-generated responses
-                    </p>
-                  </div>
-                  <SearchableSelect
-                    ariaLabel="Main language"
-                    value={snapshot.generalDraft.mainLanguage}
-                    onChange={appStore.setMainLanguage}
-                    options={LANGUAGE_OPTIONS}
-                    placeholder="Select language"
-                    searchPlaceholder="Search language..."
-                    disabled={snapshot.generalBusy}
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-[minmax(0,1fr),220px] md:items-center">
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-950">Timezone</p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-600">
-                      Override the timezone used for the sidebar timeline
-                    </p>
-                  </div>
-                  <SearchableSelect
-                    ariaLabel="Timezone"
-                    value={snapshot.generalDraft.timezone || systemTimezone}
-                    onChange={(nextValue) => {
-                      appStore.setTimezone(nextValue === systemTimezone ? "" : nextValue);
-                    }}
-                    options={timezoneOptions}
-                    placeholder={`System default (${systemTimezone})`}
-                    searchPlaceholder="Search timezone..."
-                    disabled={snapshot.generalBusy}
-                  />
-                </div>
-
-                <div>
-                  <div>
-                    <p className="text-sm font-semibold text-zinc-950">Spoken languages</p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-600">
-                      Add other languages you use other than the main language
-                    </p>
-                  </div>
-                  <div className="mt-4">
-                    <SpokenLanguagesCombobox
-                      mainLanguage={snapshot.generalDraft.mainLanguage}
-                      value={snapshot.generalDraft.spokenLanguages}
-                      disabled={snapshot.generalBusy}
-                      onAdd={appStore.addSpokenLanguage}
-                      onRemove={appStore.removeSpokenLanguage}
-                    />
-                  </div>
-                </div>
-              </CardPanel>
             </Card>
 
             {snapshot.generalNote ? (
