@@ -525,11 +525,10 @@ function MainWindowCharBanner() {
             </span>
           </span>
           <div className="mt-4 flex items-center gap-2" data-window-drag="false">
-            <Button
+            <button
               type="button"
-              variant="outline"
-              size="sm"
-              className="border-white bg-white text-zinc-950 hover:text-zinc-950 data-pressed:text-zinc-950 shadow-none hover:bg-zinc-100 data-pressed:bg-zinc-100"
+              className="inline-flex h-8 items-center justify-center rounded-[var(--radius-control)] border border-white bg-white px-3 text-sm font-medium shadow-none transition-colors hover:bg-zinc-100 active:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-[color:var(--ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-950"
+              style={{ color: "#18181b", WebkitTextFillColor: "#18181b" }}
               onClick={() => {
                 void invoke("open_char_website").catch((error) => {
                   console.error("Failed to open Char website", error);
@@ -537,7 +536,7 @@ function MainWindowCharBanner() {
               }}
             >
               Start using
-            </Button>
+            </button>
             <Button
               type="button"
               variant="ghost"
