@@ -49,7 +49,6 @@ import {
 import { useScrollFade } from "./hooks/useScrollFade";
 import {
   LANGUAGE_OPTIONS,
-  PROCESSING_MODE_OPTIONS,
   appStore,
   currentSetupBannerContent,
   formatClockSeconds,
@@ -216,6 +215,70 @@ function modelCapabilityLabel(processingMode: "realtime" | "batch") {
 
 function modelCapabilityBadgeVariant(processingMode: "realtime" | "batch") {
   return processingMode === "realtime" ? "info" : "outline";
+}
+
+function ProcessingModeToggle({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: "realtime" | "batch";
+  onChange: (value: "realtime" | "batch") => void;
+  disabled?: boolean;
+}) {
+  const realtimeEnabled = value === "realtime";
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={realtimeEnabled}
+      disabled={disabled}
+      className={cn(
+        "flex w-full items-center justify-between gap-4 rounded-[calc(var(--radius)-6px)] border border-[color:var(--border-strong)] bg-[color:var(--card)] px-4 py-4 text-left shadow-[0_1px_0_rgba(255,255,255,0.85)] transition",
+        "hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--ring)]",
+        disabled && "cursor-not-allowed opacity-60",
+      )}
+      onClick={() => {
+        if (disabled) {
+          return;
+        }
+
+        onChange(realtimeEnabled ? "batch" : "realtime");
+      }}
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-zinc-950">Realtime transcription</p>
+          <Badge variant={realtimeEnabled ? "info" : "outline"}>
+            {realtimeEnabled ? "On" : "Off"}
+          </Badge>
+        </div>
+        <p className="mt-1 text-sm leading-6 text-zinc-600">
+          {realtimeEnabled
+            ? "Streaming in real time while you record."
+            : "Processed after the meeting ends."}
+        </p>
+      </div>
+
+      <span
+        aria-hidden="true"
+        className={cn(
+          "relative inline-flex h-7 w-12 shrink-0 rounded-full border transition-colors",
+          realtimeEnabled
+            ? "border-sky-200 bg-sky-500/90"
+            : "border-[color:var(--border-strong)] bg-[color:var(--secondary)]",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 size-6 rounded-full bg-white shadow-[0_1px_3px_rgba(15,23,42,0.24)] transition-transform",
+            realtimeEnabled ? "translate-x-[1.25rem]" : "translate-x-0.5",
+          )}
+        />
+      </span>
+    </button>
+  );
 }
 
 function getModelDownloadProgressPercent(download: ManagedModelDownloadState | null) {
@@ -1525,16 +1588,10 @@ function SettingsScreen() {
               </CardHeader>
               <CardPanel className="grid gap-6 pt-0">
                 <div className="grid gap-3">
-                  <p className="text-sm font-semibold text-zinc-950">Processing mode</p>
-                  <SearchableSelect
-                    ariaLabel="Processing mode"
+                  <p className="text-sm font-semibold text-zinc-950">Realtime</p>
+                  <ProcessingModeToggle
                     value={snapshot.modelSettings.processingMode}
-                    onChange={(nextValue) => {
-                      appStore.setProcessingMode(nextValue as "realtime" | "batch");
-                    }}
-                    options={PROCESSING_MODE_OPTIONS}
-                    placeholder="Select mode"
-                    searchPlaceholder="Search mode..."
+                    onChange={appStore.setProcessingMode}
                     disabled={snapshot.modelBusy || downloadStatus === "downloading"}
                   />
                 </div>
