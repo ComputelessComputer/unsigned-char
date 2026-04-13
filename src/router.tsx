@@ -983,8 +983,28 @@ function MeetingScreen() {
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
   const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
-  const showSummaryAction = !isMeetingListening && summaryReady && transcriptEntries.length > 0;
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
+  const summaryActionHint = isGeneratingSummary
+    ? "Generating summary..."
+    : snapshot.summaryMeetingId !== null
+      ? "Another summary is already running."
+      : !summaryReady
+        ? "Configure AI summaries in Preferences to enable this."
+        : isMeetingListening
+          ? "Stop listening before generating a summary."
+          : transcriptEntries.length === 0
+            ? meeting.status === "live" && snapshot.modelSettings?.processingMode === "batch"
+              ? "Stop listening to transcribe this meeting before generating a summary."
+              : "A transcript is required before generating a summary."
+            : meeting.summary
+              ? "Generate a fresh summary from the current transcript."
+              : "Generate a summary from the current transcript.";
+  const summaryActionDisabled =
+    isGeneratingSummary ||
+    snapshot.summaryMeetingId !== null ||
+    !summaryReady ||
+    isMeetingListening ||
+    transcriptEntries.length === 0;
   const emptyTranscriptCopy =
     meeting.status === "live" && snapshot.modelSettings?.processingMode === "batch"
       ? "Transcript will be generated after you stop the meeting."
@@ -1075,8 +1095,8 @@ function MeetingScreen() {
         </div>
       </WindowDragRegion>
 
-      <div className="flex items-end justify-end">
-        <div className="flex min-w-0 items-end justify-end">
+      <div className="flex items-end justify-between gap-3">
+        <div className="flex min-w-0 items-end justify-start">
           <Button
             size="lg"
             variant={meeting.status === "live" ? "destructive" : "outline"}
@@ -1095,6 +1115,21 @@ function MeetingScreen() {
                 <span>Resume listening</span>
               </>
             )}
+          </Button>
+        </div>
+
+        <div className="inline-flex shrink-0" title={summaryActionHint} tabIndex={summaryActionDisabled ? 0 : undefined}>
+          <Button
+            size="lg"
+            variant="outline"
+            className="min-w-[176px]"
+            disabled={summaryActionDisabled}
+            loading={isGeneratingSummary}
+            onClick={() => {
+              void appStore.generateMeetingSummary(meeting.id);
+            }}
+          >
+            Generate summary
           </Button>
         </div>
       </div>
@@ -1131,21 +1166,6 @@ function MeetingScreen() {
                 </div>
               </CardFooter>
             </Card>
-          ) : null}
-
-          {showSummaryAction ? (
-            <div className="flex justify-start">
-              <Button
-                size="sm"
-                disabled={snapshot.summaryMeetingId !== null}
-                loading={isGeneratingSummary}
-                onClick={() => {
-                  void appStore.generateMeetingSummary(meeting.id);
-                }}
-              >
-                Generate summary
-              </Button>
-            </div>
           ) : null}
 
           {transcriptEntries.length === 0 ? (
