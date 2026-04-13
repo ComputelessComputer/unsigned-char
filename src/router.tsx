@@ -241,12 +241,19 @@ function SettingsStatusDot({
   );
 }
 
-function modelCapabilityLabel(processingMode: "realtime" | "batch") {
-  return processingMode === "realtime" ? "Realtime" : "Batch only";
+function batchModelPickerLabel(modelId: string, fallbackLabel: string) {
+  return modelId === "parakeetBatch" ? "Parakeet" : fallbackLabel;
 }
 
-function modelCapabilityBadgeVariant(processingMode: "realtime" | "batch") {
-  return processingMode === "realtime" ? "info" : "outline";
+function batchModelPickerBadges(modelId: string) {
+  if (modelId === "parakeetBatch") {
+    return [
+      { label: "Realtime", variant: "info" as const },
+      { label: "Batch", variant: "outline" as const },
+    ];
+  }
+
+  return [{ label: "Batch only", variant: "outline" as const }];
 }
 
 function ProcessingModeToggle({
@@ -468,6 +475,11 @@ type SearchableOption = {
   value: string;
   label: string;
   detail?: string;
+  badges?: readonly {
+    label: string;
+    variant: "default" | "secondary" | "outline" | "success" | "warning" | "destructive" | "info";
+  }[];
+  searchTerms?: readonly string[];
 };
 
 const summaryProviderOptions: readonly SearchableOption[] = [
@@ -536,7 +548,15 @@ function SearchableSelect({
     }
 
     return options.filter((option) => {
-      const haystack = `${option.label} ${option.detail ?? ""} ${option.value}`.toLowerCase();
+      const haystack = [
+        option.label,
+        option.detail ?? "",
+        option.value,
+        ...(option.badges?.map((badge) => badge.label) ?? []),
+        ...(option.searchTerms ?? []),
+      ]
+        .join(" ")
+        .toLowerCase();
       return haystack.includes(needle);
     });
   }, [options, query]);
@@ -608,12 +628,28 @@ function SearchableSelect({
           setActiveIndex(0);
         }}
       >
-        <span className={cn("truncate", !selectedOption && "text-zinc-500")}>
-          {selectedOption
-            ? selectedOption.detail
-              ? `${selectedOption.label} (${selectedOption.detail})`
-              : selectedOption.label
-            : placeholder}
+        <span className="flex min-w-0 items-center gap-3">
+          <span className={cn("truncate", !selectedOption && "text-zinc-500")}>
+            {selectedOption ? selectedOption.label : placeholder}
+          </span>
+          {selectedOption?.badges?.length ? (
+            <span className="shrink-0 items-center gap-1 inline-flex">
+              {selectedOption.badges.map((badge) => (
+                <Badge
+                  key={`${selectedOption.value}-${badge.label}`}
+                  variant={badge.variant}
+                  className="px-2 py-0.5 text-[10px]"
+                >
+                  {badge.label}
+                </Badge>
+              ))}
+            </span>
+          ) : null}
+          {selectedOption?.detail ? (
+            <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
+              {selectedOption.detail}
+            </span>
+          ) : null}
         </span>
         <IconChevronDown />
       </Button>
@@ -641,7 +677,7 @@ function SearchableSelect({
                   variant="ghost"
                   size="sm"
                   className={cn(
-                    "h-auto w-full justify-between rounded-[var(--radius-control-sm)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
+                    "h-auto w-full rounded-[var(--radius-control-sm)] border-transparent px-3 py-2 text-left font-normal text-zinc-900 shadow-none",
                     index === activeIndex
                       ? "bg-zinc-100 hover:bg-zinc-100 data-pressed:bg-zinc-100"
                       : "hover:bg-zinc-50 data-pressed:bg-zinc-50",
@@ -653,12 +689,27 @@ function SearchableSelect({
                     close();
                   }}
                 >
-                  <span className="truncate">{option.label}</span>
-                  {option.detail ? (
-                    <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
-                      {option.detail}
-                    </span>
-                  ) : null}
+                  <span className="flex min-w-0 flex-1 items-center gap-3">
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    {option.badges?.length ? (
+                      <span className="shrink-0 items-center gap-1 inline-flex">
+                        {option.badges.map((badge) => (
+                          <Badge
+                            key={`${option.value}-${badge.label}`}
+                            variant={badge.variant}
+                            className="px-2 py-0.5 text-[10px]"
+                          >
+                            {badge.label}
+                          </Badge>
+                        ))}
+                      </span>
+                    ) : null}
+                    {option.detail ? (
+                      <span className="shrink-0 text-[11px] uppercase tracking-[0.08em] text-zinc-500">
+                        {option.detail}
+                      </span>
+                    ) : null}
+                  </span>
                 </Button>
               ))
             ) : (
@@ -1540,8 +1591,13 @@ function SettingsScreen() {
     .filter((option) => option.processingMode === "batch")
     .map((option) => ({
       value: option.id,
-      label: option.label,
+      label: batchModelPickerLabel(option.id, option.label),
       detail: option.sizeLabel,
+      badges: batchModelPickerBadges(option.id),
+      searchTerms:
+        option.id === "parakeetBatch"
+          ? [option.label, "Parakeet Streaming", "streaming", "realtime", option.languagesLabel]
+          : [option.languagesLabel],
     }));
   const recommendedModel = modelSettings.availableModels.find(
     (option) => option.id === modelSettings.recommendedModelId,
@@ -1661,37 +1717,6 @@ function SettingsScreen() {
                     searchPlaceholder="Search model..."
                     disabled={snapshot.modelBusy || downloadStatus === "downloading"}
                   />
-                </div>
-
-                <div className={cn(insetPanelClass, "space-y-3")}>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
-                      Available models
-                    </p>
-                    <p className="mt-1 text-sm leading-6 text-zinc-600">
-                      Realtime uses streaming-capable models. Batch runs after the meeting ends.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-2">
-                    {modelSettings.availableModels.map((option) => (
-                      <div
-                        key={option.id}
-                        className="rounded-[calc(var(--radius)-6px)] border border-[color:var(--border)] bg-white/70 px-3 py-3"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-zinc-950">{option.label}</p>
-                          <Badge variant={modelCapabilityBadgeVariant(option.processingMode)}>
-                            {modelCapabilityLabel(option.processingMode)}
-                          </Badge>
-                        </div>
-                        <p className="mt-1 text-sm leading-6 text-zinc-600">{option.detail}</p>
-                        <p className="mt-1 text-sm text-zinc-500">
-                          {option.languagesLabel} · {option.sizeLabel}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
                 </div>
 
                 <div className={cn(insetPanelClass, "space-y-3")}>
