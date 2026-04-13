@@ -211,6 +211,8 @@ type AppState = {
   liveTranscriptionMode: ProcessingMode | null;
   recordingMeetingId: string | null;
   diarizationRunBusy: boolean;
+  diarizationMeetingId: string | null;
+  diarizationIndicatorMinimized: boolean;
   summaryMeetingId: string | null;
   meetingNote: string;
   homeScrollTop: number;
@@ -346,6 +348,8 @@ let state: AppState = {
   liveTranscriptionMode: null,
   recordingMeetingId: null,
   diarizationRunBusy: false,
+  diarizationMeetingId: null,
+  diarizationIndicatorMinimized: false,
   summaryMeetingId: null,
   meetingNote: "",
   homeScrollTop: 0,
@@ -364,6 +368,14 @@ function emit() {
 function patch(next: Partial<AppState>) {
   state = { ...state, ...next };
   emit();
+}
+
+function setDiarizationIndicatorMinimized(minimized: boolean) {
+  if (!state.diarizationRunBusy || !state.diarizationMeetingId) {
+    return;
+  }
+
+  patch({ diarizationIndicatorMinimized: minimized });
 }
 
 function subscribe(listener: () => void) {
@@ -2037,6 +2049,8 @@ async function runMeetingDiarization(
 
   patch({
     diarizationRunBusy: true,
+    diarizationMeetingId: meetingId,
+    diarizationIndicatorMinimized: false,
     meetingNote: "",
   });
 
@@ -2082,7 +2096,11 @@ async function runMeetingDiarization(
           : String(error),
     });
   } finally {
-    patch({ diarizationRunBusy: false });
+    patch({
+      diarizationRunBusy: false,
+      diarizationMeetingId: null,
+      diarizationIndicatorMinimized: false,
+    });
     void drainAutoDiarizationQueue();
   }
 }
@@ -2132,6 +2150,10 @@ async function deleteMeeting(meetingId: string) {
     meetings: state.meetings.filter((candidate) => candidate.id !== meetingId),
     permissionNote: "",
     meetingNote: deletedActiveMeeting ? "" : state.meetingNote,
+    diarizationMeetingId:
+      state.diarizationMeetingId === meetingId ? null : state.diarizationMeetingId,
+    diarizationIndicatorMinimized:
+      state.diarizationMeetingId === meetingId ? false : state.diarizationIndicatorMinimized,
   };
   persistMeetings();
   emit();
@@ -2674,6 +2696,7 @@ export const appStore = {
   startMeeting,
   toggleMeetingStatus,
   runMeetingDiarization,
+  setDiarizationIndicatorMinimized,
   revealMeetingExportInFinder,
   deleteMeeting,
   startManagedModelDownload,

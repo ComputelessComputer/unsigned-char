@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ChevronLeft, CircleAlert, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, CircleAlert, Cloud, Cpu, Ellipsis, Globe2, PlugZap, Users } from "lucide-react";
 import {
   type CSSProperties,
   type MouseEvent,
@@ -90,6 +90,7 @@ import {
   getSummaryProviderDefinition,
   type SummaryProviderId,
 } from "./lib/summary-providers";
+import { Spinner } from "./components/ui/spinner";
 
 function IconBack() {
   return <ChevronLeft className="size-5" strokeWidth={1.5} aria-hidden="true" />;
@@ -161,6 +162,68 @@ function LiveIndicator({ className }: { className?: string }) {
       <span className="absolute inline-flex size-3 animate-ping rounded-full bg-rose-400/35 motion-reduce:animate-none" />
       <span className="relative inline-flex size-2 rounded-full bg-rose-400 shadow-[0_0_0_4px_rgba(244,63,94,0.12)]" />
     </span>
+  );
+}
+
+function DiarizationActivityBanner({
+  minimized,
+  onExpand,
+  onMinimize,
+}: {
+  minimized: boolean;
+  onExpand: () => void;
+  onMinimize: () => void;
+}) {
+  if (minimized) {
+    return (
+      <Button
+        size="icon-xl"
+        aria-label="Show speaker identification progress"
+        className="fixed right-6 bottom-6 z-40 rounded-full border-zinc-950 bg-zinc-950 text-white shadow-[0_18px_48px_rgba(15,23,42,0.36)] before:shadow-none hover:bg-zinc-900 data-pressed:bg-zinc-900 *:data-[slot=button-loading-indicator]:text-white"
+        onClick={onExpand}
+      >
+        <Spinner className="size-5 text-white" />
+      </Button>
+    );
+  }
+
+  return (
+    <Card className="overflow-visible border-zinc-900/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,244,245,0.98))]">
+      <CardHeader className="flex-row items-start justify-between gap-4 pb-3">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" size="sm">
+              Background task
+            </Badge>
+            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.12em] text-zinc-500">
+              <Spinner className="size-3.5 text-zinc-700" />
+              <span>Running now</span>
+            </div>
+          </div>
+          <CardTitle className="text-base">Speaker identification is happening</CardTitle>
+          <CardDescription>
+            unsigned char is mapping this transcript to speakers in the background. You can keep
+            reading while it finishes.
+          </CardDescription>
+        </div>
+        <div data-window-drag="false">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Minimize speaker identification progress"
+            onClick={onMinimize}
+          >
+            <ChevronDown className="size-4" strokeWidth={1.8} />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardFooter className="justify-between gap-3 bg-black/[0.02] text-sm text-zinc-600">
+        <div className="flex items-center gap-2 text-zinc-700">
+          <Users className="size-4 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+          <span>Speaker turns will appear here once identification is complete.</span>
+        </div>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -1152,6 +1215,10 @@ function MeetingScreen() {
     snapshot.recordingMeetingId === meeting.id ||
     (meeting.status === "live" && snapshot.transcriptionRunning);
   const isStoppingMeeting = snapshot.transcriptionStopping && meeting.status === "live";
+  const showDiarizationActivity =
+    snapshot.diarizationRunBusy && snapshot.diarizationMeetingId === meeting.id;
+  const diarizationIndicatorMinimized =
+    showDiarizationActivity && snapshot.diarizationIndicatorMinimized;
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
   const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
@@ -1359,6 +1426,20 @@ function MeetingScreen() {
           </TooltipPopup>
         </Tooltip>
       </div>
+
+      {showDiarizationActivity ? (
+        <div className="shrink-0">
+          <DiarizationActivityBanner
+            minimized={diarizationIndicatorMinimized}
+            onMinimize={() => {
+              appStore.setDiarizationIndicatorMinimized(true);
+            }}
+            onExpand={() => {
+              appStore.setDiarizationIndicatorMinimized(false);
+            }}
+          />
+        </div>
+      ) : null}
 
       <div className="-mx-4 min-h-0 flex-1 pb-4">
         <div className="relative h-full min-h-0">
