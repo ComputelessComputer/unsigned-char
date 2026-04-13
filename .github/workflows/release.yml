@@ -112,7 +112,7 @@ jobs:
         run: |
           gh release view "${{ steps.release_meta.outputs.tag }}" >/dev/null 2>&1 || \
             gh release create "${{ steps.release_meta.outputs.tag }}" \
-              --title "unsigned {char} v${{ steps.release_meta.outputs.version }}" \
+              --title "unsigned Char v${{ steps.release_meta.outputs.version }}" \
               --notes-file release-notes.md
 
       - name: Generate updater manifest
