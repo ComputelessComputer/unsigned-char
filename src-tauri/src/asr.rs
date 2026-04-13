@@ -17,6 +17,12 @@ swift!(fn _speech_model_start_download(model_id: &SRString) -> Bool);
 #[cfg(target_os = "macos")]
 swift!(fn _speech_model_reset(model_id: &SRString) -> Bool);
 #[cfg(target_os = "macos")]
+swift!(fn _speech_transcribe_audio_file(
+    model_id: &SRString,
+    audio_path: &SRString,
+    language: &SRString
+) -> SRString);
+#[cfg(target_os = "macos")]
 swift!(fn _speech_live_transcription_start(
     mode: &SRString,
     model_id: &SRString,
@@ -75,6 +81,14 @@ pub struct SpeechModelDownloadState {
     pub current_file: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct FileTranscriptionPayload {
+    #[serde(default)]
+    text: String,
+    error: Option<String>,
 }
 
 impl TranscriptionManager {
@@ -232,6 +246,34 @@ pub fn reset_managed_model(model_id: &str) -> Result<(), String> {
 
     #[cfg(not(target_os = "macos"))]
     {
+        Err("speech-swift is only available on macOS.".to_string())
+    }
+}
+
+pub fn transcribe_audio_file(model_id: &str, audio_path: &Path, language: &str) -> Result<String, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let model_id: SRString = model_id.into();
+        let audio_path_string = audio_path.display().to_string();
+        let audio_path: SRString = audio_path_string.as_str().into();
+        let language: SRString = language.into();
+        let response: FileTranscriptionPayload = decode_json(
+            unsafe { _speech_transcribe_audio_file(&model_id, &audio_path, &language) },
+            "speech-swift file transcription",
+        )?;
+
+        if let Some(error) = response.error.filter(|value| !value.trim().is_empty()) {
+            return Err(error);
+        }
+
+        Ok(response.text)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = model_id;
+        let _ = audio_path;
+        let _ = language;
         Err("speech-swift is only available on macOS.".to_string())
     }
 }

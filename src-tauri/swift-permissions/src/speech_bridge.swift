@@ -226,6 +226,11 @@ private struct TranscriptionPayload: Codable {
   )
 }
 
+private struct FileTranscriptionPayload: Codable {
+  var text: String
+  var error: String?
+}
+
 private func encodeJSON<T: Encodable>(_ value: T) -> String {
   guard let data = try? JSONEncoder().encode(value),
         let string = String(data: data, encoding: .utf8)
@@ -881,6 +886,35 @@ private actor SpeechBridge {
     }
   }
 
+  func transcribeAudioFileJSON(modelId: String, audioPath: String, language: String) async -> String {
+    do {
+      guard let kind = SpeechModelKind.resolve(modelId) else {
+        throw SpeechBridgeError.message("Unsupported speech model: \(modelId)")
+      }
+
+      let trimmedLanguage = language.trimmingCharacters(in: .whitespacesAndNewlines)
+      let text = try await transcribeRecordedAudio(
+        atPath: audioPath,
+        with: kind,
+        language: trimmedLanguage.isEmpty ? nil : trimmedLanguage
+      )
+
+      return encodeJSON(
+        FileTranscriptionPayload(
+          text: text,
+          error: nil
+        )
+      )
+    } catch {
+      return encodeJSON(
+        FileTranscriptionPayload(
+          text: "",
+          error: error.localizedDescription
+        )
+      )
+    }
+  }
+
   func transcriptionStateJSON() async -> String {
     guard let activeSession else {
       return encodeJSON(TranscriptionPayload.empty)
@@ -1127,6 +1161,21 @@ public func _speech_model_reset(modelId: SRString) -> Bool {
     await SpeechBridge.shared.resetModel(modelId: modelId.toString())
     return true
   }
+}
+
+@_cdecl("_speech_transcribe_audio_file")
+public func _speech_transcribe_audio_file(
+  modelId: SRString,
+  audioPath: SRString,
+  language: SRString
+) -> SRString {
+  SRString(waitForValue {
+    await SpeechBridge.shared.transcribeAudioFileJSON(
+      modelId: modelId.toString(),
+      audioPath: audioPath.toString(),
+      language: language.toString()
+    )
+  })
 }
 
 @_cdecl("_speech_live_transcription_start")

@@ -49,6 +49,42 @@ impl SpeechModelId {
         }
     }
 
+    pub fn cli_name(self) -> &'static str {
+        match self {
+            Self::ParakeetStreaming => "parakeet-streaming",
+            Self::ParakeetBatch => "parakeet-batch",
+            Self::Omnilingual => "omnilingual",
+            Self::Qwen3Small => "qwen3-small",
+            Self::Qwen3Large => "qwen3-large",
+        }
+    }
+
+    pub fn from_cli_name(value: &str) -> Option<Self> {
+        let normalized = value.trim().to_ascii_lowercase();
+
+        match normalized.as_str() {
+            "parakeet-streaming" | "parakeetstreaming" | "parakeet_streaming" => {
+                Some(Self::ParakeetStreaming)
+            }
+            "parakeet-batch" | "parakeetbatch" | "parakeet_batch" => Some(Self::ParakeetBatch),
+            "omnilingual" => Some(Self::Omnilingual),
+            "qwen3-small" | "qwen3small" | "qwen3-small-0.6b" | "qwen3-0.6b" => {
+                Some(Self::Qwen3Small)
+            }
+            "qwen3-large" | "qwen3large" | "qwen3-large-1.7b" | "qwen3-1.7b" => {
+                Some(Self::Qwen3Large)
+            }
+            _ => match value {
+                "parakeetStreaming" => Some(Self::ParakeetStreaming),
+                "parakeetBatch" => Some(Self::ParakeetBatch),
+                "omnilingual" => Some(Self::Omnilingual),
+                "qwen3Small" => Some(Self::Qwen3Small),
+                "qwen3Large" => Some(Self::Qwen3Large),
+                _ => None,
+            },
+        }
+    }
+
     pub fn batch_default() -> Self {
         Self::ParakeetBatch
     }

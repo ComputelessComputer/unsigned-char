@@ -1,5 +1,6 @@
 mod asr;
 mod audio_capture;
+mod cli;
 mod logging;
 mod permissions;
 mod speech_models;
@@ -2627,6 +2628,10 @@ fn sanitize_path_component(input: &str) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    if let Some(exit_code) = cli::try_run_from_env() {
+        std::process::exit(exit_code);
+    }
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .manage(AppState::default())
