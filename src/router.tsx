@@ -1148,14 +1148,9 @@ function HomeScreen() {
                             </div>
 
                             {postProcessingLabel ? (
-                              <div
-                                aria-label={postProcessingLabel}
-                                className="flex size-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]"
-                                role="status"
-                                title={postProcessingLabel}
-                              >
-                                <Spinner className="size-4" aria-hidden="true" />
-                              </div>
+                              <span className="inline-flex shrink-0 text-zinc-500" title={postProcessingLabel}>
+                                <Spinner aria-label={postProcessingLabel} className="size-4" />
+                              </span>
                             ) : null}
                           </div>
                         </CardPanel>
