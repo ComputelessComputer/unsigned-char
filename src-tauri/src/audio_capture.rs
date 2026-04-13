@@ -1,3 +1,4 @@
+use aec3::voip::VoipAec3;
 use std::{
     collections::VecDeque,
     sync::{
@@ -11,21 +12,10 @@ use std::{
 use tracing::error;
 
 const TARGET_SAMPLE_RATE: u32 = 16_000;
-const OUTPUT_CHUNK_SIZE: usize = 2_048;
+const AEC_FRAME_SIZE: usize = TARGET_SAMPLE_RATE as usize / 100;
+const OUTPUT_CHUNK_SIZE: usize = AEC_FRAME_SIZE * 10;
 const JOINER_MAX_LAG: usize = 4;
 const JOINER_MAX_QUEUE_SIZE: usize = 30;
-const ECHO_MAX_DELAY_SAMPLES: usize = OUTPUT_CHUNK_SIZE;
-const ECHO_HISTORY_SIZE: usize = OUTPUT_CHUNK_SIZE + ECHO_MAX_DELAY_SAMPLES;
-const ECHO_MIN_OVERLAP: usize = OUTPUT_CHUNK_SIZE / 2;
-const ECHO_CORRELATION_THRESHOLD: f32 = 0.65;
-const ECHO_MIN_GAIN: f32 = 0.08;
-const ECHO_MAX_GAIN: f32 = 1.25;
-const ECHO_SIGNAL_FLOOR: f32 = 0.001;
-const ECHO_MUTE_CORRELATION_THRESHOLD: f32 = 0.8;
-const ECHO_MUTE_EXPLAINED_RATIO: f32 = 0.72;
-const ECHO_MUTE_RESIDUAL_RATIO: f32 = 0.12;
-const ECHO_DUCK_RESIDUAL_RATIO: f32 = 0.32;
-const ECHO_RESIDUAL_CORRELATION_THRESHOLD: f32 = 0.45;
 const SESSION_POLL_INTERVAL: Duration = Duration::from_millis(200);
 const SYSTEM_AUDIO_DEVICE_NAME: &str = "unsigned char meeting system audio";
 
@@ -115,6 +105,8 @@ enum WorkerMessage {
     Stop,
 }
 
+type OutputChunk = (Vec<f32>, Vec<f32>, Vec<f32>);
+
 fn run_capture_loop<F>(
     command_tx: mpsc::Sender<WorkerMessage>,
     command_rx: mpsc::Receiver<WorkerMessage>,
@@ -144,15 +136,23 @@ fn run_capture_loop<F>(
             }
         };
 
-        running.store(true, Ordering::SeqCst);
-        let _ = startup_tx.send(Ok(()));
-
         let mut joiner = ChunkJoiner::new();
         let mut mic_resampler = LinearResampler::new(TARGET_SAMPLE_RATE);
         let mut speaker_resampler = LinearResampler::new(TARGET_SAMPLE_RATE);
-        let mut mic_chunks = ChunkAccumulator::new(OUTPUT_CHUNK_SIZE);
-        let mut speaker_chunks = ChunkAccumulator::new(OUTPUT_CHUNK_SIZE);
-        let mut echo_reducer = EchoReducer::new();
+        let mut mic_frames = ChunkAccumulator::new(AEC_FRAME_SIZE);
+        let mut speaker_frames = ChunkAccumulator::new(AEC_FRAME_SIZE);
+        let mut echo_canceller = match EchoCanceller::new() {
+            Ok(canceller) => canceller,
+            Err(message) => {
+                drop(mic_stream);
+                drop(speaker_capture);
+                let _ = startup_tx.send(Err(message));
+                return;
+            }
+        };
+
+        running.store(true, Ordering::SeqCst);
+        let _ = startup_tx.send(Ok(()));
 
         loop {
             match command_rx.recv_timeout(SESSION_POLL_INTERVAL) {
@@ -162,9 +162,9 @@ fn run_capture_loop<F>(
                         &mut joiner,
                         &mut mic_resampler,
                         &mut speaker_resampler,
-                        &mut mic_chunks,
-                        &mut speaker_chunks,
-                        &mut echo_reducer,
+                        &mut mic_frames,
+                        &mut speaker_frames,
+                        &mut echo_canceller,
                         &mut on_chunk,
                     );
 
@@ -178,14 +178,30 @@ fn run_capture_loop<F>(
             }
         }
 
-        let remaining = finish_joined_audio(&mut joiner, &mut mic_chunks, &mut speaker_chunks);
+        let remaining = finish_joined_audio(&mut joiner, &mut mic_frames, &mut speaker_frames);
 
         for (mic, speaker) in remaining {
-            let cleaned_mic = echo_reducer.reduce(&mic, &speaker);
-            if let Err(message) = on_chunk(mix_audio(&cleaned_mic, &speaker), cleaned_mic, speaker)
-            {
+            let delivery = match echo_canceller.process_frame(&mic, &speaker) {
+                Ok(delivery) => delivery,
+                Err(message) => {
+                    set_error(&error, message);
+                    break;
+                }
+            };
+            if let Err(message) = deliver_output_chunks(delivery, &mut on_chunk) {
                 set_error(&error, message);
                 break;
+            }
+        }
+
+        if error
+            .lock()
+            .ok()
+            .and_then(|slot| slot.as_ref().cloned())
+            .is_none()
+        {
+            if let Err(message) = deliver_output_chunks(echo_canceller.finish(), &mut on_chunk) {
+                set_error(&error, message);
             }
         }
 
@@ -212,9 +228,9 @@ fn process_audio_chunk<F>(
     joiner: &mut ChunkJoiner,
     mic_resampler: &mut LinearResampler,
     speaker_resampler: &mut LinearResampler,
-    mic_chunks: &mut ChunkAccumulator,
-    speaker_chunks: &mut ChunkAccumulator,
-    echo_reducer: &mut EchoReducer,
+    mic_frames: &mut ChunkAccumulator,
+    speaker_frames: &mut ChunkAccumulator,
+    echo_canceller: &mut EchoCanceller,
     on_chunk: &mut F,
 ) -> Result<(), String>
 where
@@ -229,12 +245,12 @@ where
         return Ok(());
     }
 
-    let ready_chunks = match chunk.source {
-        AudioSource::Mic => mic_chunks.push(resampled),
-        AudioSource::Speaker => speaker_chunks.push(resampled),
+    let ready_frames = match chunk.source {
+        AudioSource::Mic => mic_frames.push(resampled),
+        AudioSource::Speaker => speaker_frames.push(resampled),
     };
 
-    for ready in ready_chunks {
+    for ready in ready_frames {
         match chunk.source {
             AudioSource::Mic => joiner.push_mic(ready),
             AudioSource::Speaker => joiner.push_speaker(ready),
@@ -242,8 +258,8 @@ where
     }
 
     while let Some((mic, speaker)) = joiner.pop_pair() {
-        let cleaned_mic = echo_reducer.reduce(&mic, &speaker);
-        on_chunk(mix_audio(&cleaned_mic, &speaker), cleaned_mic, speaker)?;
+        let delivery = echo_canceller.process_frame(&mic, &speaker)?;
+        deliver_output_chunks(delivery, on_chunk)?;
     }
 
     Ok(())
@@ -262,6 +278,17 @@ fn finish_joined_audio(
     }
 
     joiner.finish()
+}
+
+fn deliver_output_chunks<F>(chunks: Vec<OutputChunk>, on_chunk: &mut F) -> Result<(), String>
+where
+    F: FnMut(Vec<f32>, Vec<f32>, Vec<f32>) -> Result<(), String>,
+{
+    for (mixed, mic, speaker) in chunks {
+        on_chunk(mixed, mic, speaker)?;
+    }
+
+    Ok(())
 }
 
 fn mix_audio(mic: &[f32], speaker: &[f32]) -> Vec<f32> {
@@ -285,175 +312,72 @@ fn set_error(error: &Arc<Mutex<Option<String>>>, message: impl Into<String>) {
     }
 }
 
-struct EchoReducer {
-    speaker_history: Vec<f32>,
+struct EchoCanceller {
+    pipeline: VoipAec3,
+    mic_chunks: ChunkAccumulator,
+    speaker_chunks: ChunkAccumulator,
 }
 
-impl EchoReducer {
-    fn new() -> Self {
-        Self {
-            speaker_history: Vec::with_capacity(ECHO_HISTORY_SIZE),
-        }
-    }
+impl EchoCanceller {
+    fn new() -> Result<Self, String> {
+        let pipeline = VoipAec3::builder(TARGET_SAMPLE_RATE as usize, 1, 1)
+            .initial_delay_ms(0)
+            .enable_high_pass(false)
+            .build()
+            .map_err(|error| format!("Failed to initialize echo cancellation: {error}"))?;
 
-    fn reduce(&mut self, mic: &[f32], speaker: &[f32]) -> Vec<f32> {
-        self.push_speaker(speaker);
-
-        if mic.is_empty() || speaker.is_empty() {
-            return mic.to_vec();
-        }
-
-        let mic_rms = signal_rms(mic);
-        if mic_rms < ECHO_SIGNAL_FLOOR {
-            return mic.to_vec();
-        }
-
-        let Some(estimate) = self.estimate(mic) else {
-            return mic.to_vec();
-        };
-
-        if estimate.correlation < ECHO_CORRELATION_THRESHOLD
-            || estimate.gain.abs() < ECHO_MIN_GAIN
-            || estimate.gain.abs() > ECHO_MAX_GAIN
+        if pipeline.capture_frame_samples() != AEC_FRAME_SIZE
+            || pipeline.render_frame_samples() != AEC_FRAME_SIZE
         {
-            return mic.to_vec();
+            return Err(format!(
+                "Unexpected echo canceller frame size: capture={} render={}",
+                pipeline.capture_frame_samples(),
+                pipeline.render_frame_samples()
+            ));
         }
 
-        let mut cleaned = mic.to_vec();
-        for index in 0..estimate.overlap_len {
-            let mic_index = estimate.mic_start + index;
-            let speaker_index = estimate.speaker_start + index;
-            cleaned[mic_index] = (cleaned[mic_index]
-                - (self.speaker_history[speaker_index] * estimate.gain))
-                .clamp(-1.0, 1.0);
-        }
-
-        let overlap = estimate.mic_start..estimate.mic_start + estimate.overlap_len;
-        let speaker_overlap = &self.speaker_history
-            [estimate.speaker_start..estimate.speaker_start + estimate.overlap_len];
-        let cleaned_overlap = &cleaned[overlap.clone()];
-        let residual_ratio = signal_energy(cleaned_overlap) / estimate.mic_energy;
-        let residual_correlation = normalized_correlation(cleaned_overlap, speaker_overlap);
-
-        if estimate.correlation >= ECHO_MUTE_CORRELATION_THRESHOLD
-            && estimate.explained_ratio >= ECHO_MUTE_EXPLAINED_RATIO
-            && (residual_ratio <= ECHO_MUTE_RESIDUAL_RATIO
-                || (residual_ratio <= ECHO_DUCK_RESIDUAL_RATIO
-                    && residual_correlation >= ECHO_RESIDUAL_CORRELATION_THRESHOLD))
-        {
-            cleaned[overlap].fill(0.0);
-        }
-
-        if signal_rms(&cleaned) >= mic_rms {
-            return mic.to_vec();
-        }
-
-        cleaned
+        Ok(Self {
+            pipeline,
+            mic_chunks: ChunkAccumulator::new(OUTPUT_CHUNK_SIZE),
+            speaker_chunks: ChunkAccumulator::new(OUTPUT_CHUNK_SIZE),
+        })
     }
 
-    fn push_speaker(&mut self, speaker: &[f32]) {
-        if speaker.is_empty() {
-            return;
-        }
+    fn process_frame(&mut self, mic: &[f32], speaker: &[f32]) -> Result<Vec<OutputChunk>, String> {
+        let mut cleaned_mic = vec![0.0; AEC_FRAME_SIZE];
+        self.pipeline
+            .process(mic, Some(speaker), false, &mut cleaned_mic)
+            .map_err(|error| format!("Failed to process echo cancellation frame: {error}"))?;
 
-        self.speaker_history.extend_from_slice(speaker);
+        let mic_ready = self.mic_chunks.push(cleaned_mic);
+        let speaker_ready = self.speaker_chunks.push(speaker.to_vec());
 
-        if self.speaker_history.len() > ECHO_HISTORY_SIZE {
-            let overflow = self.speaker_history.len() - ECHO_HISTORY_SIZE;
-            self.speaker_history.drain(..overflow);
-        }
+        Ok(zip_output_chunks(mic_ready, speaker_ready))
     }
 
-    fn estimate(&self, mic: &[f32]) -> Option<EchoEstimate> {
-        if mic.is_empty() || self.speaker_history.is_empty() {
-            return None;
+    fn finish(&mut self) -> Vec<OutputChunk> {
+        let mut mic_ready = Vec::new();
+        if let Some(chunk) = self.mic_chunks.finish() {
+            mic_ready.push(chunk);
         }
 
-        let max_delay = ECHO_MAX_DELAY_SAMPLES.min(self.speaker_history.len().saturating_sub(1));
-        let mut best: Option<EchoEstimate> = None;
-
-        for delay in 0..=max_delay {
-            let available = self
-                .speaker_history
-                .len()
-                .saturating_sub(delay)
-                .min(mic.len());
-            if available < ECHO_MIN_OVERLAP {
-                continue;
-            }
-
-            let mic_start = mic.len() - available;
-            let speaker_start = self.speaker_history.len() - delay - available;
-            let mic_slice = &mic[mic_start..];
-            let speaker_slice = &self.speaker_history[speaker_start..speaker_start + available];
-
-            let mic_energy = signal_energy(mic_slice);
-            let speaker_energy = signal_energy(speaker_slice);
-            if mic_energy <= 0.0 || speaker_energy <= 0.0 {
-                continue;
-            }
-
-            let correlation = normalized_correlation(mic_slice, speaker_slice);
-            if !correlation.is_finite() || correlation <= 0.0 {
-                continue;
-            }
-
-            let gain = dot_product(mic_slice, speaker_slice) / speaker_energy;
-            let candidate = EchoEstimate {
-                correlation,
-                gain,
-                mic_start,
-                speaker_start,
-                overlap_len: available,
-                mic_energy,
-                explained_ratio: (gain * gain * speaker_energy) / mic_energy,
-            };
-
-            match best {
-                Some(current) if current.correlation >= candidate.correlation => {}
-                _ => best = Some(candidate),
-            }
+        let mut speaker_ready = Vec::new();
+        if let Some(chunk) = self.speaker_chunks.finish() {
+            speaker_ready.push(chunk);
         }
 
-        best
+        zip_output_chunks(mic_ready, speaker_ready)
     }
 }
 
-#[derive(Clone, Copy)]
-struct EchoEstimate {
-    correlation: f32,
-    gain: f32,
-    mic_start: usize,
-    speaker_start: usize,
-    overlap_len: usize,
-    mic_energy: f32,
-    explained_ratio: f32,
-}
+fn zip_output_chunks(mic_chunks: Vec<Vec<f32>>, speaker_chunks: Vec<Vec<f32>>) -> Vec<OutputChunk> {
+    debug_assert_eq!(mic_chunks.len(), speaker_chunks.len());
 
-fn dot_product(left: &[f32], right: &[f32]) -> f32 {
-    left.iter().zip(right.iter()).map(|(a, b)| a * b).sum()
-}
-
-fn normalized_correlation(left: &[f32], right: &[f32]) -> f32 {
-    let left_energy = signal_energy(left);
-    let right_energy = signal_energy(right);
-    if left_energy <= 0.0 || right_energy <= 0.0 {
-        return 0.0;
-    }
-
-    dot_product(left, right) / (left_energy.sqrt() * right_energy.sqrt())
-}
-
-fn signal_energy(samples: &[f32]) -> f32 {
-    samples.iter().map(|sample| sample * sample).sum()
-}
-
-fn signal_rms(samples: &[f32]) -> f32 {
-    if samples.is_empty() {
-        return 0.0;
-    }
-
-    (signal_energy(samples) / samples.len() as f32).sqrt()
+    mic_chunks
+        .into_iter()
+        .zip(speaker_chunks)
+        .map(|(mic, speaker)| (mix_audio(&mic, &speaker), mic, speaker))
+        .collect()
 }
 
 struct ChunkAccumulator {
@@ -624,9 +548,7 @@ impl LinearResampler {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        normalized_correlation, signal_rms, EchoReducer, LinearResampler, OUTPUT_CHUNK_SIZE,
-    };
+    use super::{EchoCanceller, LinearResampler, AEC_FRAME_SIZE, OUTPUT_CHUNK_SIZE};
 
     #[test]
     fn linear_resampler_does_not_drain_past_buffer_when_downsampling() {
@@ -641,75 +563,88 @@ mod tests {
     }
 
     #[test]
-    fn echo_reducer_suppresses_loud_system_bleed_from_mic() {
-        let mut reducer = EchoReducer::new();
-        let speaker = test_tone(OUTPUT_CHUNK_SIZE * 2, 0.72, 0.61);
-        let mic_head = delayed_mix(&speaker, 0, 240, 0.9, 0.0, 0.0);
-        let mic_tail = delayed_mix(&speaker, OUTPUT_CHUNK_SIZE, 240, 0.9, 0.0, 0.0);
+    fn echo_canceller_suppresses_loud_system_bleed_from_mic() {
+        let speaker = test_tone(OUTPUT_CHUNK_SIZE * 8, 0.71, 0.37);
+        let mic = delayed_echo(&speaker, AEC_FRAME_SIZE / 2, 0.88);
+        let cleaned = run_canceller(&mic, &speaker);
 
-        let _ = reducer.reduce(&mic_head, &speaker[..OUTPUT_CHUNK_SIZE]);
-        let cleaned_tail = reducer.reduce(&mic_tail, &speaker[OUTPUT_CHUNK_SIZE..]);
+        let tail = OUTPUT_CHUNK_SIZE * 2;
+        let mic_tail = &mic[mic.len() - tail..];
+        let cleaned_tail = &cleaned[cleaned.len() - tail..];
 
-        assert!(signal_rms(&cleaned_tail) < signal_rms(&mic_tail) * 0.45);
+        assert!(signal_rms(cleaned_tail) < signal_rms(mic_tail) * 0.35);
     }
 
     #[test]
-    fn echo_reducer_keeps_nearfield_voice_when_signal_is_not_correlated() {
-        let mut reducer = EchoReducer::new();
-        let speaker = test_tone(OUTPUT_CHUNK_SIZE * 2, 0.41, 0.53);
-        let mic_head = test_tone(OUTPUT_CHUNK_SIZE, 0.93, 0.27);
-        let mic_tail = test_tone(OUTPUT_CHUNK_SIZE, 1.11, 0.19);
+    fn echo_canceller_keeps_nearfield_voice_when_render_is_silent() {
+        let speaker = vec![0.0; OUTPUT_CHUNK_SIZE * 6];
+        let mic = voice_chunk(0, speaker.len(), 0.93, 0.27);
+        let cleaned = run_canceller(&mic, &speaker);
 
-        let _ = reducer.reduce(&mic_head, &speaker[..OUTPUT_CHUNK_SIZE]);
-        let cleaned_tail = reducer.reduce(&mic_tail, &speaker[OUTPUT_CHUNK_SIZE..]);
-
-        assert!(signal_rms(&cleaned_tail) > signal_rms(&mic_tail) * 0.9);
+        assert!(signal_rms(&cleaned) > signal_rms(&mic) * 0.9);
+        assert!(best_alignment_correlation(&cleaned, &mic, AEC_FRAME_SIZE) > 0.9);
     }
 
     #[test]
-    fn echo_reducer_keeps_voice_when_nearfield_speech_overlaps_system_audio() {
-        let mut reducer = EchoReducer::new();
-        let speaker = test_tone(OUTPUT_CHUNK_SIZE * 2, 0.57, 0.33);
-        let voice_head = voice_chunk(0, 0.91, 0.23);
-        let voice_tail = voice_chunk(OUTPUT_CHUNK_SIZE, 0.91, 0.23);
-        let mic_head = sum_audio(&delayed_mix(&speaker, 0, 180, 0.72, 0.0, 0.0), &voice_head);
-        let mic_tail = sum_audio(
-            &delayed_mix(&speaker, OUTPUT_CHUNK_SIZE, 180, 0.72, 0.0, 0.0),
-            &voice_tail,
-        );
+    fn echo_canceller_keeps_voice_when_nearfield_speech_overlaps_system_audio() {
+        let speaker = test_tone(OUTPUT_CHUNK_SIZE * 8, 0.57, 0.33);
+        let voice = voice_chunk(0, speaker.len(), 0.91, 0.23);
+        let mic = sum_audio(&delayed_echo(&speaker, AEC_FRAME_SIZE / 2, 0.68), &voice);
+        let cleaned = run_canceller(&mic, &speaker);
 
-        let _ = reducer.reduce(&mic_head, &speaker[..OUTPUT_CHUNK_SIZE]);
-        let cleaned_tail = reducer.reduce(&mic_tail, &speaker[OUTPUT_CHUNK_SIZE..]);
+        let tail = OUTPUT_CHUNK_SIZE * 2;
+        let cleaned_tail = &cleaned[cleaned.len() - tail..];
+        let voice_tail = &voice[voice.len() - tail..];
+        let speaker_tail = &speaker[speaker.len() - tail..];
+        let mic_tail = &mic[mic.len() - tail..];
+        let raw_render_corr = best_alignment_correlation(mic_tail, speaker_tail, AEC_FRAME_SIZE);
+        let cleaned_render_corr =
+            best_alignment_correlation(cleaned_tail, speaker_tail, AEC_FRAME_SIZE);
+        let cleaned_voice_corr =
+            best_alignment_correlation(cleaned_tail, voice_tail, AEC_FRAME_SIZE);
 
-        assert!(signal_rms(&cleaned_tail) > signal_rms(&voice_tail) * 0.6);
-        assert!(normalized_correlation(&cleaned_tail, &voice_tail) > 0.7);
+        assert!(signal_rms(cleaned_tail) > signal_rms(voice_tail) * 0.35);
+        assert!(cleaned_render_corr < raw_render_corr * 0.75);
+        assert!(cleaned_voice_corr > 0.4);
     }
 
-    fn delayed_mix(
-        speaker: &[f32],
-        start: usize,
-        delay: usize,
-        echo_gain: f32,
-        voice_freq_a: f32,
-        voice_freq_b: f32,
-    ) -> Vec<f32> {
-        let mut samples = Vec::with_capacity(OUTPUT_CHUNK_SIZE);
-        for index in 0..OUTPUT_CHUNK_SIZE {
-            let absolute_index = start + index;
-            let echo = absolute_index
-                .checked_sub(delay)
-                .and_then(|source| speaker.get(source).copied())
-                .unwrap_or(0.0)
-                * echo_gain;
-            let voice = if voice_freq_a > 0.0 && voice_freq_b > 0.0 {
-                ((absolute_index as f32 * voice_freq_a).sin() * 0.25)
-                    + ((absolute_index as f32 * voice_freq_b).sin() * 0.15)
-            } else {
-                0.0
-            };
-            samples.push((echo + voice).clamp(-1.0, 1.0));
+    fn run_canceller(mic: &[f32], speaker: &[f32]) -> Vec<f32> {
+        assert_eq!(mic.len(), speaker.len());
+        assert_eq!(mic.len() % AEC_FRAME_SIZE, 0);
+
+        let mut canceller = EchoCanceller::new().expect("echo canceller should initialize");
+        let mut cleaned = Vec::with_capacity(mic.len());
+
+        for (mic_frame, speaker_frame) in mic
+            .chunks_exact(AEC_FRAME_SIZE)
+            .zip(speaker.chunks_exact(AEC_FRAME_SIZE))
+        {
+            for (_, mic_chunk, _) in canceller
+                .process_frame(mic_frame, speaker_frame)
+                .expect("frame should process")
+            {
+                cleaned.extend(mic_chunk);
+            }
         }
-        samples
+
+        for (_, mic_chunk, _) in canceller.finish() {
+            cleaned.extend(mic_chunk);
+        }
+
+        cleaned.truncate(mic.len());
+        cleaned
+    }
+
+    fn delayed_echo(speaker: &[f32], delay: usize, gain: f32) -> Vec<f32> {
+        (0..speaker.len())
+            .map(|index| {
+                index
+                    .checked_sub(delay)
+                    .and_then(|source| speaker.get(source).copied())
+                    .unwrap_or(0.0)
+                    * gain
+            })
+            .collect()
     }
 
     fn test_tone(len: usize, freq_a: f32, freq_b: f32) -> Vec<f32> {
@@ -720,8 +655,8 @@ mod tests {
             .collect()
     }
 
-    fn voice_chunk(start: usize, freq_a: f32, freq_b: f32) -> Vec<f32> {
-        (0..OUTPUT_CHUNK_SIZE)
+    fn voice_chunk(start: usize, len: usize, freq_a: f32, freq_b: f32) -> Vec<f32> {
+        (0..len)
             .map(|index| {
                 let absolute_index = start + index;
                 ((absolute_index as f32 * freq_a).sin() * 0.25)
@@ -735,6 +670,48 @@ mod tests {
             .zip(right.iter())
             .map(|(a, b)| (a + b).clamp(-1.0, 1.0))
             .collect()
+    }
+
+    fn normalized_correlation(left: &[f32], right: &[f32]) -> f32 {
+        let left_energy = signal_energy(left);
+        let right_energy = signal_energy(right);
+        if left_energy <= 0.0 || right_energy <= 0.0 {
+            return 0.0;
+        }
+
+        dot_product(left, right) / (left_energy.sqrt() * right_energy.sqrt())
+    }
+
+    fn best_alignment_correlation(left: &[f32], right: &[f32], max_delay: usize) -> f32 {
+        let max_delay = max_delay
+            .min(left.len().saturating_sub(1))
+            .min(right.len().saturating_sub(1));
+        let mut best = normalized_correlation(left, right).abs();
+
+        for delay in 1..=max_delay {
+            best = best
+                .max(normalized_correlation(&left[delay..], &right[..right.len() - delay]).abs());
+            best = best
+                .max(normalized_correlation(&left[..left.len() - delay], &right[delay..]).abs());
+        }
+
+        best
+    }
+
+    fn dot_product(left: &[f32], right: &[f32]) -> f32 {
+        left.iter().zip(right.iter()).map(|(a, b)| a * b).sum()
+    }
+
+    fn signal_energy(samples: &[f32]) -> f32 {
+        samples.iter().map(|sample| sample * sample).sum()
+    }
+
+    fn signal_rms(samples: &[f32]) -> f32 {
+        if samples.is_empty() {
+            return 0.0;
+        }
+
+        (signal_energy(samples) / samples.len() as f32).sqrt()
     }
 }
 
