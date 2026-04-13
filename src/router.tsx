@@ -1832,12 +1832,10 @@ function SettingsScreen() {
               </CardHeader>
               <CardPanel className="grid gap-6 pt-0">
                 {!modelReady && !showModelDownloadGauge ? (
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <Badge variant="warning">Download required</Badge>
-                      <p className="text-sm font-medium text-zinc-900">Download model</p>
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="warning">Download required</Badge>
                     <Button
+                      size="sm"
                       className="shrink-0"
                       disabled={snapshot.modelBusy}
                       onClick={() => {
@@ -1846,6 +1844,7 @@ function SettingsScreen() {
                     >
                       Download model
                     </Button>
+                    <p className="text-sm font-medium text-zinc-900">to start using.</p>
                   </div>
                 ) : null}
 
