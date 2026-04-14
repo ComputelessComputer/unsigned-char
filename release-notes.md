@@ -1,1 +1,1 @@
-unsigned Char 0.0.7 fixes the false microphone permission warning by matching Philo's microphone access flow.
+unsigned Char 0.0.8 fixes installed DMG builds that were missing the macOS microphone entitlement and could not register for microphone access.
