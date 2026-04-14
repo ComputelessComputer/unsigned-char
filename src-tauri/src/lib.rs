@@ -129,6 +129,8 @@ struct SaveGeneralSettingsInput {
     main_language: String,
     spoken_languages: Vec<String>,
     timezone: String,
+    #[serde(default = "default_save_audio_after_meeting")]
+    save_audio_after_meeting: bool,
 }
 
 #[derive(Clone, Deserialize)]
@@ -166,6 +168,10 @@ fn default_diarization_enabled() -> bool {
     true
 }
 
+fn default_save_audio_after_meeting() -> bool {
+    true
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredDiarizationSettings {
@@ -187,7 +193,7 @@ impl Default for StoredDiarizationSettings {
     }
 }
 
-#[derive(Clone, Default, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredGeneralSettings {
     #[serde(default)]
@@ -196,6 +202,19 @@ struct StoredGeneralSettings {
     spoken_languages: Vec<String>,
     #[serde(default)]
     timezone: String,
+    #[serde(default = "default_save_audio_after_meeting")]
+    save_audio_after_meeting: bool,
+}
+
+impl Default for StoredGeneralSettings {
+    fn default() -> Self {
+        Self {
+            main_language: String::new(),
+            spoken_languages: Vec::new(),
+            timezone: String::new(),
+            save_audio_after_meeting: true,
+        }
+    }
 }
 
 #[derive(Clone, Default, Deserialize, Serialize)]
@@ -305,6 +324,7 @@ struct GeneralSettingsState {
     main_language: String,
     spoken_languages: Vec<String>,
     timezone: String,
+    save_audio_after_meeting: bool,
 }
 
 #[derive(Serialize)]
@@ -417,6 +437,7 @@ impl StoredGeneralSettings {
             main_language,
             spoken_languages,
             timezone: input.timezone.trim().to_string(),
+            save_audio_after_meeting: input.save_audio_after_meeting,
         }
     }
 }
@@ -1389,6 +1410,7 @@ fn build_general_settings_state(
             .map(str::to_string)
             .collect(),
         timezone: settings.timezone.trim().to_string(),
+        save_audio_after_meeting: settings.save_audio_after_meeting,
     })
 }
 

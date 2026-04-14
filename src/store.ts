@@ -117,6 +117,7 @@ export type GeneralSettings = {
   mainLanguage: string;
   spokenLanguages: string[];
   timezone: string;
+  saveAudioAfterMeeting: boolean;
 };
 
 type GeneralDraft = GeneralSettings;
@@ -413,6 +414,7 @@ function emptyGeneralDraft(): GeneralDraft {
     mainLanguage: defaultMainLanguage(),
     spokenLanguages: [],
     timezone: "",
+    saveAudioAfterMeeting: true,
   };
 }
 
@@ -494,6 +496,7 @@ function syncGeneralDraft(settings: GeneralSettings) {
     mainLanguage,
     spokenLanguages: normalizeSpokenLanguages(settings.spokenLanguages, mainLanguage),
     timezone: settings.timezone.trim(),
+    saveAudioAfterMeeting: settings.saveAudioAfterMeeting,
   };
 }
 
@@ -1176,6 +1179,33 @@ function distinctSpeakerCount(segments: DiarizationSegment[]) {
 function activeTimezone() {
   const value = state.generalSettings?.timezone.trim();
   return value || undefined;
+}
+
+function shouldSaveAudioAfterMeeting() {
+  return state.generalDraft.saveAudioAfterMeeting;
+}
+
+function withoutRetainedMeetingAudio(meeting: Meeting) {
+  const audioPath = meeting.audioPath.trim();
+  if (!audioPath) {
+    return {
+      meeting,
+      deletedAudioPath: null,
+    };
+  }
+
+  return {
+    meeting: {
+      ...meeting,
+      audioPath: "",
+      diarizationSegments: [],
+      speakerLabels: {},
+      diarizationSpeakerCount: 0,
+      diarizationPipelineSource: null,
+      diarizationRanAt: null,
+    },
+    deletedAudioPath: audioPath,
+  };
 }
 
 function formatDateValue(date: Date, options: Intl.DateTimeFormatOptions) {
@@ -1982,6 +2012,8 @@ function finalizeLiveTranscript(markDone = false) {
     return null;
   }
 
+  let audioPathToDelete: string | null = null;
+
   updateMeeting(meeting.id, (current) => {
     let transcript = current.transcript;
 
@@ -1994,8 +2026,7 @@ function finalizeLiveTranscript(markDone = false) {
     }
 
     const transcriptChanged = transcript !== current.transcript;
-
-    return {
+    let nextMeeting: Meeting = {
       ...current,
       transcript,
       status: markDone ? "done" : current.status,
@@ -2005,6 +2036,14 @@ function finalizeLiveTranscript(markDone = false) {
       summaryUpdatedAt: transcriptChanged ? null : current.summaryUpdatedAt,
       updatedAt: new Date().toISOString(),
     };
+
+    if (markDone && !shouldSaveAudioAfterMeeting()) {
+      const retention = withoutRetainedMeetingAudio(nextMeeting);
+      nextMeeting = retention.meeting;
+      audioPathToDelete = retention.deletedAudioPath;
+    }
+
+    return nextMeeting;
   });
 
   patch({
@@ -2015,7 +2054,10 @@ function finalizeLiveTranscript(markDone = false) {
     transcriptionStopping: false,
   });
 
-  return meeting.id;
+  return {
+    meetingId: meeting.id,
+    audioPathToDelete,
+  };
 }
 
 async function refreshLiveTranscription(silent = false) {
@@ -2040,9 +2082,12 @@ async function refreshLiveTranscription(silent = false) {
     emit();
 
     if (wasRunning && !snapshot.running) {
-      const endedMeetingId = finalizeLiveTranscript(true);
-      if (endedMeetingId) {
-        queueMeetingAutoDiarization(endedMeetingId);
+      const completedMeeting = finalizeLiveTranscript(true);
+      if (completedMeeting) {
+        if (completedMeeting.audioPathToDelete) {
+          void deleteMeetingAudioQuietly(completedMeeting.audioPathToDelete);
+        }
+        queueMeetingAutoDiarization(completedMeeting.meetingId);
       }
     }
   } catch (error) {
@@ -2094,9 +2139,12 @@ async function requestStopLiveTranscriptionSession() {
   emit();
 
   if (!stopPending) {
-    const endedMeetingId = finalizeLiveTranscript(true);
-    if (endedMeetingId) {
-      queueMeetingAutoDiarization(endedMeetingId);
+    const completedMeeting = finalizeLiveTranscript(true);
+    if (completedMeeting) {
+      if (completedMeeting.audioPathToDelete) {
+        void deleteMeetingAudioQuietly(completedMeeting.audioPathToDelete);
+      }
+      queueMeetingAutoDiarization(completedMeeting.meetingId);
     }
   }
   syncLiveTranscriptionPolling();
@@ -2129,12 +2177,19 @@ async function reconcilePersistedLiveMeetings() {
     state.meetings.filter((meeting) => meeting.status === "live"),
   );
   let snapshot: LiveTranscriptionState;
+  let saveAudioAfterMeeting = true;
 
   try {
     snapshot = await invoke<LiveTranscriptionState>("live_transcription_state");
   } catch {
     return;
   }
+
+  try {
+    saveAudioAfterMeeting =
+      state.generalSettings?.saveAudioAfterMeeting ??
+      (await invoke<GeneralSettings>("general_settings_state")).saveAudioAfterMeeting;
+  } catch {}
 
   const activeMeetingId = snapshot.running ? liveMeetings[0]?.id ?? null : null;
   const nextLiveTranscriptEntries = normalizeTranscriptEntries(snapshot.entries);
@@ -2143,6 +2198,7 @@ async function reconcilePersistedLiveMeetings() {
   const nextLiveTranscriptionMode = snapshot.mode;
   const nextMeetingNote = snapshot.error || state.meetingNote;
   const exportPathsToDelete: string[] = [];
+  const audioPathsToDelete: string[] = [];
   const finishedAt = new Date().toISOString();
   let meetingsChanged = false;
 
@@ -2165,13 +2221,21 @@ async function reconcilePersistedLiveMeetings() {
       return [];
     }
 
-    return [
-      {
-        ...meeting,
-        status: "done" as const,
-        updatedAt: finishedAt,
-      },
-    ];
+    let nextMeeting: Meeting = {
+      ...meeting,
+      status: "done" as const,
+      updatedAt: finishedAt,
+    };
+
+    if (!saveAudioAfterMeeting) {
+      const retention = withoutRetainedMeetingAudio(nextMeeting);
+      nextMeeting = retention.meeting;
+      if (retention.deletedAudioPath) {
+        audioPathsToDelete.push(retention.deletedAudioPath);
+      }
+    }
+
+    return [nextMeeting];
   });
 
   const stateChanged =
@@ -2203,7 +2267,10 @@ async function reconcilePersistedLiveMeetings() {
   }
 
   syncLiveTranscriptionPolling();
-  await Promise.all(exportPathsToDelete.map((path) => deleteMeetingExportQuietly(path)));
+  await Promise.all([
+    ...exportPathsToDelete.map((path) => deleteMeetingExportQuietly(path)),
+    ...audioPathsToDelete.map((path) => deleteMeetingAudioQuietly(path)),
+  ]);
 }
 
 async function waitForLiveTranscriptionStopCompletion() {
@@ -2499,6 +2566,7 @@ async function saveGeneralSettings() {
         mainLanguage,
         spokenLanguages,
         timezone: state.generalDraft.timezone.trim(),
+        saveAudioAfterMeeting: state.generalDraft.saveAudioAfterMeeting,
       },
     });
 
@@ -2828,6 +2896,17 @@ function setTimezone(timezone: string) {
   void saveGeneralSettings();
 }
 
+function setSaveAudioAfterMeeting(saveAudioAfterMeeting: boolean) {
+  patch({
+    generalDraft: {
+      ...state.generalDraft,
+      saveAudioAfterMeeting,
+    },
+    generalNote: "",
+  });
+  void saveGeneralSettings();
+}
+
 function addSpokenLanguage(language: string) {
   const nextLanguage = normalizeLanguageCode(language);
   if (!nextLanguage) {
@@ -3043,6 +3122,7 @@ export const appStore = {
   setSelectedModel,
   setMainLanguage,
   setTimezone,
+  setSaveAudioAfterMeeting,
   addSpokenLanguage,
   removeSpokenLanguage,
   setSummaryProvider,

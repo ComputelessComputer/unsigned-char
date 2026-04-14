@@ -59,6 +59,7 @@ import {
   CardPanel,
   CardTitle,
   Field,
+  FieldDescription,
   FieldLabel,
   Input,
   Kbd,
@@ -72,6 +73,7 @@ import {
   SelectPopup,
   SelectTrigger,
   ScrollFade,
+  Switch,
   Tooltip,
   TooltipPopup,
   TooltipTrigger,
@@ -1965,6 +1967,31 @@ function SettingsScreen() {
                     onRemove={appStore.removeSpokenLanguage}
                   />
                 </div>
+
+                <Field className={cn(insetPanelClass, "gap-3")}>
+                  <div className="flex w-full items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <FieldLabel>Save audio after meeting</FieldLabel>
+                      <FieldDescription>
+                        Keep the local WAV after a meeting ends so speaker diarization can run.
+                      </FieldDescription>
+                    </div>
+                    <Switch
+                      aria-label="Save audio after meeting"
+                      checked={snapshot.generalDraft.saveAudioAfterMeeting}
+                      disabled={snapshot.generalBusy}
+                      onCheckedChange={(checked) => {
+                        appStore.setSaveAudioAfterMeeting(checked);
+                      }}
+                    />
+                  </div>
+                  {!snapshot.generalDraft.saveAudioAfterMeeting ? (
+                    <FieldDescription>
+                      Meetings recorded while this is off will delete their audio when they finish, so
+                      diarization stays disabled for them.
+                    </FieldDescription>
+                  ) : null}
+                </Field>
               </CardPanel>
             </Card>
 
