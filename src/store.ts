@@ -1914,10 +1914,18 @@ function permissionHostHint(permission: PermissionKind) {
 }
 
 function permissionDeniedMessage(permission: PermissionKind) {
+  if (permission === "microphone") {
+    return `Microphone access is required to record meetings. Allow the app in System Settings > Privacy & Security > Microphone.${permissionHostHint(permission)}`;
+  }
+
   return `${permissionLabel(permission)} access is off. Enable it in System Settings and try again.${permissionHostHint(permission)}`;
 }
 
 function permissionPendingMessage(permission: PermissionKind) {
+  if (permission === "microphone") {
+    return `Microphone permission request did not finish. Try recording again and allow access when prompted.${permissionHostHint(permission)}`;
+  }
+
   return `${permissionLabel(permission)} permission request did not finish. Try again and allow access when prompted.${permissionHostHint(permission)}`;
 }
 

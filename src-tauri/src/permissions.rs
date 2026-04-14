@@ -1,14 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "macos")]
+use block2::RcBlock;
+#[cfg(target_os = "macos")]
 use cidre::{cf, core_audio as ca, ns, os};
 #[cfg(target_os = "macos")]
-use swift_rs::{swift, Bool, Int};
+use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
+#[cfg(target_os = "macos")]
+use swift_rs::{swift, Int};
 
-#[cfg(target_os = "macos")]
-swift!(fn _microphone_permission_status() -> Int);
-#[cfg(target_os = "macos")]
-swift!(fn _request_microphone_permission() -> Bool);
 #[cfg(target_os = "macos")]
 swift!(fn _audio_capture_permission_status() -> Int);
 
@@ -55,16 +55,17 @@ pub fn snapshot() -> Result<PermissionSnapshot, String> {
 pub fn check(permission: PermissionKind) -> Result<PermissionStatus, String> {
     #[cfg(target_os = "macos")]
     {
-        let raw = match permission {
-            PermissionKind::Microphone => unsafe { _microphone_permission_status() as isize },
-            PermissionKind::SystemAudio => unsafe { _audio_capture_permission_status() as isize },
-        };
-
-        Ok(match raw {
-            GRANTED => PermissionStatus::Authorized,
-            NEVER_REQUESTED => PermissionStatus::NeverRequested,
-            DENIED => PermissionStatus::Denied,
-            _ => PermissionStatus::Denied,
+        Ok(match permission {
+            PermissionKind::Microphone => check_microphone(),
+            PermissionKind::SystemAudio => {
+                let raw = unsafe { _audio_capture_permission_status() as isize };
+                match raw {
+                    GRANTED => PermissionStatus::Authorized,
+                    NEVER_REQUESTED => PermissionStatus::NeverRequested,
+                    DENIED => PermissionStatus::Denied,
+                    _ => PermissionStatus::Denied,
+                }
+            }
         })
     }
 
@@ -79,7 +80,10 @@ pub fn request(permission: PermissionKind) -> Result<PermissionStatus, String> {
     #[cfg(target_os = "macos")]
     {
         let granted = match permission {
-            PermissionKind::Microphone => unsafe { _request_microphone_permission() },
+            PermissionKind::Microphone => {
+                request_microphone();
+                true
+            }
             PermissionKind::SystemAudio => {
                 request_system_audio_probe()?;
                 true
@@ -118,6 +122,35 @@ pub fn open_settings(permission: PermissionKind) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn check_microphone() -> PermissionStatus {
+    let status = unsafe {
+        let media_type = AVMediaTypeAudio.unwrap();
+        AVCaptureDevice::authorizationStatusForMediaType(media_type)
+    };
+
+    match status {
+        AVAuthorizationStatus::NotDetermined => PermissionStatus::NeverRequested,
+        AVAuthorizationStatus::Authorized => PermissionStatus::Authorized,
+        _ => PermissionStatus::Denied,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn request_microphone() {
+    let (tx, rx) = std::sync::mpsc::channel::<bool>();
+    let completion = RcBlock::new(move |granted: objc2::runtime::Bool| {
+        let _ = tx.send(granted.as_bool());
+    });
+
+    unsafe {
+        let media_type = AVMediaTypeAudio.unwrap();
+        AVCaptureDevice::requestAccessForMediaType_completionHandler(media_type, &completion);
+    }
+
+    let _ = rx.recv_timeout(std::time::Duration::from_secs(60));
 }
 
 #[cfg(target_os = "macos")]

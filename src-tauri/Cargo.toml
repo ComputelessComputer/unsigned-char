@@ -37,6 +37,9 @@ aec3 = "0.1.7"
 swift-rs = { version = "1.0.7", features = ["build"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
+objc2 = "0.6.3"
+objc2-av-foundation = "0.3.2"
 swift-rs = "1.0.7"
 cidre = { version = "0.15", features = ["av"] }
 rodio = "0.22"

@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 
 private let grantedValue = 0
@@ -13,49 +12,6 @@ private let tccHandle: UnsafeMutableRawPointer? = {
 }()
 
 private typealias TCCPreflightFunc = @convention(c) (CFString, CFDictionary?) -> Int
-
-private func mapCaptureMicrophoneStatus(_ status: AVAuthorizationStatus) -> Int {
-  switch status {
-  case .authorized:
-    grantedValue
-  case .notDetermined:
-    neverRequestedValue
-  case .denied, .restricted:
-    deniedValue
-  @unknown default:
-    errorValue
-  }
-}
-
-@_cdecl("_microphone_permission_status")
-public func _microphone_permission_status() -> Int {
-  mapCaptureMicrophoneStatus(AVCaptureDevice.authorizationStatus(for: .audio))
-}
-
-@_cdecl("_request_microphone_permission")
-public func _request_microphone_permission() -> Bool {
-  let status = AVCaptureDevice.authorizationStatus(for: .audio)
-
-  switch status {
-  case .authorized:
-    return true
-  case .denied, .restricted:
-    return false
-  case .notDetermined:
-    let semaphore = DispatchSemaphore(value: 0)
-    var granted = false
-
-    AVCaptureDevice.requestAccess(for: .audio) { allowed in
-      granted = allowed
-      semaphore.signal()
-    }
-
-    _ = semaphore.wait(timeout: .now() + .seconds(60))
-    return granted
-  @unknown default:
-    return false
-  }
-}
 
 @_cdecl("_audio_capture_permission_status")
 public func _audio_capture_permission_status() -> Int {
