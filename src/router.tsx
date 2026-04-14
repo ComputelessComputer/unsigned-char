@@ -1221,7 +1221,7 @@ function MeetingTitleField({
       value={draft}
       spellCheck={false}
       aria-label="Meeting title"
-      className="w-full bg-transparent text-[56px] leading-[1.05] font-semibold tracking-[-0.045em] text-zinc-950 outline-none"
+      className="min-h-14 w-full border-0 bg-transparent p-0 text-[56px] leading-none font-semibold tracking-[-0.045em] text-zinc-950 outline-none"
       onChange={(event) => setDraft(event.target.value)}
       onBlur={() => {
         appStore.updateMeetingTitle(meetingId, draft);
@@ -1496,7 +1496,7 @@ function MeetingScreen() {
           </div>
         </div>
 
-        <div className="flex items-end gap-3">
+        <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1" data-window-drag="false">
             <MeetingTitleField key={meeting.id} meetingId={meeting.id} title={meeting.title} />
           </div>
