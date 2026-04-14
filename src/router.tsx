@@ -77,6 +77,7 @@ import {
   LANGUAGE_OPTIONS,
   appStore,
   currentSetupBannerContent,
+  formatDateTime,
   getMeetingTranscriptEntries,
   getMeetingSpeakerLabel,
   getTimezoneOptions,
@@ -1165,6 +1166,9 @@ function HomeScreen() {
                               <h2 className="truncate text-lg font-semibold tracking-[-0.03em] text-zinc-950">
                                 {meeting.title}
                               </h2>
+                              <p className="mt-1 truncate text-sm text-zinc-500">
+                                Created {formatDateTime(meeting.createdAt)}
+                              </p>
                             </div>
 
                             {postProcessingLabel ? (
