@@ -22,6 +22,13 @@ export {
 } from "./ui/field";
 export { Input, InputPrimitive, type InputProps } from "./ui/input";
 export {
+  Progress,
+  ProgressIndicator,
+  ProgressLabel,
+  ProgressTrack,
+  ProgressValue,
+} from "./ui/progress";
+export {
   Select,
   SelectContent,
   SelectGroup,

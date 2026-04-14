@@ -84,6 +84,8 @@ pub struct SpeechModelDownloadState {
     #[serde(default)]
     pub current_file: Option<String>,
     #[serde(default)]
+    pub progress_percent: Option<u8>,
+    #[serde(default)]
     pub error: Option<String>,
 }
 

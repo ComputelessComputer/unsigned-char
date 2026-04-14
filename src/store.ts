@@ -96,8 +96,7 @@ export type ManagedModelDownloadState = {
   status: ManagedModelDownloadStatus;
   localPath: string;
   currentFile: string | null;
-  bytesDownloaded: number;
-  totalBytes: number | null;
+  progressPercent: number | null;
   error: string | null;
 };
 
@@ -1330,31 +1329,9 @@ export function requiresAppSetup(snapshot: AppState) {
   return requiresModelSetup(snapshot);
 }
 
-function formatByteSize(bytes: number) {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 B";
-  }
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const decimals = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
-  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
-}
-
 function modelDownloadProgressCopy(download: ManagedModelDownloadState) {
-  if (download.totalBytes && download.totalBytes > 0) {
-    return `${formatByteSize(download.bytesDownloaded)} of ${formatByteSize(download.totalBytes)}`;
-  }
-
-  if (download.bytesDownloaded > 0) {
-    return formatByteSize(download.bytesDownloaded);
+  if (download.progressPercent !== null) {
+    return `${download.progressPercent}%`;
   }
 
   return "Preparing download";
@@ -1376,7 +1353,7 @@ export function currentSetupBannerContent(snapshot: AppState): SetupBannerConten
 
   if (isDownloading && download) {
     const progress = download.currentFile
-      ? download.bytesDownloaded > 0 || download.totalBytes
+      ? download.progressPercent !== null
         ? `${download.currentFile} · ${modelDownloadProgressCopy(download)}`
         : download.currentFile
       : modelDownloadProgressCopy(download);
@@ -1710,8 +1687,7 @@ function optimisticModelDownloadState(): ManagedModelDownloadState {
     status: "downloading",
     localPath: state.modelSettings?.selectedModelLocalPath || state.modelDownload?.localPath || "",
     currentFile: `Preparing ${selectedModelLabel}...`,
-    bytesDownloaded: 0,
-    totalBytes: null,
+    progressPercent: null,
     error: null,
   };
 }

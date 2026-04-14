@@ -280,8 +280,7 @@ struct ManagedModelDownloadState {
     status: ManagedModelDownloadStatus,
     local_path: String,
     current_file: Option<String>,
-    bytes_downloaded: u64,
-    total_bytes: Option<u64>,
+    progress_percent: Option<u8>,
     error: Option<String>,
 }
 
@@ -609,8 +608,7 @@ fn download_managed_model<R: tauri::Runtime>(
             status: ManagedModelDownloadStatus::Ready,
             local_path: target_dir.display().to_string(),
             current_file: None,
-            bytes_downloaded: 0,
-            total_bytes: None,
+            progress_percent: None,
             error: None,
         };
         return Ok(download_state.clone());
@@ -627,8 +625,7 @@ fn download_managed_model<R: tauri::Runtime>(
         status: ManagedModelDownloadStatus::Downloading,
         local_path: target_dir.display().to_string(),
         current_file: Some(format!("Preparing {}...", selected_spec.label)),
-        bytes_downloaded: 0,
-        total_bytes: None,
+        progress_percent: None,
         error: None,
     };
 
@@ -710,8 +707,7 @@ fn delete_managed_model<R: tauri::Runtime>(
             status: ManagedModelDownloadStatus::Idle,
             local_path: target_dir.display().to_string(),
             current_file: None,
-            bytes_downloaded: 0,
-            total_bytes: None,
+            progress_percent: None,
             error: None,
         };
     }
@@ -1820,8 +1816,7 @@ fn apply_speech_model_download_state(
         _ => ManagedModelDownloadStatus::Idle,
     };
     download_state.current_file = speech_state.current_file;
-    download_state.bytes_downloaded = 0;
-    download_state.total_bytes = None;
+    download_state.progress_percent = speech_state.progress_percent;
     download_state.error = speech_state.error;
 }
 

@@ -62,6 +62,11 @@ import {
   FieldLabel,
   Input,
   Kbd,
+  Progress,
+  ProgressIndicator,
+  ProgressLabel,
+  ProgressTrack,
+  ProgressValue,
   Select,
   SelectItem,
   SelectPopup,
@@ -345,11 +350,11 @@ function SettingsStatusDot({
 }
 
 function getModelDownloadProgressPercent(download: ManagedModelDownloadState | null) {
-  if (!download?.totalBytes || download.totalBytes <= 0) {
+  if (download?.progressPercent === null || download?.progressPercent === undefined) {
     return null;
   }
 
-  return Math.max(0, Math.min(100, Math.round((download.bytesDownloaded / download.totalBytes) * 100)));
+  return Math.max(0, Math.min(100, Math.round(download.progressPercent)));
 }
 
 function ModelDownloadGauge({
@@ -360,33 +365,31 @@ function ModelDownloadGauge({
   download: ManagedModelDownloadState | null;
 }) {
   const progressPercent = getModelDownloadProgressPercent(download);
-  const progressLabel = progressPercent === null ? "0%" : `${progressPercent}%`;
-  const progressWidth = progressPercent === null ? "2%" : `${Math.max(progressPercent, 2)}%`;
+  const progressLabel = progressPercent === null ? "Starting" : `${progressPercent}%`;
 
   return (
     <div className="w-full rounded-[calc(var(--radius)-6px)] border border-[color:var(--border)] bg-[color:var(--secondary)] px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <p className="min-w-0 truncate text-sm font-medium text-zinc-900">
-          {download?.currentFile ?? (busy ? "Starting download..." : "Preparing download...")}
-        </p>
-        <span className="shrink-0 text-sm text-zinc-500">{progressLabel}</span>
-      </div>
-      <div
+      <Progress
         aria-label="Model download progress"
-        aria-valuemax={100}
-        aria-valuemin={0}
-        aria-valuenow={progressPercent ?? 0}
-        className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200"
-        role="progressbar"
+        getAriaValueText={(_formatted, value) =>
+          value === null ? "Preparing download" : `${Math.round(value)}% downloaded`
+        }
+        value={progressPercent}
       >
-        <div
-          className={cn(
-            "h-full rounded-full bg-zinc-950 transition-[width] duration-500 ease-out",
-            progressPercent === null && "animate-pulse",
-          )}
-          style={{ width: progressWidth }}
-        />
-      </div>
+        <div className="flex items-center justify-between gap-3">
+          <ProgressLabel className="min-w-0 truncate">
+            {download?.currentFile ?? (busy ? "Starting download..." : "Preparing download...")}
+          </ProgressLabel>
+          <ProgressValue className="shrink-0">
+            {(formattedValue, value) =>
+              value === null ? progressLabel : (formattedValue ?? `${Math.round(value)}%`)
+            }
+          </ProgressValue>
+        </div>
+        <ProgressTrack>
+          <ProgressIndicator />
+        </ProgressTrack>
+      </Progress>
     </div>
   );
 }

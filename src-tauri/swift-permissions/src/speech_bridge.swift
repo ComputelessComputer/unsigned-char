@@ -242,6 +242,7 @@ private enum LoadedSpeechModel {
 private struct ModelDownloadPayload: Codable {
   var status: String
   var currentFile: String?
+  var progressPercent: Int?
   var localPath: String
   var error: String?
 }
@@ -964,6 +965,7 @@ private actor SpeechBridge {
         ModelDownloadPayload(
           status: "error",
           currentFile: nil,
+          progressPercent: nil,
           localPath: "",
           error: "Unsupported speech model."
         )
@@ -999,6 +1001,7 @@ private actor SpeechBridge {
     var state = downloadState(for: kind)
     state.status = "downloading"
     state.currentFile = "Preparing \(kind.label)..."
+    state.progressPercent = nil
     state.error = nil
     downloadStates[kind] = state
 
@@ -1048,6 +1051,7 @@ private actor SpeechBridge {
       state.status = "idle"
     }
     state.currentFile = nil
+    state.progressPercent = nil
     state.error = nil
     downloadStates[kind] = state
   }
@@ -1318,10 +1322,11 @@ private actor SpeechBridge {
 
     let percent = Int(max(0.0, min(1.0, fraction)) * 100.0)
     let statusText = status.trimmingCharacters(in: .whitespacesAndNewlines)
+    state.progressPercent = percent
     if statusText.isEmpty {
-      state.currentFile = "Preparing \(kind.label)... (\(percent)%)"
+      state.currentFile = "Preparing \(kind.label)..."
     } else {
-      state.currentFile = "\(statusText) (\(percent)%)"
+      state.currentFile = statusText
     }
     downloadStates[kind] = state
   }
@@ -1334,6 +1339,7 @@ private actor SpeechBridge {
     state.localPath = kind.cacheDirectoryPath()
     state.status = "ready"
     state.currentFile = nil
+    state.progressPercent = nil
     state.error = nil
     downloadStates[kind] = state
   }
@@ -1345,6 +1351,7 @@ private actor SpeechBridge {
     state.localPath = kind.cacheDirectoryPath()
     state.status = "error"
     state.currentFile = nil
+    state.progressPercent = nil
     state.error = error.localizedDescription
     downloadStates[kind] = state
   }
@@ -1362,9 +1369,11 @@ private actor SpeechBridge {
       state.status = "ready"
       state.error = nil
       state.currentFile = nil
+      state.progressPercent = nil
     } else if state.status == "ready" {
       state.status = "idle"
       state.currentFile = nil
+      state.progressPercent = nil
       state.error = nil
       loadedModels[kind] = nil
     } else if state.localPath.isEmpty {
@@ -1382,6 +1391,7 @@ private actor SpeechBridge {
     return ModelDownloadPayload(
       status: "idle",
       currentFile: nil,
+      progressPercent: nil,
       localPath: kind.cacheDirectoryPath(),
       error: nil
     )
