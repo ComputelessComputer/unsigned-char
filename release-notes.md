@@ -1,1 +1,1 @@
-unsigned Char 0.0.6 fixes false microphone and system-audio permission errors, updates the bundle identifier, and fixes CI workflows.
+unsigned Char 0.0.7 fixes the false microphone permission warning by matching Philo's microphone access flow.
