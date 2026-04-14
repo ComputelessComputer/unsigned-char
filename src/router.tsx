@@ -136,7 +136,7 @@ function BrandWordmark({ className }: { className?: string }) {
     <img
       src={brandWordmark}
       alt="unsigned Char"
-      className={cn("block h-7 w-auto", className)}
+      className={cn("block h-8 w-auto -translate-y-1", className)}
       draggable={false}
     />
   );
@@ -1314,10 +1314,18 @@ function MeetingScreen() {
   const snapshot = useAppState();
   const navigate = useNavigate();
   const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
-  const transcriptScrollFade = useScrollFade<HTMLElement>();
-  const { attachRef: attachTranscriptScrollFade, handleScroll: handleTranscriptScroll } =
-    transcriptScrollFade;
   const { meetingId } = useParams({ from: "/meeting/$meetingId" });
+  const transcriptScrollFade = useScrollFade<HTMLElement>({
+    stickToBottom:
+      snapshot.recordingMeetingId === meetingId &&
+      snapshot.transcriptionRunning &&
+      !snapshot.transcriptionStopping,
+  });
+  const {
+    attachRef: attachTranscriptScrollFade,
+    handleScroll: handleTranscriptScroll,
+    scrollToBottom: scrollTranscriptToBottom,
+  } = transcriptScrollFade;
   const meeting = snapshot.meetings.find((candidate) => candidate.id === meetingId) ?? null;
   const attachTranscriptRef = useCallback(
     (node: HTMLElement | null) => {
@@ -1328,10 +1336,10 @@ function MeetingScreen() {
       }
 
       window.requestAnimationFrame(() => {
-        node.scrollTop = node.scrollHeight;
+        scrollTranscriptToBottom(node);
       });
     },
-    [attachTranscriptScrollFade],
+    [attachTranscriptScrollFade, scrollTranscriptToBottom],
   );
 
   if (!meeting) {

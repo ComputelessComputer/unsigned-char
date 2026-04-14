@@ -5,7 +5,12 @@ type ScrollFadeState = {
   showTop: boolean;
 };
 
-export function useScrollFade<T extends HTMLElement>() {
+type UseScrollFadeOptions = {
+  stickToBottom?: boolean;
+};
+
+export function useScrollFade<T extends HTMLElement>(options: UseScrollFadeOptions = {}) {
+  const { stickToBottom = false } = options;
   const [node, setNode] = useState<T | null>(null);
   const [state, setState] = useState<ScrollFadeState>({
     showBottom: false,
@@ -27,12 +32,34 @@ export function useScrollFade<T extends HTMLElement>() {
     );
   }, []);
 
+  const scrollToBottom = useCallback(
+    (element: T | null = node) => {
+      if (!element) {
+        return;
+      }
+
+      const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+
+      if (Math.abs(element.scrollTop - maxScrollTop) > 1) {
+        element.scrollTop = maxScrollTop;
+      }
+
+      updateState(element);
+    },
+    [node, updateState],
+  );
+
   useEffect(() => {
     if (!node) {
       return;
     }
 
     const update = () => {
+      if (stickToBottom) {
+        scrollToBottom(node);
+        return;
+      }
+
       updateState(node);
     };
 
@@ -54,7 +81,7 @@ export function useScrollFade<T extends HTMLElement>() {
       mutationObserver.disconnect();
       window.removeEventListener("resize", update);
     };
-  }, [node, updateState]);
+  }, [node, scrollToBottom, stickToBottom, updateState]);
 
   const attachRef = useCallback((nextNode: T | null) => {
     setNode((current) => (current === nextNode ? current : nextNode));
@@ -78,6 +105,7 @@ export function useScrollFade<T extends HTMLElement>() {
   return {
     attachRef,
     handleScroll,
+    scrollToBottom,
     showBottom: state.showBottom,
     showTop: state.showTop,
   };
