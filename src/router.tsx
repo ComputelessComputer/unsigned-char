@@ -1247,6 +1247,35 @@ function MeetingTitleField({
   );
 }
 
+function MeetingHeaderTimestampButton({
+  meeting,
+}: {
+  meeting: Pick<Meeting, "createdAt" | "updatedAt">;
+}) {
+  const [mode, setMode] = useState<"created" | "updated">("created");
+  const showingCreated = mode === "created";
+  const label = showingCreated ? "Created" : "Updated";
+  const nextLabel = showingCreated ? "updated" : "created";
+  const value = showingCreated ? meeting.createdAt : meeting.updatedAt;
+
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="rounded-full px-2.5 text-zinc-600 hover:bg-zinc-100 data-pressed:bg-zinc-100"
+      data-window-drag="false"
+      aria-label={`${label} ${formatDateTime(value)}. Click to show ${nextLabel}.`}
+      title={`Showing ${label.toLowerCase()} time. Click to show ${nextLabel}.`}
+      onClick={() => {
+        setMode((current) => (current === "created" ? "updated" : "created"));
+      }}
+    >
+      <span className="font-medium text-zinc-500">{label}</span>
+      <span>{formatDateTime(value)}</span>
+    </Button>
+  );
+}
+
 function SpeakerLabelField({
   meetingId,
   speakerId,
@@ -1466,7 +1495,9 @@ function MeetingScreen() {
             </Button>
           </div>
 
-          <div className="min-w-0" />
+          <div className="flex min-w-0 justify-center">
+            <MeetingHeaderTimestampButton key={meeting.id} meeting={meeting} />
+          </div>
 
           <div data-window-drag="false">
             <Button
