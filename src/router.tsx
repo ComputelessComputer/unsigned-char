@@ -192,7 +192,7 @@ function LiveIndicator({ className }: { className?: string }) {
 
 function BottomBannerShell({ children }: { children: ReactNode }) {
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-40">
+    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50">
       <div className="mx-auto w-full max-w-[780px]">
         <div className="pointer-events-auto rounded-[calc(var(--radius)+2px)] border border-zinc-950 bg-zinc-950 px-4 py-4 text-white shadow-[0_1px_2px_rgba(15,23,42,0.08),0_20px_44px_rgba(15,23,42,0.18)]">
           {children}
@@ -222,7 +222,7 @@ function DiarizationActivityBanner({
       <Button
         size="icon-xl"
         aria-label="Show speaker identification progress"
-        className="fixed right-6 bottom-6 z-40 rounded-full border-zinc-950 bg-zinc-950 text-white shadow-[0_18px_48px_rgba(15,23,42,0.36)] before:shadow-none hover:bg-zinc-900 data-pressed:bg-zinc-900 *:data-[slot=button-loading-indicator]:text-white"
+        className="fixed right-6 bottom-6 z-50 rounded-full border-zinc-950 bg-zinc-950 text-white shadow-[0_18px_48px_rgba(15,23,42,0.36)] before:shadow-none hover:bg-zinc-900 data-pressed:bg-zinc-900 *:data-[slot=button-loading-indicator]:text-white"
         onClick={onExpand}
       >
         <Spinner className="size-5 text-white" />
@@ -1382,7 +1382,6 @@ function MeetingScreen() {
     snapshot.diarizationRunBusy && snapshot.diarizationMeetingId === meeting.id ? "running" : "done";
   const diarizationIndicatorMinimized =
     showDiarizationActivity && diarizationBannerPhase === "running" && snapshot.diarizationIndicatorMinimized;
-  const showDiarizationBottomBanner = showDiarizationActivity && !diarizationIndicatorMinimized;
   const summaryReady = Boolean(snapshot.summarySettings?.ready);
   const showSummaryCard = !isMeetingListening && Boolean(meeting.summary);
   const isGeneratingSummary = snapshot.summaryMeetingId === meeting.id;
@@ -1639,7 +1638,6 @@ function MeetingScreen() {
               className={cn(
                 "flex min-h-full flex-col gap-4 px-4 pb-4",
                 showTranscriptEmptyState && "h-full",
-                showDiarizationBottomBanner && "pb-24",
               )}
             >
               {showSummaryCard ? (
