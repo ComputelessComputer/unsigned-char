@@ -1,4 +1,4 @@
-import { type UIEventHandler, useCallback, useEffect, useState } from "react";
+import { type UIEventHandler, useCallback, useEffect, useRef, useState } from "react";
 
 type ScrollFadeState = {
   showBottom: boolean;
@@ -12,6 +12,7 @@ type UseScrollFadeOptions = {
 export function useScrollFade<T extends HTMLElement>(options: UseScrollFadeOptions = {}) {
   const { stickToBottom = false } = options;
   const [node, setNode] = useState<T | null>(null);
+  const pendingScrollFrame = useRef<number | null>(null);
   const [state, setState] = useState<ScrollFadeState>({
     showBottom: false,
     showTop: false,
@@ -38,13 +39,25 @@ export function useScrollFade<T extends HTMLElement>(options: UseScrollFadeOptio
         return;
       }
 
-      const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+      const syncScrollPosition = () => {
+        const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
 
-      if (Math.abs(element.scrollTop - maxScrollTop) > 1) {
-        element.scrollTop = maxScrollTop;
+        if (Math.abs(element.scrollTop - maxScrollTop) > 1) {
+          element.scrollTop = maxScrollTop;
+        }
+
+        updateState(element);
+      };
+
+      if (pendingScrollFrame.current !== null) {
+        window.cancelAnimationFrame(pendingScrollFrame.current);
       }
 
-      updateState(element);
+      syncScrollPosition();
+      pendingScrollFrame.current = window.requestAnimationFrame(() => {
+        pendingScrollFrame.current = null;
+        syncScrollPosition();
+      });
     },
     [node, updateState],
   );
@@ -77,6 +90,10 @@ export function useScrollFade<T extends HTMLElement>(options: UseScrollFadeOptio
 
     return () => {
       window.cancelAnimationFrame(frame);
+      if (pendingScrollFrame.current !== null) {
+        window.cancelAnimationFrame(pendingScrollFrame.current);
+        pendingScrollFrame.current = null;
+      }
       resizeObserver.disconnect();
       mutationObserver.disconnect();
       window.removeEventListener("resize", update);
@@ -87,6 +104,10 @@ export function useScrollFade<T extends HTMLElement>(options: UseScrollFadeOptio
     setNode((current) => (current === nextNode ? current : nextNode));
 
     if (!nextNode) {
+      if (pendingScrollFrame.current !== null) {
+        window.cancelAnimationFrame(pendingScrollFrame.current);
+        pendingScrollFrame.current = null;
+      }
       setState((current) =>
         current.showBottom || current.showTop
           ? {
