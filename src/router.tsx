@@ -11,6 +11,7 @@ import {
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   CircleAlert,
@@ -19,6 +20,7 @@ import {
   Globe2,
   PlugZap,
   RefreshCw,
+  Trash2,
   Users,
 } from "lucide-react";
 import {
@@ -607,6 +609,66 @@ function DeleteMeetingDialog({
                 ⏎
               </Kbd>
             </Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+function DeleteSummaryApiKeyDialog({
+  open,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-zinc-950/20 p-4 backdrop-blur-[2px] sm:items-center"
+      onClick={onCancel}
+      role="presentation"
+    >
+      <Card
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-summary-api-key-title"
+        className="w-full max-w-sm"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onConfirm();
+          }}
+        >
+          <div className="space-y-4 px-5 py-4">
+            <div className="space-y-1">
+              <CardTitle id="delete-summary-api-key-title" className="text-base">
+                Delete saved API key?
+              </CardTitle>
+              <CardDescription>Are you sure you want to delete the API key?</CardDescription>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" onClick={onCancel}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                type="submit"
+                autoFocus
+                className="text-white"
+                style={{ color: "#fff", WebkitTextFillColor: "#fff" }}
+              >
+                Delete
+              </Button>
+            </div>
           </div>
         </form>
       </Card>
@@ -2075,6 +2137,8 @@ function SettingsScreen() {
     readTargetSettingsSection(),
   );
   const [settingsScrollTop, setSettingsScrollTop] = useState(0);
+  const [apiKeyFieldFocused, setApiKeyFieldFocused] = useState(false);
+  const [summaryApiKeyDeleteRequested, setSummaryApiKeyDeleteRequested] = useState(false);
   const settingsLoadNote =
     snapshot.permissionNote || snapshot.generalNote || snapshot.summaryNote || snapshot.speakerProfilesNote;
   const settingsContentWidthClass = isSettingsWindow ? "max-w-[640px]" : "max-w-[760px]";
@@ -2210,9 +2274,14 @@ function SettingsScreen() {
       ? "ready"
       : "needs setup";
   const summaryStatusActive = snapshot.summarySettings.ready;
-  const apiKeyPlaceholder =
-    snapshot.summaryDraft.apiKeyPresent && !snapshot.summaryDraft.apiKeyDirty
-      ? "API key saved"
+  const savedSummaryApiKey =
+    snapshot.summaryDraft.apiKeyPresent && !snapshot.summaryDraft.apiKeyDirty;
+  const showSavedSummaryApiKeyMask =
+    savedSummaryApiKey && !snapshot.summaryDraft.apiKey && !apiKeyFieldFocused;
+  const apiKeyPlaceholder = showSavedSummaryApiKeyMask
+    ? ""
+    : savedSummaryApiKey
+      ? "Replace API key"
       : selectedSummaryProvider?.requiresApiKey
         ? "Paste API key"
         : "Optional API key";
@@ -2501,30 +2570,74 @@ function SettingsScreen() {
 
                     <Field>
                       <FieldLabel>API key</FieldLabel>
-                      <div className="flex w-full flex-col gap-3 sm:flex-row">
-                        <Input
-                          className="flex-1"
-                          type="text"
-                          autoComplete="off"
-                          spellCheck={false}
-                          value={snapshot.summaryDraft.apiKey}
-                          onChange={(event) => {
-                            appStore.setSummaryApiKey(event.target.value);
-                          }}
-                          placeholder={apiKeyPlaceholder}
-                          style={snapshot.summaryDraft.apiKey ? MASKED_TEXT_INPUT_STYLE : undefined}
-                          disabled={snapshot.summaryBusy}
-                        />
-                        {snapshot.summaryDraft.apiKeyPresent ? (
-                          <Button
-                            variant="secondary"
-                            disabled={snapshot.summaryBusy}
-                            onClick={() => {
-                              void appStore.removeSummaryApiKey();
+                      <div className="flex w-full flex-col gap-2">
+                        <div className="relative">
+                          <Input
+                            className={cn("flex-1", savedSummaryApiKey && "pr-11")}
+                            type="text"
+                            autoComplete="off"
+                            spellCheck={false}
+                            value={snapshot.summaryDraft.apiKey}
+                            onChange={(event) => {
+                              appStore.setSummaryApiKey(event.target.value);
                             }}
-                          >
-                            Remove saved key
-                          </Button>
+                            onFocus={() => {
+                              setApiKeyFieldFocused(true);
+                            }}
+                            onBlur={() => {
+                              setApiKeyFieldFocused(false);
+                            }}
+                            placeholder={apiKeyPlaceholder}
+                            style={snapshot.summaryDraft.apiKey ? MASKED_TEXT_INPUT_STYLE : undefined}
+                            disabled={snapshot.summaryBusy}
+                          />
+                          {showSavedSummaryApiKeyMask ? (
+                            <span
+                              aria-hidden="true"
+                              className="pointer-events-none absolute inset-y-0 left-3 right-11 flex items-center overflow-hidden text-sm tracking-[0.28em] text-zinc-500"
+                            >
+                              ••••••••••••••••
+                            </span>
+                          ) : null}
+                          {savedSummaryApiKey ? (
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="group absolute right-2 top-1/2 -translate-y-1/2 rounded-full text-zinc-500 hover:bg-transparent"
+                                    aria-label="Delete saved API key"
+                                    disabled={snapshot.summaryBusy}
+                                  />
+                                }
+                                onClick={() => {
+                                  setSummaryApiKeyDeleteRequested(true);
+                                }}
+                              >
+                                <span className="relative flex size-4 items-center justify-center">
+                                  <Check
+                                    className="size-4 text-emerald-600 transition-opacity duration-150 group-hover:opacity-0"
+                                    strokeWidth={2.2}
+                                    aria-hidden="true"
+                                  />
+                                  <Trash2
+                                    className="absolute size-4 text-rose-600 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+                                    strokeWidth={2}
+                                    aria-hidden="true"
+                                  />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipPopup side="top" align="end">
+                                Delete saved key
+                              </TooltipPopup>
+                            </Tooltip>
+                          ) : null}
+                        </div>
+                        {savedSummaryApiKey ? (
+                          <FieldDescription>
+                            Safely saved in the macOS Keychain.
+                          </FieldDescription>
                         ) : null}
                       </div>
                     </Field>
@@ -2546,6 +2659,16 @@ function SettingsScreen() {
           </div>
         </div>
       </div>
+      <DeleteSummaryApiKeyDialog
+        open={savedSummaryApiKey && summaryApiKeyDeleteRequested}
+        onCancel={() => {
+          setSummaryApiKeyDeleteRequested(false);
+        }}
+        onConfirm={() => {
+          setSummaryApiKeyDeleteRequested(false);
+          void appStore.removeSummaryApiKey();
+        }}
+      />
     </section>
   );
 }
