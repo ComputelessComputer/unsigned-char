@@ -43,3 +43,4 @@ objc2-av-foundation = "0.3.2"
 swift-rs = "1.0.7"
 cidre = { version = "0.15", features = ["av"] }
 rodio = "0.22"
+keyring = { version = "3.6.3", default-features = false, features = ["apple-native"] }

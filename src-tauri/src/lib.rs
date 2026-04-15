@@ -14,8 +14,8 @@ use std::{
 };
 
 use asr::{
-    embed_speaker_audio_file as speech_embed_speaker_audio_file,
     diarize_audio_file as speech_diarize_audio_file,
+    embed_speaker_audio_file as speech_embed_speaker_audio_file,
     managed_model_download_state as speech_model_download_state,
     managed_model_path as speech_model_path, reset_managed_model as reset_speech_model,
     start_managed_model_download as start_speech_model_download, FileSpeakerEmbeddingPayload,
@@ -38,6 +38,8 @@ use tracing::{error, info, warn};
 
 #[cfg(target_os = "macos")]
 use cidre::{cf, core_audio as ca};
+#[cfg(target_os = "macos")]
+use keyring::{Entry as KeyringEntry, Error as KeyringError};
 
 const APP_STORAGE_DIR_NAME: &str = "unsigned char";
 const APP_DISPLAY_NAME: &str = "unsigned Char";
@@ -53,6 +55,9 @@ const SETTINGS_WINDOW_LABEL: &str = "settings";
 const CHAR_WEBSITE_URL: &str = "https://char.com";
 const DIARIZATION_PROVIDER_LABEL: &str = "speech-swift";
 const DIARIZATION_PIPELINE_LABEL: &str = "sortformer coreml diarization";
+const SECRET_STORAGE_SOURCE_LABEL: &str = "macOS Keychain";
+const SUMMARY_API_KEY_ACCOUNT_PREFIX: &str = "summary-api-key";
+const DIARIZATION_HUGGING_FACE_TOKEN_ACCOUNT: &str = "diarization-hugging-face-token";
 
 #[derive(Default)]
 struct AppState {
@@ -218,7 +223,7 @@ struct StoredDiarizationSettings {
     enabled: bool,
     #[serde(default)]
     local_path: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     hugging_face_token: String,
 }
 
@@ -271,9 +276,9 @@ struct StoredSummarySettings {
     base_url: String,
     #[serde(default)]
     base_url_provider: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     api_key: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     api_key_provider: String,
 }
 
@@ -569,17 +574,6 @@ impl StoredSummarySettings {
             self.base_url_provider = provider.clone();
         }
 
-        if input.clear_api_key {
-            self.api_key.clear();
-            self.api_key_provider.clear();
-        } else if input.update_api_key {
-            let api_key = input.api_key.trim();
-            if !api_key.is_empty() {
-                self.api_key = api_key.to_string();
-                self.api_key_provider = provider;
-            }
-        }
-
         Ok(())
     }
 
@@ -590,14 +584,201 @@ impl StoredSummarySettings {
 
         self.base_url.trim().to_string()
     }
+}
 
-    fn current_api_key(&self) -> String {
-        if self.provider.is_empty() || self.api_key_provider != self.provider {
-            return String::new();
-        }
-
-        self.api_key.trim().to_string()
+fn summary_api_key_account(provider: &str) -> Option<String> {
+    let provider = provider.trim();
+    if provider.is_empty() {
+        None
+    } else {
+        Some(format!("{SUMMARY_API_KEY_ACCOUNT_PREFIX}:{provider}"))
     }
+}
+
+fn load_summary_api_key<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    provider: &str,
+) -> Result<Option<String>, String> {
+    let Some(account) = summary_api_key_account(provider) else {
+        return Ok(None);
+    };
+
+    load_secret(app, &account)
+}
+
+fn persist_summary_api_key<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    provider: &str,
+    api_key: &str,
+) -> Result<(), String> {
+    let Some(account) = summary_api_key_account(provider) else {
+        return Err("Choose a provider before saving an API key.".to_string());
+    };
+
+    persist_secret(app, &account, api_key)
+}
+
+fn clear_summary_api_key<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    provider: &str,
+) -> Result<(), String> {
+    let Some(account) = summary_api_key_account(provider) else {
+        return Ok(());
+    };
+
+    delete_secret(app, &account)
+}
+
+fn load_diarization_hugging_face_token<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Option<String>, String> {
+    load_secret(app, DIARIZATION_HUGGING_FACE_TOKEN_ACCOUNT)
+}
+
+fn persist_diarization_hugging_face_token<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    token: &str,
+) -> Result<(), String> {
+    persist_secret(app, DIARIZATION_HUGGING_FACE_TOKEN_ACCOUNT, token)
+}
+
+fn migrate_summary_secrets<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &mut StoredSummarySettings,
+) -> Result<bool, String> {
+    let legacy_api_key = settings.api_key.trim().to_string();
+    let legacy_provider = settings.api_key_provider.trim().to_string();
+
+    if legacy_api_key.is_empty() {
+        let changed = !settings.api_key.is_empty() || !settings.api_key_provider.is_empty();
+        settings.api_key.clear();
+        settings.api_key_provider.clear();
+        return Ok(changed);
+    }
+
+    let provider = if legacy_provider.is_empty() {
+        settings.provider.trim().to_string()
+    } else {
+        legacy_provider
+    };
+
+    if provider.is_empty() {
+        return Err("Found a saved summary API key without an associated provider.".to_string());
+    }
+
+    persist_summary_api_key(app, &provider, &legacy_api_key)?;
+    settings.api_key.clear();
+    settings.api_key_provider.clear();
+    Ok(true)
+}
+
+fn migrate_diarization_secrets<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &mut StoredDiarizationSettings,
+) -> Result<bool, String> {
+    let legacy_token = settings.hugging_face_token.trim().to_string();
+    if legacy_token.is_empty() {
+        let changed = !settings.hugging_face_token.is_empty();
+        settings.hugging_face_token.clear();
+        return Ok(changed);
+    }
+
+    persist_diarization_hugging_face_token(app, &legacy_token)?;
+    settings.hugging_face_token.clear();
+    Ok(true)
+}
+
+fn migrate_stored_secrets<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &mut StoredAppSettings,
+) -> Result<bool, String> {
+    let mut changed = false;
+    changed |= migrate_summary_secrets(app, &mut settings.summary)?;
+    changed |= migrate_diarization_secrets(app, &mut settings.diarization)?;
+    Ok(changed)
+}
+
+#[cfg(target_os = "macos")]
+fn load_secret<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    account: &str,
+) -> Result<Option<String>, String> {
+    let entry = KeyringEntry::new(app.config().identifier.as_str(), account)
+        .map_err(|error| format!("Failed to open Keychain entry: {error}"))?;
+
+    match entry.get_password() {
+        Ok(secret) => {
+            let secret = secret.trim().to_string();
+            if secret.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(secret))
+            }
+        }
+        Err(KeyringError::NoEntry) => Ok(None),
+        Err(error) => Err(format!("Failed to read from Keychain: {error}")),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn persist_secret<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    account: &str,
+    secret: &str,
+) -> Result<(), String> {
+    let entry = KeyringEntry::new(app.config().identifier.as_str(), account)
+        .map_err(|error| format!("Failed to open Keychain entry: {error}"))?;
+    let secret = secret.trim();
+
+    if secret.is_empty() {
+        return match entry.delete_credential() {
+            Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+            Err(error) => Err(format!("Failed to remove secret from Keychain: {error}")),
+        };
+    }
+
+    entry
+        .set_password(secret)
+        .map_err(|error| format!("Failed to write to Keychain: {error}"))
+}
+
+#[cfg(target_os = "macos")]
+fn delete_secret<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    account: &str,
+) -> Result<(), String> {
+    let entry = KeyringEntry::new(app.config().identifier.as_str(), account)
+        .map_err(|error| format!("Failed to open Keychain entry: {error}"))?;
+
+    match entry.delete_credential() {
+        Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
+        Err(error) => Err(format!("Failed to remove secret from Keychain: {error}")),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn load_secret<R: tauri::Runtime>(
+    _app: &tauri::AppHandle<R>,
+    _account: &str,
+) -> Result<Option<String>, String> {
+    Ok(None)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn persist_secret<R: tauri::Runtime>(
+    _app: &tauri::AppHandle<R>,
+    _account: &str,
+    _secret: &str,
+) -> Result<(), String> {
+    Err("Secure secret storage is only available on macOS.".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn delete_secret<R: tauri::Runtime>(
+    _app: &tauri::AppHandle<R>,
+    _account: &str,
+) -> Result<(), String> {
+    Ok(())
 }
 
 fn sanitize_embedding(values: &[f32]) -> Vec<f32> {
@@ -921,7 +1102,7 @@ fn delete_managed_model<R: tauri::Runtime>(
 fn diarization_settings_state<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<DiarizationSettingsState, String> {
-    build_diarization_settings_state(&load_diarization_settings(&app)?)
+    build_diarization_settings_state(&app, &load_diarization_settings(&app)?)
 }
 
 #[tauri::command]
@@ -940,7 +1121,7 @@ fn audio_device_settings_state() -> Result<AudioDeviceSettingsState, String> {
 fn summary_settings_state<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<SummarySettingsState, String> {
-    build_summary_settings_state(&load_summary_settings(&app)?)
+    build_summary_settings_state(&app, &load_summary_settings(&app)?)
 }
 
 #[tauri::command]
@@ -974,20 +1155,22 @@ fn save_diarization_settings<R: tauri::Runtime>(
     let mut stored = load_diarization_settings(&app)?;
     stored.enabled = settings.enabled;
     stored.local_path = settings.local_path.trim().to_string();
+    stored.hugging_face_token.clear();
 
     let token = settings.hugging_face_token.trim();
     if !token.is_empty() {
-        stored.hugging_face_token = token.to_string();
+        persist_diarization_hugging_face_token(&app, token)?;
     }
 
     persist_diarization_settings(&app, &stored)?;
+    let has_token = load_diarization_hugging_face_token(&app)?.is_some();
     info!(
         enabled = stored.enabled,
         custom_path = !stored.local_path.trim().is_empty(),
-        has_token = !stored.hugging_face_token.trim().is_empty(),
+        has_token,
         "Saved diarization settings",
     );
-    build_diarization_settings_state(&stored)
+    build_diarization_settings_state(&app, &stored)
 }
 
 #[tauri::command]
@@ -1026,16 +1209,29 @@ fn save_summary_settings<R: tauri::Runtime>(
     settings: SaveSummarySettingsInput,
 ) -> Result<SummarySettingsState, String> {
     let mut stored = load_summary_settings(&app)?;
+    let api_key = settings.api_key.trim().to_string();
+    let update_api_key = settings.update_api_key;
+    let clear_api_key = settings.clear_api_key;
     stored.apply_input(settings)?;
+
+    if clear_api_key {
+        clear_summary_api_key(&app, &stored.provider)?;
+    } else if update_api_key && !api_key.is_empty() {
+        persist_summary_api_key(&app, &stored.provider, &api_key)?;
+    }
+
+    stored.api_key.clear();
+    stored.api_key_provider.clear();
     persist_summary_settings(&app, &stored)?;
+    let api_key_present = load_summary_api_key(&app, &stored.provider)?.is_some();
     info!(
         provider = %stored.provider,
         model = %stored.model,
         base_url = %stored.current_base_url(),
-        api_key_present = !stored.current_api_key().is_empty(),
+        api_key_present,
         "Saved summary settings",
     );
-    build_summary_settings_state(&stored)
+    build_summary_settings_state(&app, &stored)
 }
 
 #[tauri::command]
@@ -1636,11 +1832,13 @@ fn build_model_settings_state<R: tauri::Runtime>(
     })
 }
 
-fn build_diarization_settings_state(
-    _settings: &StoredDiarizationSettings,
+fn build_diarization_settings_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &StoredDiarizationSettings,
 ) -> Result<DiarizationSettingsState, String> {
-    let enabled = true;
+    let enabled = settings.enabled;
     let ready = enabled;
+    let hugging_face_token_present = load_diarization_hugging_face_token(app)?.is_some();
     let status = if enabled {
         "Built-in Sortformer diarization runs locally after each meeting and downloads the native CoreML model on first use.".to_string()
     } else {
@@ -1654,8 +1852,9 @@ fn build_diarization_settings_state(
         local_path: String::new(),
         resolved_local_path: None,
         local_ready: enabled,
-        hugging_face_token_present: false,
-        hugging_face_token_source_label: None,
+        hugging_face_token_present,
+        hugging_face_token_source_label: hugging_face_token_present
+            .then_some(SECRET_STORAGE_SOURCE_LABEL),
         ready,
         status,
     })
@@ -1794,7 +1993,8 @@ fn set_default_audio_device(
     Err("Audio device selection is only available on macOS.".to_string())
 }
 
-fn build_summary_settings_state(
+fn build_summary_settings_state<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
     settings: &StoredSummarySettings,
 ) -> Result<SummarySettingsState, String> {
     let provider = settings.provider.trim().to_string();
@@ -1802,7 +2002,7 @@ fn build_summary_settings_state(
     let model = settings.model.trim().to_string();
     let base_url = settings.current_base_url();
     let resolved_base_url = summary_provider_resolved_base_url(&provider, &base_url).to_string();
-    let api_key_present = !settings.current_api_key().is_empty();
+    let api_key_present = load_summary_api_key(app, &provider)?.is_some();
 
     let status = if provider.is_empty() {
         "Choose a provider and model to enable transcript summaries.".to_string()
@@ -1860,7 +2060,9 @@ fn load_summary_settings<R: tauri::Runtime>(
 fn load_speaker_profiles<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Vec<StoredSpeakerProfile>, String> {
-    Ok(sanitize_speaker_profiles(load_app_settings(app)?.speaker_profiles))
+    Ok(sanitize_speaker_profiles(
+        load_app_settings(app)?.speaker_profiles,
+    ))
 }
 
 fn persist_model_settings<R: tauri::Runtime>(
@@ -1912,19 +2114,25 @@ fn load_app_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<StoredAppSettings, String> {
     let path = settings_config_path(app)?;
-    if path.exists() {
+    let mut settings = if path.exists() {
         let contents = std::fs::read(&path).map_err(|error| error.to_string())?;
-        return serde_json::from_slice(&contents)
-            .map_err(|error| format!("Invalid settings config: {error}"));
+        serde_json::from_slice(&contents)
+            .map_err(|error| format!("Invalid settings config: {error}"))?
+    } else {
+        StoredAppSettings {
+            general: load_legacy_general_settings(app)?,
+            model: load_legacy_model_settings(app)?,
+            diarization: load_legacy_diarization_settings(app)?,
+            summary: StoredSummarySettings::default(),
+            speaker_profiles: Vec::new(),
+        }
+    };
+
+    if migrate_stored_secrets(app, &mut settings)? {
+        persist_app_settings(app, &settings)?;
     }
 
-    Ok(StoredAppSettings {
-        general: load_legacy_general_settings(app)?,
-        model: load_legacy_model_settings(app)?,
-        diarization: load_legacy_diarization_settings(app)?,
-        summary: StoredSummarySettings::default(),
-        speaker_profiles: Vec::new(),
-    })
+    Ok(settings)
 }
 
 fn persist_app_settings<R: tauri::Runtime>(
@@ -2535,7 +2743,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
     }
 
     let settings = load_summary_settings(app)?;
-    let state = build_summary_settings_state(&settings)?;
+    let state = build_summary_settings_state(app, &settings)?;
     if !state.ready {
         return Err(state.status);
     }
@@ -2544,7 +2752,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
     let provider_label = state.provider_label.clone();
     let model = state.model.trim().to_string();
     let base_url = state.resolved_base_url.trim().to_string();
-    let api_key = settings.current_api_key();
+    let api_key = load_summary_api_key(app, provider)?.unwrap_or_default();
     let system_prompt = summary_system_prompt(&input.language);
     let user_prompt = summary_user_prompt(&input.title, transcript);
     let client = summary_http_client()?;
