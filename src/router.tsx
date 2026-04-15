@@ -2517,21 +2517,7 @@ function SettingsScreen() {
               </CardHeader>
             <CardPanel className="grid gap-6 pt-0">
                 <Field className="gap-3">
-                  <div className="flex w-full items-center justify-between gap-3">
-                    <FieldLabel>Provider</FieldLabel>
-                    {snapshot.summaryDraft.provider ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={snapshot.summaryBusy}
-                        onClick={() => {
-                          appStore.setSummaryProvider("");
-                        }}
-                      >
-                        Clear
-                      </Button>
-                    ) : null}
-                  </div>
+                  <FieldLabel>Provider</FieldLabel>
                   <SettingsSelect
                     ariaLabel="Summary provider"
                     value={snapshot.summaryDraft.provider}
