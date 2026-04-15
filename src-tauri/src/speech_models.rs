@@ -309,14 +309,16 @@ pub fn model_path_is_ready(model_id: SpeechModelId, path: &Path) -> bool {
                 && package_directory_ready(&path.join("omnilingual-ctc-300m-int8.mlpackage"))
         }
         SpeechModelId::Qwen3Small | SpeechModelId::Qwen3Large => {
-            required_regular_files_present(path, &["vocab.json", "merges.txt", "tokenizer_config.json"])
-                && directory_contains_extension(path, "safetensors")
+            required_regular_files_present(
+                path,
+                &["vocab.json", "merges.txt", "tokenizer_config.json"],
+            ) && directory_contains_extension(path, "safetensors")
         }
     }
 }
 
 pub fn meeting_audio_file_name(meeting_id: &str) -> String {
-    format!("meeting-{}.wav", sanitize_path_component(meeting_id))
+    format!("meeting-{}.m4a", sanitize_path_component(meeting_id))
 }
 
 fn read_sysctl_value(name: &str) -> Option<String> {
