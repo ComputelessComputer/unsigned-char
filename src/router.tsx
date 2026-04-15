@@ -16,7 +16,6 @@ import {
   CircleAlert,
   Cloud,
   Cpu,
-  Ellipsis,
   Globe2,
   PlugZap,
   Users,
@@ -101,7 +100,6 @@ import {
 import {
   type MenuItemDef,
   showNativeContextMenu,
-  showNativeMenu,
 } from "./hooks/useNativeContextMenu";
 import {
   SUMMARY_PROVIDERS,
@@ -112,10 +110,6 @@ import { Spinner } from "./components/ui/spinner";
 
 function IconBack() {
   return <ChevronLeft className="size-5" strokeWidth={1.5} aria-hidden="true" />;
-}
-
-function IconMore() {
-  return <Ellipsis className="size-4" strokeWidth={1.5} aria-hidden="true" />;
 }
 
 function IconClose() {
@@ -452,26 +446,6 @@ function getMeetingActionMenuItems(
         onDeleteRequested({ id: meeting.id, title: meeting.title });
       },
     },
-  ];
-}
-
-function getMeetingDetailActionMenuItems(
-  meeting: Meeting,
-  deleteDisabled: boolean,
-  diarizeDisabled: boolean,
-  onDeleteRequested: (meeting: DeleteMeetingRequest) => void,
-): MenuItemDef[] {
-  return [
-    {
-      id: `diarize-meeting-${meeting.id}`,
-      text: "Diarize again",
-      disabled: diarizeDisabled,
-      action: () => {
-        void appStore.runMeetingDiarization(meeting.id);
-      },
-    },
-    { separator: true },
-    ...getMeetingActionMenuItems(meeting, deleteDisabled, onDeleteRequested),
   ];
 }
 
@@ -1383,7 +1357,6 @@ function SpeakerLabelField({
 function MeetingScreen() {
   const snapshot = useAppState();
   const navigate = useNavigate();
-  const [meetingPendingDelete, setMeetingPendingDelete] = useState<DeleteMeetingRequest | null>(null);
   const { meetingId } = useParams({ from: "/meeting/$meetingId" });
   const transcriptScrollFade = useScrollFade<HTMLElement>({
     stickToBottom:
@@ -1436,12 +1409,6 @@ function MeetingScreen() {
   }
 
   const transcriptEntries = getMeetingTranscriptEntries(meeting);
-  const deleteDisabled = isMeetingDeleteDisabled(
-    meeting,
-    snapshot.transcriptionBusy,
-    snapshot.transcriptionRunning,
-    snapshot.recordingMeetingId,
-  );
   const isStartingMeeting =
     meeting.status === "live" &&
     snapshot.startMeetingBusy &&
@@ -1500,8 +1467,6 @@ function MeetingScreen() {
     !summaryReady ||
     isMeetingListening ||
     transcriptEntries.length === 0;
-  const diarizeActionDisabled =
-    snapshot.diarizationRunBusy || snapshot.transcriptionBusy || isMeetingListening || !meeting.audioPath.trim();
   const showTranscriptEmptyState = transcriptEntries.length === 0;
   const emptyTranscriptCopy =
     isStartingMeeting
@@ -1537,35 +1502,7 @@ function MeetingScreen() {
             <MeetingHeaderTimestampButton key={meeting.id} meeting={meeting} />
           </div>
 
-          <div data-window-drag="false">
-            <Button
-              variant="secondary"
-              size="icon-sm"
-              className="shrink-0"
-              aria-label="More actions"
-              onClick={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect();
-
-                void showNativeMenu(
-                  getMeetingDetailActionMenuItems(
-                    meeting,
-                    deleteDisabled,
-                    diarizeActionDisabled,
-                    setMeetingPendingDelete,
-                  ),
-                  {
-                    event,
-                    at: {
-                      x: rect.left,
-                      y: rect.bottom + 6,
-                    },
-                  },
-                );
-              }}
-            >
-              <IconMore />
-            </Button>
-          </div>
+          <div className="size-8 shrink-0" aria-hidden="true" />
         </div>
 
         <div className="flex items-center gap-3">
@@ -1760,7 +1697,7 @@ function MeetingScreen() {
                     return (
                       <article
                         key={`${meeting.id}-${index}-${entry.source}-${entry.text.slice(0, 12)}`}
-                        className="space-y-2 border-b border-[color:var(--border)] pb-5 last:border-b-0 last:pb-0"
+                        className="space-y-2"
                       >
                         <div className="flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
                           <div className="min-w-0">
@@ -1798,16 +1735,6 @@ function MeetingScreen() {
           />
         </div>
       </div>
-      <DeleteMeetingDialog
-        meeting={meetingPendingDelete}
-        onCancel={() => {
-          setMeetingPendingDelete(null);
-        }}
-        onConfirm={(targetMeetingId) => {
-          setMeetingPendingDelete(null);
-          void appStore.deleteMeeting(targetMeetingId);
-        }}
-      />
     </section>
   );
 }
