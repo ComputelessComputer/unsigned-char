@@ -2019,10 +2019,7 @@ function SettingsScreen() {
                         className="mt-1 size-4 shrink-0 text-rose-500"
                         strokeWidth={1.8}
                       />
-                      <span>
-                        Diarization won&apos;t run if you choose Don&apos;t save. unsigned Char needs
-                        retained meeting audio after the meeting ends to process speakers.
-                      </span>
+                      <span>Need audio files to run post-processing.</span>
                     </FieldDescription>
                   ) : null}
                 </Field>
