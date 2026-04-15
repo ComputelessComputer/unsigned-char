@@ -1866,9 +1866,6 @@ function SettingsScreen() {
         ? "ready"
         : "needs setup";
   const modelStatusActive = downloadStatus === "downloading" || modelReady;
-  const selectedModel = modelSettings.availableModels.find(
-    (option) => option.id === modelSettings.selectedModelId,
-  );
   const modelOptions = modelSettings.availableModels
     .map((option): SearchableOption => ({
       value: option.id,
@@ -2080,11 +2077,6 @@ function SettingsScreen() {
                     {showModelDownloadGauge ? (
                       <ModelDownloadGauge busy={snapshot.modelBusy} download={snapshot.modelDownload} />
                     ) : null}
-
-                    <p className="text-sm text-zinc-500">
-                      {selectedModel?.detail} · {snapshot.modelSettings.selectedModelLanguagesLabel} ·{" "}
-                      {snapshot.modelSettings.selectedModelSizeLabel}
-                    </p>
                   </div>
                 </div>
 
