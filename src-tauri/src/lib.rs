@@ -2664,6 +2664,11 @@ struct GeminiPart {
     text: Option<String>,
 }
 
+struct ResolvedSummaryModel {
+    request_id: String,
+    display_label: String,
+}
+
 fn normalize_summary_provider(value: &str) -> Result<String, String> {
     let provider = value.trim().to_string();
     if provider.is_empty() {
@@ -2738,6 +2743,43 @@ fn summary_provider_resolved_base_url<'a>(provider: &'a str, base_url: &'a str) 
     }
 }
 
+fn resolve_summary_model(provider: &str, stored_model: &str) -> ResolvedSummaryModel {
+    let trimmed_model = stored_model.trim();
+
+    let (request_id, display_label) = match (provider, trimmed_model) {
+        ("openai", "preset:openai:gpt-5.4") | ("openai", "gpt-5.4") => ("gpt-5.4", "GPT-5.4"),
+        ("openai", "preset:openai:gpt-5.4-mini") | ("openai", "gpt-5.4-mini") => {
+            ("gpt-5.4-mini", "GPT-5.4 mini")
+        }
+        ("openai", "preset:openai:gpt-5.4-nano") | ("openai", "gpt-5.4-nano") => {
+            ("gpt-5.4-nano", "GPT-5.4 nano")
+        }
+        ("anthropic", "preset:anthropic:sonnet") | ("anthropic", "claude-sonnet-4-6") => {
+            ("claude-sonnet-4-6", "Sonnet")
+        }
+        ("anthropic", "preset:anthropic:opus") | ("anthropic", "claude-opus-4-6") => {
+            ("claude-opus-4-6", "Opus")
+        }
+        ("anthropic", "preset:anthropic:haiku")
+        | ("anthropic", "claude-haiku-4-5")
+        | ("anthropic", "claude-haiku-4-5-20251001") => ("claude-haiku-4-5", "Haiku"),
+        ("google_generative_ai", "preset:google_generative_ai:flash")
+        | ("google_generative_ai", "gemini-2.5-flash") => ("gemini-2.5-flash", "Flash"),
+        ("google_generative_ai", "preset:google_generative_ai:pro")
+        | ("google_generative_ai", "gemini-2.5-pro") => ("gemini-2.5-pro", "Pro"),
+        ("google_generative_ai", "preset:google_generative_ai:flash-lite")
+        | ("google_generative_ai", "gemini-2.5-flash-lite") => {
+            ("gemini-2.5-flash-lite", "Flash-Lite")
+        }
+        _ => (trimmed_model, trimmed_model),
+    };
+
+    ResolvedSummaryModel {
+        request_id: request_id.to_string(),
+        display_label: display_label.to_string(),
+    }
+}
+
 fn summary_http_client() -> Result<reqwest::blocking::Client, String> {
     reqwest::blocking::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -2763,7 +2805,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
 
     let provider = state.provider.as_str();
     let provider_label = state.provider_label.clone();
-    let model = state.model.trim().to_string();
+    let resolved_model = resolve_summary_model(provider, &state.model);
     let base_url = state.resolved_base_url.trim().to_string();
     let api_key = load_summary_api_key(app, provider)?.unwrap_or_default();
     let system_prompt = summary_system_prompt(&input.language);
@@ -2775,7 +2817,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
             &client,
             &base_url,
             &api_key,
-            &model,
+            &resolved_model.request_id,
             &system_prompt,
             &user_prompt,
         )?,
@@ -2783,7 +2825,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
             &client,
             &base_url,
             &api_key,
-            &model,
+            &resolved_model.request_id,
             &system_prompt,
             &user_prompt,
         )?,
@@ -2792,7 +2834,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
             provider,
             &base_url,
             &api_key,
-            &model,
+            &resolved_model.request_id,
             &system_prompt,
             &user_prompt,
         )?,
@@ -2806,7 +2848,7 @@ fn generate_transcript_summary_blocking<R: tauri::Runtime>(
     Ok(TranscriptSummaryResult {
         summary,
         provider_label,
-        model,
+        model: resolved_model.display_label,
     })
 }
 

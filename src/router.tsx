@@ -2185,6 +2185,7 @@ function SettingsScreen() {
   const [settingsScrollTop, setSettingsScrollTop] = useState(0);
   const [apiKeyFieldFocused, setApiKeyFieldFocused] = useState(false);
   const [summaryApiKeyDeleteRequested, setSummaryApiKeyDeleteRequested] = useState(false);
+  const [manualSummaryModelProvider, setManualSummaryModelProvider] = useState<string | null>(null);
   const settingsLoadNote =
     snapshot.permissionNote || snapshot.generalNote || snapshot.summaryNote || snapshot.speakerProfilesNote;
   const settingsContentWidthClass = isSettingsWindow ? "max-w-[640px]" : "max-w-[760px]";
@@ -2314,6 +2315,31 @@ function SettingsScreen() {
           : [option.languagesLabel],
     }));
   const selectedSummaryProvider = getSummaryProviderDefinition(snapshot.summaryDraft.provider);
+  const summaryModelPresets = getSummaryProviderModelPresets(snapshot.summaryDraft.provider);
+  const selectedSummaryModelPreset = getSummaryModelPreset(
+    snapshot.summaryDraft.provider,
+    snapshot.summaryDraft.model,
+  );
+  const summaryModelOptions: readonly SearchableOption[] = [
+    ...summaryModelPresets.map((preset): SearchableOption => ({
+      value: preset.value,
+      label: preset.label,
+      searchTerms: [preset.resolvedModel, ...(preset.aliases ?? []), ...(preset.searchTerms ?? [])],
+    })),
+    ...(summaryModelPresets.length > 0
+      ? [
+          {
+            value: CUSTOM_SUMMARY_MODEL_OPTION_VALUE,
+            label: "Custom model ID",
+            icon: "custom" as const,
+          },
+        ]
+      : []),
+  ];
+  const summaryModelUsesCustomInput =
+    summaryModelPresets.length === 0 ||
+    manualSummaryModelProvider === snapshot.summaryDraft.provider ||
+    Boolean(snapshot.summaryDraft.model.trim() && !selectedSummaryModelPreset);
   const summaryStatusLabel = !snapshot.summarySettings.provider
     ? "off"
     : snapshot.summarySettings.ready
@@ -2325,6 +2351,10 @@ function SettingsScreen() {
   const showSavedSummaryApiKeyMask =
     savedSummaryApiKey && !snapshot.summaryDraft.apiKey && !apiKeyFieldFocused;
   const showSummaryBaseUrlField = selectedSummaryProvider?.id === "custom";
+  const summaryModelInputPlaceholder =
+    summaryModelPresets.length > 0
+      ? "Enter model ID"
+      : selectedSummaryProvider?.modelPlaceholder ?? "Model ID";
   const apiKeyPlaceholder = showSavedSummaryApiKeyMask
     ? ""
     : savedSummaryApiKey
@@ -2582,14 +2612,57 @@ function SettingsScreen() {
                   <>
                     <Field className="gap-3">
                       <FieldLabel>Model</FieldLabel>
-                      <Input
-                        value={snapshot.summaryDraft.model}
-                        onChange={(event) => {
-                          appStore.setSummaryModel(event.target.value);
-                        }}
-                        placeholder={selectedSummaryProvider?.modelPlaceholder ?? "Model id"}
-                        disabled={snapshot.summaryBusy}
-                      />
+                      {summaryModelPresets.length > 0 ? (
+                        <div className="space-y-3">
+                          <SettingsSelect
+                            ariaLabel="Summary model"
+                            value={
+                              summaryModelUsesCustomInput
+                                ? CUSTOM_SUMMARY_MODEL_OPTION_VALUE
+                                : selectedSummaryModelPreset?.value ?? ""
+                            }
+                            onChange={(nextValue) => {
+                              if (nextValue === CUSTOM_SUMMARY_MODEL_OPTION_VALUE) {
+                                setManualSummaryModelProvider(snapshot.summaryDraft.provider);
+                                if (!snapshot.summaryDraft.model.trim() || selectedSummaryModelPreset) {
+                                  appStore.setSummaryModel("");
+                                }
+                                return;
+                              }
+
+                              setManualSummaryModelProvider(null);
+                              appStore.setSummaryModel(nextValue);
+                            }}
+                            options={summaryModelOptions}
+                            placeholder="Select model"
+                            disabled={snapshot.summaryBusy}
+                          />
+                          {summaryModelUsesCustomInput ? (
+                            <Input
+                              value={
+                                selectedSummaryModelPreset && !manualSummaryModelProvider
+                                  ? ""
+                                  : snapshot.summaryDraft.model
+                              }
+                              onChange={(event) => {
+                                setManualSummaryModelProvider(snapshot.summaryDraft.provider);
+                                appStore.setSummaryModel(event.target.value);
+                              }}
+                              placeholder={summaryModelInputPlaceholder}
+                              disabled={snapshot.summaryBusy}
+                            />
+                          ) : null}
+                        </div>
+                      ) : (
+                        <Input
+                          value={snapshot.summaryDraft.model}
+                          onChange={(event) => {
+                            appStore.setSummaryModel(event.target.value);
+                          }}
+                          placeholder={summaryModelInputPlaceholder}
+                          disabled={snapshot.summaryBusy}
+                        />
+                      )}
                     </Field>
 
                     {showSummaryBaseUrlField ? (
