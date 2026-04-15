@@ -113,7 +113,9 @@ import {
 } from "./hooks/useNativeContextMenu";
 import {
   SUMMARY_PROVIDERS,
+  getSummaryModelPreset,
   getSummaryProviderDefinition,
+  getSummaryProviderModelPresets,
   type SummaryProviderId,
 } from "./lib/summary-providers";
 import { Spinner } from "./components/ui/spinner";
@@ -166,14 +168,18 @@ function BrandWordmark({ className }: { className?: string }) {
 
 const AI_SUMMARIES_SETTINGS_SECTION = "ai-summaries";
 const AI_SUMMARIES_SETTINGS_SECTION_ID = "settings-ai-summaries";
+const AUDIO_SETTINGS_SECTION = "audio";
+const AUDIO_SETTINGS_SECTION_ID = "settings-audio";
 const TRANSCRIPTION_MODEL_SETTINGS_SECTION = "transcription-model";
 const TRANSCRIPTION_MODEL_SETTINGS_SECTION_ID = "settings-transcription-model";
+const CUSTOM_SUMMARY_MODEL_OPTION_VALUE = "__summary-model-custom__";
 const MASKED_TEXT_INPUT_STYLE = {
   WebkitTextSecurity: "disc",
 } as CSSProperties;
 
 const SETTINGS_SECTION_IDS = {
   [AI_SUMMARIES_SETTINGS_SECTION]: AI_SUMMARIES_SETTINGS_SECTION_ID,
+  [AUDIO_SETTINGS_SECTION]: AUDIO_SETTINGS_SECTION_ID,
   [TRANSCRIPTION_MODEL_SETTINGS_SECTION]: TRANSCRIPTION_MODEL_SETTINGS_SECTION_ID,
 } as const;
 
@@ -1727,6 +1733,9 @@ function MeetingScreen() {
     isMeetingListening ||
     transcriptEntries.length === 0;
   const showTranscriptEmptyState = transcriptEntries.length === 0;
+  const participantFieldNeedsSavedAudio = snapshot.generalDraft.audioRetention === "none";
+  const participantFieldDisabled =
+    participantFieldNeedsSavedAudio || snapshot.transcriptionBusy || snapshot.diarizationRunBusy;
   const emptyTranscriptCopy =
     isStartingMeeting
       ? "Transcription is starting."
@@ -1738,6 +1747,35 @@ function MeetingScreen() {
   const summaryMeta = [meeting.summaryProviderLabel, meeting.summaryModel]
     .filter((value): value is string => Boolean(value))
     .join(" · ");
+  const participantField = (
+    <NumberField
+      className="w-[140px] shrink-0"
+      data-window-drag="false"
+      disabled={participantFieldDisabled}
+      min={1}
+      step={1}
+      value={meeting.requestedSpeakerCount}
+      onValueChange={(value) => {
+        appStore.updateMeetingRequestedSpeakerCount(
+          meeting.id,
+          value === null ? "" : String(value),
+        );
+      }}
+    >
+      <NumberFieldGroup className="h-8">
+        <NumberFieldDecrement className="w-8" />
+        <div className="grid min-w-0 flex-1 grid-cols-[auto_auto] items-center justify-center gap-1 border-x border-[color:var(--border)] px-1.5 text-zinc-500">
+          <Users className="size-3.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
+          <NumberFieldInput
+            placeholder="Auto"
+            aria-label="Participants"
+            className="w-[2.35rem] min-w-0 flex-none border-0 bg-transparent px-0 text-center text-sm placeholder:text-center"
+          />
+        </div>
+        <NumberFieldIncrement className="w-8" />
+      </NumberFieldGroup>
+    </NumberField>
+  );
 
   return (
     <section className={cn("mx-auto flex max-w-[760px] flex-col gap-5", windowShellHeightClass)}>
@@ -1773,33 +1811,42 @@ function MeetingScreen() {
             <MeetingTitleField key={meeting.id} meetingId={meeting.id} title={meeting.title} />
           </div>
 
-          <NumberField
-            className="w-[140px] shrink-0"
-            data-window-drag="false"
-            disabled={snapshot.transcriptionBusy || snapshot.diarizationRunBusy}
-            min={1}
-            step={1}
-            value={meeting.requestedSpeakerCount}
-            onValueChange={(value) => {
-              appStore.updateMeetingRequestedSpeakerCount(
-                meeting.id,
-                value === null ? "" : String(value),
-              );
-            }}
-          >
-            <NumberFieldGroup className="h-8">
-              <NumberFieldDecrement className="w-8" />
-              <div className="grid min-w-0 flex-1 grid-cols-[auto_auto] items-center justify-center gap-1 border-x border-[color:var(--border)] px-1.5 text-zinc-500">
-                <Users className="size-3.5 shrink-0" strokeWidth={1.8} aria-hidden="true" />
-                <NumberFieldInput
-                  placeholder="Auto"
-                  aria-label="Participants"
-                  className="w-[2.35rem] min-w-0 flex-none border-0 bg-transparent px-0 text-center text-sm placeholder:text-center"
-                />
-              </div>
-              <NumberFieldIncrement className="w-8" />
-            </NumberFieldGroup>
-          </NumberField>
+          {participantFieldNeedsSavedAudio ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="block w-[140px] shrink-0" data-window-drag="false" />
+                }
+                tabIndex={0}
+                aria-label="Save recordings to edit participants"
+              >
+                {participantField}
+              </TooltipTrigger>
+              <TooltipPopup side="bottom" align="end">
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">
+                    Save recordings to use diarization
+                  </p>
+                  <p>
+                    Speaker diarization reruns from the saved meeting recording. Turn on Save audio
+                    after meeting to enable this control.
+                  </p>
+                  <Button
+                    size="xs"
+                    variant="secondary"
+                    className="w-full justify-center border-white/10 bg-white/10 text-white hover:bg-white/16 data-pressed:bg-white/14"
+                    onClick={() => {
+                      void appStore.openSettingsWindow(AUDIO_SETTINGS_SECTION);
+                    }}
+                  >
+                    Open preferences
+                  </Button>
+                </div>
+              </TooltipPopup>
+            </Tooltip>
+          ) : (
+            participantField
+          )}
         </div>
       </WindowDragRegion>
 
@@ -2301,7 +2348,7 @@ function SettingsScreen() {
           }}
         >
           <div className={cn("mx-auto flex min-w-0 flex-col gap-6", settingsContentWidthClass, settingsContentInsetClass)}>
-            <Card className="overflow-visible">
+            <Card id={AUDIO_SETTINGS_SECTION_ID} className="overflow-visible">
               <CardHeader className="pb-2">
                 <CardTitle>General</CardTitle>
               </CardHeader>

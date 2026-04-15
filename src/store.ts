@@ -317,6 +317,7 @@ const LIVE_TRANSCRIPTION_STOP_WAIT_MS = 250;
 const MODEL_DOWNLOAD_POLL_MS = 1000;
 const MODEL_DOWNLOAD_START_GRACE_MS = 4000;
 const MEETING_MARKDOWN_SYNC_MS = 250;
+const MEETING_SPEAKER_COUNT_DIARIZATION_DEBOUNCE_MS = 2000;
 const SUMMARY_AUTOSAVE_MS = 500;
 const MARKDOWN_SAVE_ERROR_PREFIX = "Markdown save failed:";
 const liveTranscriptionPermissionKinds: PermissionKind[] = ["microphone", "systemAudio"];
@@ -329,6 +330,7 @@ const pendingAutoDiarizationRuns: PendingAutoDiarization[] = [];
 let autoDiarizationDrainRunning = false;
 let modelDownloadStartDeadline = 0;
 let summaryAutosaveTimer: number | null = null;
+const meetingSpeakerCountDiarizationTimers = new Map<string, number>();
 
 export const currentWindow = getCurrentWindow();
 export const isSettingsWindow = currentWindow.label === SETTINGS_WINDOW_LABEL;
@@ -2093,7 +2095,7 @@ function createMeeting(meetingId = crypto.randomUUID(), audioPath = "") {
   return meeting;
 }
 
-function queueMeetingAutoDiarization(meetingId: string) {
+function queueMeetingAutoDiarization(meetingId: string, speakerCountOverride?: number | null) {
   const meeting = getMeeting(meetingId);
   if (!meeting || !canRunMeetingAudioPostProcessing(meeting) || !state.diarizationSettings?.enabled) {
     return;
@@ -2107,13 +2109,18 @@ function queueMeetingAutoDiarization(meetingId: string) {
     return;
   }
 
-  if (pendingAutoDiarizationRuns.some((candidate) => candidate.meetingId === meetingId)) {
+  const speakerCount =
+    speakerCountOverride !== undefined ? speakerCountOverride : meeting.requestedSpeakerCount;
+  const existingRun = pendingAutoDiarizationRuns.find((candidate) => candidate.meetingId === meetingId);
+
+  if (existingRun) {
+    existingRun.speakerCount = speakerCount;
     return;
   }
 
   pendingAutoDiarizationRuns.push({
     meetingId,
-    speakerCount: meeting.requestedSpeakerCount,
+    speakerCount,
   });
   void drainAutoDiarizationQueue();
 }
@@ -2153,6 +2160,50 @@ function clearMeetingMarkdownSync(meetingId: string) {
 
   window.clearTimeout(timer);
   meetingMarkdownSyncTimers.delete(meetingId);
+}
+
+function clearPendingMeetingSpeakerCountDiarization(meetingId: string) {
+  const timer = meetingSpeakerCountDiarizationTimers.get(meetingId);
+  if (typeof timer !== "number") {
+    return;
+  }
+
+  window.clearTimeout(timer);
+  meetingSpeakerCountDiarizationTimers.delete(meetingId);
+}
+
+function shouldAutoRerunMeetingDiarization(meeting: Meeting) {
+  return (
+    meeting.status === "done" &&
+    canRunMeetingAudioPostProcessing(meeting) &&
+    currentAudioRetentionPolicy() !== "none"
+  );
+}
+
+function queueMeetingSpeakerCountDiarization(meetingId: string, speakerCount: number | null) {
+  clearPendingMeetingSpeakerCountDiarization(meetingId);
+
+  const meeting = getMeeting(meetingId);
+  if (!meeting || !shouldAutoRerunMeetingDiarization(meeting)) {
+    return;
+  }
+
+  const timer = window.setTimeout(() => {
+    meetingSpeakerCountDiarizationTimers.delete(meetingId);
+
+    const currentMeeting = getMeeting(meetingId);
+    if (
+      !currentMeeting ||
+      currentMeeting.requestedSpeakerCount !== speakerCount ||
+      !shouldAutoRerunMeetingDiarization(currentMeeting)
+    ) {
+      return;
+    }
+
+    queueMeetingAutoDiarization(meetingId, speakerCount);
+  }, MEETING_SPEAKER_COUNT_DIARIZATION_DEBOUNCE_MS);
+
+  meetingSpeakerCountDiarizationTimers.set(meetingId, timer);
 }
 
 function setMeetingExportPath(id: string, path: string) {
@@ -3416,6 +3467,7 @@ async function deleteMeeting(meetingId: string) {
   const deletedActiveMeeting = currentMeetingIdFromHash() === meetingId;
 
   clearMeetingMarkdownSync(meetingId);
+  clearPendingMeetingSpeakerCountDiarization(meetingId);
 
   state = {
     ...state,
@@ -3716,15 +3768,26 @@ function updateMeetingAudioPath(meetingId: string, audioPath: string) {
 }
 
 function updateMeetingRequestedSpeakerCount(meetingId: string, value: string) {
+  const meeting = getMeeting(meetingId);
+  if (!meeting) {
+    return;
+  }
+
   const trimmed = value.trim();
   const requestedSpeakerCount =
     trimmed.length === 0 ? null : normalizeRequestedSpeakerCount(Number.parseInt(trimmed, 10));
+
+  if (meeting.requestedSpeakerCount === requestedSpeakerCount) {
+    return;
+  }
 
   updateMeeting(meetingId, (meeting) => ({
     ...meeting,
     requestedSpeakerCount,
     updatedAt: meeting.updatedAt,
   }));
+
+  queueMeetingSpeakerCountDiarization(meetingId, requestedSpeakerCount);
 }
 
 function updateMeetingSpeakerLabel(meetingId: string, speaker: string, nextLabel: string) {
@@ -4042,7 +4105,7 @@ async function removeSummaryApiKey() {
   await saveSummarySettings({ clearApiKey: true });
 }
 
-async function openSettingsWindow(section?: "ai-summaries" | "transcription-model") {
+async function openSettingsWindow(section?: "ai-summaries" | "audio" | "transcription-model") {
   try {
     await invoke("open_settings_window", { section });
   } catch (error) {
