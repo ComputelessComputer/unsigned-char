@@ -2013,13 +2013,8 @@ function SettingsScreen() {
                     disabled={snapshot.generalBusy}
                   />
                   {snapshot.generalDraft.audioRetention === "none" ? (
-                    <FieldDescription className="flex items-start gap-2 rounded-[var(--radius-control)] border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm leading-6 text-rose-700">
-                      <CircleAlert
-                        aria-hidden="true"
-                        className="mt-1 size-4 shrink-0 text-rose-500"
-                        strokeWidth={1.8}
-                      />
-                      <span>Need audio files to run post-processing.</span>
+                    <FieldDescription className="text-sm text-rose-700">
+                      Need audio files to run post-processing.
                     </FieldDescription>
                   ) : null}
                 </Field>
