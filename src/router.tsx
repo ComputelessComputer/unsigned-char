@@ -18,6 +18,7 @@ import {
   Cpu,
   Globe2,
   PlugZap,
+  RefreshCw,
   Users,
 } from "lucide-react";
 import {
@@ -1970,8 +1971,27 @@ function SettingsScreen() {
             </Card>
 
             <Card className="overflow-visible">
-              <CardHeader className="pb-2">
+              <CardHeader className="flex-row items-center justify-between pb-2">
                 <CardTitle>Audio</CardTitle>
+                <CardAction>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0 text-zinc-500 hover:bg-zinc-100"
+                    aria-label="Refresh audio devices"
+                    title="Refresh audio devices"
+                    disabled={snapshot.audioDeviceRefreshBusy || snapshot.generalBusy}
+                    onClick={() => {
+                      void appStore.refreshAudioDevices();
+                    }}
+                  >
+                    <RefreshCw
+                      className={cn("size-4", snapshot.audioDeviceRefreshBusy && "animate-spin")}
+                      strokeWidth={1.8}
+                      aria-hidden="true"
+                    />
+                  </Button>
+                </CardAction>
               </CardHeader>
               <CardPanel className="grid gap-6 pt-0">
                 <Field className="gap-3">

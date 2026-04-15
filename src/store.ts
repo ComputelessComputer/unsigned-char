@@ -225,6 +225,7 @@ type AppState = {
   summaryNote: string;
   modelBusy: boolean;
   generalBusy: boolean;
+  audioDeviceRefreshBusy: boolean;
   summaryBusy: boolean;
   startMeetingBusy: boolean;
   transcriptionBusy: boolean;
@@ -364,6 +365,7 @@ let state: AppState = {
   summaryNote: "",
   modelBusy: false,
   generalBusy: false,
+  audioDeviceRefreshBusy: false,
   summaryBusy: false,
   startMeetingBusy: false,
   transcriptionBusy: false,
@@ -1916,11 +1918,31 @@ async function refreshDiarizationSettings(silent = false) {
 async function refreshAudioDeviceSettings(silent = false) {
   try {
     const audioDeviceSettings = await invoke<AudioDeviceSettings>("audio_device_settings_state");
-    patch({ audioDeviceSettings });
+    patch({
+      audioDeviceSettings,
+      ...(silent ? {} : { generalNote: "" }),
+    });
   } catch (error) {
     if (!silent) {
       patch({ generalNote: `Failed to load audio devices: ${String(error)}` });
     }
+  }
+}
+
+async function refreshAudioDevices() {
+  if (state.audioDeviceRefreshBusy) {
+    return;
+  }
+
+  patch({
+    audioDeviceRefreshBusy: true,
+    generalNote: "",
+  });
+
+  try {
+    await refreshAudioDeviceSettings(false);
+  } finally {
+    patch({ audioDeviceRefreshBusy: false });
   }
 }
 
@@ -3341,6 +3363,7 @@ export const appStore = {
   setAudioRetention,
   setAudioInputDevice,
   setAudioOutputDevice,
+  refreshAudioDevices,
   addSpokenLanguage,
   removeSpokenLanguage,
   setSummaryProvider,
