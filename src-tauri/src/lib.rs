@@ -1710,7 +1710,7 @@ fn show_settings_window<R: tauri::Runtime>(
     let route = settings_window_route(section);
 
     if let Some(window) = app.get_webview_window(SETTINGS_WINDOW_LABEL) {
-        window.eval(&format!("window.location.hash = '#{route}'"))?;
+        window.eval(format!("window.location.hash = '#{route}'"))?;
         let _ = window.unminimize();
         window.show()?;
         window.set_focus()?;
@@ -3153,29 +3153,29 @@ fn yaml_optional_string(value: Option<&str>) -> String {
 fn open_external_url(url: &str) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        return Command::new("open")
+        Command::new("open")
             .arg(url)
             .spawn()
             .map(|_| ())
-            .map_err(|error| format!("Failed to open {url}: {error}"));
+            .map_err(|error| format!("Failed to open {url}: {error}"))
     }
 
     #[cfg(target_os = "windows")]
     {
-        return Command::new("cmd")
+        Command::new("cmd")
             .args(["/C", "start", "", url])
             .spawn()
             .map(|_| ())
-            .map_err(|error| format!("Failed to open {url}: {error}"));
+            .map_err(|error| format!("Failed to open {url}: {error}"))
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        return Command::new("xdg-open")
+        Command::new("xdg-open")
             .arg(url)
             .spawn()
             .map(|_| ())
-            .map_err(|error| format!("Failed to open {url}: {error}"));
+            .map_err(|error| format!("Failed to open {url}: {error}"))
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", unix)))]

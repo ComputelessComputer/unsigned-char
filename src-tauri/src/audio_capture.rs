@@ -159,12 +159,14 @@ fn run_capture_loop<F>(
                 Ok(WorkerMessage::Audio(chunk)) => {
                     let delivery = process_audio_chunk(
                         chunk,
-                        &mut joiner,
-                        &mut mic_resampler,
-                        &mut speaker_resampler,
-                        &mut mic_frames,
-                        &mut speaker_frames,
-                        &mut echo_canceller,
+                        &mut AudioChunkProcessor {
+                            joiner: &mut joiner,
+                            mic_resampler: &mut mic_resampler,
+                            speaker_resampler: &mut speaker_resampler,
+                            mic_frames: &mut mic_frames,
+                            speaker_frames: &mut speaker_frames,
+                            echo_canceller: &mut echo_canceller,
+                        },
                         &mut on_chunk,
                     );
 
@@ -223,22 +225,30 @@ fn run_capture_loop<F>(
     }
 }
 
+struct AudioChunkProcessor<'a> {
+    joiner: &'a mut ChunkJoiner,
+    mic_resampler: &'a mut LinearResampler,
+    speaker_resampler: &'a mut LinearResampler,
+    mic_frames: &'a mut ChunkAccumulator,
+    speaker_frames: &'a mut ChunkAccumulator,
+    echo_canceller: &'a mut EchoCanceller,
+}
+
 fn process_audio_chunk<F>(
     chunk: AudioChunk,
-    joiner: &mut ChunkJoiner,
-    mic_resampler: &mut LinearResampler,
-    speaker_resampler: &mut LinearResampler,
-    mic_frames: &mut ChunkAccumulator,
-    speaker_frames: &mut ChunkAccumulator,
-    echo_canceller: &mut EchoCanceller,
+    processor: &mut AudioChunkProcessor<'_>,
     on_chunk: &mut F,
 ) -> Result<(), String>
 where
     F: FnMut(Vec<f32>, Vec<f32>, Vec<f32>) -> Result<(), String>,
 {
     let resampled = match chunk.source {
-        AudioSource::Mic => mic_resampler.process(&chunk.samples, chunk.sample_rate),
-        AudioSource::Speaker => speaker_resampler.process(&chunk.samples, chunk.sample_rate),
+        AudioSource::Mic => processor
+            .mic_resampler
+            .process(&chunk.samples, chunk.sample_rate),
+        AudioSource::Speaker => processor
+            .speaker_resampler
+            .process(&chunk.samples, chunk.sample_rate),
     };
 
     if resampled.is_empty() {
@@ -246,19 +256,19 @@ where
     }
 
     let ready_frames = match chunk.source {
-        AudioSource::Mic => mic_frames.push(resampled),
-        AudioSource::Speaker => speaker_frames.push(resampled),
+        AudioSource::Mic => processor.mic_frames.push(resampled),
+        AudioSource::Speaker => processor.speaker_frames.push(resampled),
     };
 
     for ready in ready_frames {
         match chunk.source {
-            AudioSource::Mic => joiner.push_mic(ready),
-            AudioSource::Speaker => joiner.push_speaker(ready),
+            AudioSource::Mic => processor.joiner.push_mic(ready),
+            AudioSource::Speaker => processor.joiner.push_speaker(ready),
         }
     }
 
-    while let Some((mic, speaker)) = joiner.pop_pair() {
-        let delivery = echo_canceller.process_frame(&mic, &speaker)?;
+    while let Some((mic, speaker)) = processor.joiner.pop_pair() {
+        let delivery = processor.echo_canceller.process_frame(&mic, &speaker)?;
         deliver_output_chunks(delivery, on_chunk)?;
     }
 

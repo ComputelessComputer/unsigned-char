@@ -311,7 +311,7 @@ fn run_transcribe(args: &[String]) -> Result<(), String> {
     let model_id = model_id.unwrap_or_else(|| {
         recommend_model(
             &detect_device_profile(),
-            &[language.clone()],
+            std::slice::from_ref(&language),
             TranscriptionMode::Batch,
         )
         .model_id
