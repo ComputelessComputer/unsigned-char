@@ -1981,9 +1981,6 @@ function SettingsScreen() {
                     }
                     disabled={snapshot.generalBusy || microphoneOptions.length === 0}
                   />
-                  <FieldDescription>
-                    Sets the macOS default input device used when unsigned Char starts recording.
-                  </FieldDescription>
                 </Field>
 
                 <Field className="gap-3">
@@ -1996,9 +1993,6 @@ function SettingsScreen() {
                     placeholder={audioDeviceSettings ? "Select speaker" : "Loading speakers..."}
                     disabled={snapshot.generalBusy || speakerOptions.length === 0}
                   />
-                  <FieldDescription>
-                    Sets the macOS default output device.
-                  </FieldDescription>
                 </Field>
 
                 <Field className="gap-3">
@@ -2013,9 +2007,6 @@ function SettingsScreen() {
                     placeholder="Select retention"
                     disabled={snapshot.generalBusy}
                   />
-                  <FieldDescription>
-                    Choose how long unsigned Char keeps local meeting audio available for diarization.
-                  </FieldDescription>
                   {snapshot.generalDraft.audioRetention === "none" ? (
                     <FieldDescription className="flex items-start gap-2 rounded-[var(--radius-control)] border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm leading-6 text-rose-700">
                       <CircleAlert
