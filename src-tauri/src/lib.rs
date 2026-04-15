@@ -14,11 +14,13 @@ use std::{
 };
 
 use asr::{
+    embed_speaker_audio_file as speech_embed_speaker_audio_file,
     diarize_audio_file as speech_diarize_audio_file,
     managed_model_download_state as speech_model_download_state,
     managed_model_path as speech_model_path, reset_managed_model as reset_speech_model,
-    start_managed_model_download as start_speech_model_download, LiveTranscriptionState,
-    SpeechModelDownloadState, TranscriptionManager,
+    start_managed_model_download as start_speech_model_download, FileSpeakerEmbeddingPayload,
+    LiveTranscriptionState, SpeakerEmbeddingRequest, SpeechModelDownloadState,
+    TranscriptionManager,
 };
 use permissions::{PermissionKind, PermissionSnapshot};
 use serde::{Deserialize, Serialize};
@@ -277,6 +279,42 @@ struct StoredSummarySettings {
 
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct StoredSpeakerSample {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    audio_path: String,
+    #[serde(default)]
+    start_seconds: f64,
+    #[serde(default)]
+    end_seconds: f64,
+    #[serde(default)]
+    added_at: String,
+    #[serde(default)]
+    meeting_id: Option<String>,
+    #[serde(default)]
+    source_speaker: Option<String>,
+    #[serde(default)]
+    embedding: Vec<f32>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredSpeakerProfile {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    updated_at: String,
+    #[serde(default)]
+    centroid_embedding: Vec<f32>,
+    #[serde(default)]
+    samples: Vec<StoredSpeakerSample>,
+}
+
+#[derive(Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StoredAppSettings {
     #[serde(default)]
     general: StoredGeneralSettings,
@@ -286,6 +324,8 @@ struct StoredAppSettings {
     diarization: StoredDiarizationSettings,
     #[serde(default)]
     summary: StoredSummarySettings,
+    #[serde(default)]
+    speaker_profiles: Vec<StoredSpeakerProfile>,
 }
 
 #[derive(Serialize)]
@@ -404,7 +444,7 @@ struct TranscriptSummaryResult {
     model: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiarizationSegment {
     speaker: String,
@@ -419,6 +459,22 @@ struct LocalDiarizationResult {
     pipeline_source: String,
     speaker_count: usize,
     segments: Vec<DiarizationSegment>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnalyzeSpeakerEmbeddingsSpeakerInput {
+    speaker: String,
+    #[serde(default)]
+    segments: Vec<DiarizationSegment>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AnalyzeSpeakerEmbeddingsInput {
+    audio_path: String,
+    #[serde(default)]
+    speakers: Vec<AnalyzeSpeakerEmbeddingsSpeakerInput>,
 }
 
 impl StoredModelSettings {
@@ -542,6 +598,74 @@ impl StoredSummarySettings {
 
         self.api_key.trim().to_string()
     }
+}
+
+fn sanitize_embedding(values: &[f32]) -> Vec<f32> {
+    values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect()
+}
+
+fn sanitize_speaker_profiles(profiles: Vec<StoredSpeakerProfile>) -> Vec<StoredSpeakerProfile> {
+    profiles
+        .into_iter()
+        .filter_map(|profile| {
+            let id = profile.id.trim().to_string();
+            let name = profile.name.trim().to_string();
+            if id.is_empty() || name.is_empty() {
+                return None;
+            }
+
+            let samples = profile
+                .samples
+                .into_iter()
+                .filter_map(|sample| {
+                    let id = sample.id.trim().to_string();
+                    let audio_path = sample.audio_path.trim().to_string();
+                    if id.is_empty()
+                        || audio_path.is_empty()
+                        || !sample.start_seconds.is_finite()
+                        || !sample.end_seconds.is_finite()
+                        || sample.end_seconds <= sample.start_seconds
+                    {
+                        return None;
+                    }
+
+                    let embedding = sanitize_embedding(&sample.embedding);
+                    if embedding.is_empty() {
+                        return None;
+                    }
+
+                    Some(StoredSpeakerSample {
+                        id,
+                        audio_path,
+                        start_seconds: sample.start_seconds,
+                        end_seconds: sample.end_seconds,
+                        added_at: sample.added_at.trim().to_string(),
+                        meeting_id: sample
+                            .meeting_id
+                            .map(|value| value.trim().to_string())
+                            .filter(|value| !value.is_empty()),
+                        source_speaker: sample
+                            .source_speaker
+                            .map(|value| value.trim().to_string())
+                            .filter(|value| !value.is_empty()),
+                        embedding,
+                    })
+                })
+                .collect();
+
+            Some(StoredSpeakerProfile {
+                id,
+                name,
+                updated_at: profile.updated_at.trim().to_string(),
+                centroid_embedding: sanitize_embedding(&profile.centroid_embedding),
+                samples,
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -820,6 +944,13 @@ fn summary_settings_state<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn speaker_profiles_state<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<Vec<StoredSpeakerProfile>, String> {
+    load_speaker_profiles(&app)
+}
+
+#[tauri::command]
 fn save_model_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: SaveModelSettingsInput,
@@ -908,6 +1039,17 @@ fn save_summary_settings<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn save_speaker_profiles<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    profiles: Vec<StoredSpeakerProfile>,
+) -> Result<Vec<StoredSpeakerProfile>, String> {
+    let profiles = sanitize_speaker_profiles(profiles);
+    persist_speaker_profiles(&app, &profiles)?;
+    info!(profiles = profiles.len(), "Saved speaker profiles");
+    Ok(profiles)
+}
+
+#[tauri::command]
 async fn generate_transcript_summary<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     input: GenerateTranscriptSummaryInput,
@@ -963,6 +1105,36 @@ async fn run_local_diarization<R: tauri::Runtime>(
     })
     .await
     .map_err(|error| format!("Failed to join diarization task: {error}"))?
+}
+
+#[tauri::command]
+async fn analyze_speaker_embeddings<R: tauri::Runtime>(
+    _app: tauri::AppHandle<R>,
+    input: AnalyzeSpeakerEmbeddingsInput,
+) -> Result<FileSpeakerEmbeddingPayload, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let resolved_audio_path = resolve_audio_file_path(&input.audio_path)?;
+        let speakers = input
+            .speakers
+            .into_iter()
+            .map(|speaker| SpeakerEmbeddingRequest {
+                speaker: speaker.speaker.trim().to_string(),
+                segments: speaker
+                    .segments
+                    .into_iter()
+                    .map(|segment| asr::DiarizationSegmentPayload {
+                        speaker: segment.speaker,
+                        start_seconds: segment.start_seconds,
+                        end_seconds: segment.end_seconds,
+                    })
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+
+        speech_embed_speaker_audio_file(&resolved_audio_path, &speakers)
+    })
+    .await
+    .map_err(|error| format!("Failed to join speaker analysis task: {error}"))?
 }
 
 #[tauri::command]
@@ -1062,6 +1234,7 @@ fn delete_meeting_audio<R: tauri::Runtime>(
     path: String,
 ) -> Result<(), String> {
     let target = resolve_meeting_audio_path(&app, &path)?;
+    let working_target = meeting_working_audio_path(&target);
     if target.is_dir() {
         return Err(format!(
             "Meeting audio path points to a directory: {}",
@@ -1071,10 +1244,26 @@ fn delete_meeting_audio<R: tauri::Runtime>(
 
     match std::fs::remove_file(&target) {
         Ok(()) => {
+            if let Some(working_target) = working_target.as_ref().filter(|value| value.exists()) {
+                if let Err(error) = std::fs::remove_file(working_target) {
+                    warn!(
+                        target = %working_target.display(),
+                        "Failed to delete working meeting audio: {error}"
+                    );
+                }
+            }
             info!(target = %target.display(), "Deleted meeting audio");
             Ok(())
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if let Some(working_target) = working_target.as_ref().filter(|value| value.exists()) {
+                if let Err(error) = std::fs::remove_file(working_target) {
+                    warn!(
+                        target = %working_target.display(),
+                        "Failed to delete working meeting audio: {error}"
+                    );
+                }
+            }
             warn!(target = %target.display(), "Meeting audio delete requested for missing file");
             Ok(())
         }
@@ -1668,6 +1857,12 @@ fn load_summary_settings<R: tauri::Runtime>(
     Ok(load_app_settings(app)?.summary)
 }
 
+fn load_speaker_profiles<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<Vec<StoredSpeakerProfile>, String> {
+    Ok(sanitize_speaker_profiles(load_app_settings(app)?.speaker_profiles))
+}
+
 fn persist_model_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     settings: &StoredModelSettings,
@@ -1704,6 +1899,15 @@ fn persist_summary_settings<R: tauri::Runtime>(
     persist_app_settings(app, &app_settings)
 }
 
+fn persist_speaker_profiles<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    profiles: &[StoredSpeakerProfile],
+) -> Result<(), String> {
+    let mut app_settings = load_app_settings(app)?;
+    app_settings.speaker_profiles = profiles.to_vec();
+    persist_app_settings(app, &app_settings)
+}
+
 fn load_app_settings<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<StoredAppSettings, String> {
@@ -1719,6 +1923,7 @@ fn load_app_settings<R: tauri::Runtime>(
         model: load_legacy_model_settings(app)?,
         diarization: load_legacy_diarization_settings(app)?,
         summary: StoredSummarySettings::default(),
+        speaker_profiles: Vec::new(),
     })
 }
 
@@ -1847,6 +2052,19 @@ fn meeting_audio_path<R: tauri::Runtime>(
     Ok(meeting_audio_dir(app)?.join(meeting_audio_file_name(meeting_id)))
 }
 
+fn meeting_working_audio_path(final_audio_path: &Path) -> Option<PathBuf> {
+    if final_audio_path
+        .extension()
+        .and_then(|value| value.to_str())
+        != Some("m4a")
+    {
+        return None;
+    }
+
+    let stem = final_audio_path.file_stem()?.to_str()?;
+    Some(final_audio_path.with_file_name(format!("{stem}.recording.wav")))
+}
+
 fn normalize_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
 
@@ -1916,8 +2134,9 @@ fn resolve_meeting_audio_path<R: tauri::Runtime>(
         return Err("Meeting audio path is outside the unsigned char audio folder.".to_string());
     }
 
-    if resolved.extension().and_then(|value| value.to_str()) != Some("wav") {
-        return Err("Meeting audio path must point to a WAV file.".to_string());
+    let extension = resolved.extension().and_then(|value| value.to_str());
+    if extension != Some("m4a") && extension != Some("wav") {
+        return Err("Meeting audio path must point to an M4A or WAV file.".to_string());
     }
 
     Ok(resolved)
@@ -2767,14 +2986,17 @@ pub fn run() {
             general_settings_state,
             audio_device_settings_state,
             summary_settings_state,
+            speaker_profiles_state,
             save_model_settings,
             save_diarization_settings,
             save_general_settings,
             set_audio_input_device,
             set_audio_output_device,
             save_summary_settings,
+            save_speaker_profiles,
             generate_transcript_summary,
             run_local_diarization,
+            analyze_speaker_embeddings,
             sync_meeting_markdown,
             reveal_meeting_export_in_finder,
             meeting_export_exists,

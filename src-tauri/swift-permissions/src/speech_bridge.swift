@@ -294,7 +294,129 @@ private struct FileDiarizationPayload: Codable, Sendable {
   var error: String?
 }
 
+private struct SpeakerEmbeddingRequestPayload: Codable, Sendable {
+  var speaker: String
+  var segments: [DiarizationSegmentPayload]
+}
+
+private struct SpeakerEmbeddingSamplePayload: Codable, Sendable {
+  var startSeconds: Double
+  var endSeconds: Double
+  var durationSeconds: Double
+  var embedding: [Float]
+}
+
+private struct SpeakerEmbeddingPayload: Codable, Sendable {
+  var speaker: String
+  var embedding: [Float]
+  var samples: [SpeakerEmbeddingSamplePayload]
+}
+
+private struct FileSpeakerEmbeddingPayload: Codable, Sendable {
+  var speakers: [SpeakerEmbeddingPayload]
+  var error: String?
+}
+
 private let diarizationPipelineSource = "speech-swift / sortformer"
+
+private func diarizationSegmentDuration(_ segment: DiarizationSegmentPayload) -> Double {
+  max(0, segment.endSeconds - segment.startSeconds)
+}
+
+private func trimmedSpeakerEmbeddingSegment(
+  _ segment: DiarizationSegmentPayload,
+  minimumDuration: Double,
+  maximumDuration: Double
+) -> DiarizationSegmentPayload? {
+  let start = max(0, segment.startSeconds)
+  let end = max(start, segment.endSeconds)
+  let duration = end - start
+  guard duration >= minimumDuration else {
+    return nil
+  }
+
+  if duration <= maximumDuration {
+    return DiarizationSegmentPayload(speaker: segment.speaker, startSeconds: start, endSeconds: end)
+  }
+
+  let midpoint = start + duration / 2
+  let clippedStart = max(0, midpoint - maximumDuration / 2)
+  return DiarizationSegmentPayload(
+    speaker: segment.speaker,
+    startSeconds: clippedStart,
+    endSeconds: clippedStart + maximumDuration
+  )
+}
+
+private func selectSpeakerEmbeddingSegments(
+  _ segments: [DiarizationSegmentPayload],
+  limit: Int
+) -> [DiarizationSegmentPayload] {
+  let primary = segments.compactMap {
+    trimmedSpeakerEmbeddingSegment($0, minimumDuration: 2.5, maximumDuration: 6.0)
+  }
+  let fallback = segments.compactMap {
+    trimmedSpeakerEmbeddingSegment($0, minimumDuration: 1.5, maximumDuration: 4.0)
+  }
+  let candidates = primary.isEmpty ? fallback : primary
+
+  return Array(
+    candidates
+      .sorted { lhs, rhs in
+        let lhsDuration = diarizationSegmentDuration(lhs)
+        let rhsDuration = diarizationSegmentDuration(rhs)
+        if lhsDuration == rhsDuration {
+          return lhs.startSeconds < rhs.startSeconds
+        }
+
+        return lhsDuration > rhsDuration
+      }
+      .prefix(max(1, limit))
+  )
+}
+
+private func sliceAudio(
+  _ audio: [Float],
+  sampleRate: Int,
+  startSeconds: Double,
+  endSeconds: Double
+) -> [Float] {
+  guard !audio.isEmpty, sampleRate > 0 else {
+    return []
+  }
+
+  let clampedStart = max(0, startSeconds)
+  let clampedEnd = max(clampedStart, endSeconds)
+  let startIndex = min(audio.count, max(0, Int(floor(clampedStart * Double(sampleRate)))))
+  let endIndex = min(audio.count, max(startIndex, Int(ceil(clampedEnd * Double(sampleRate)))))
+  guard endIndex > startIndex else {
+    return []
+  }
+
+  return Array(audio[startIndex..<endIndex])
+}
+
+private func normalizedEmbeddingCentroid(_ embeddings: [[Float]]) -> [Float] {
+  guard let first = embeddings.first, !first.isEmpty else {
+    return []
+  }
+
+  var centroid = [Float](repeating: 0, count: first.count)
+  for embedding in embeddings where embedding.count == centroid.count {
+    for (index, value) in embedding.enumerated() {
+      centroid[index] += value
+    }
+  }
+
+  let norm = sqrt(centroid.reduce(Float.zero) { partialResult, value in
+    partialResult + (value * value)
+  })
+  guard norm > 0 else {
+    return centroid
+  }
+
+  return centroid.map { $0 / norm }
+}
 
 private func constrainDiarizedSegments(
   _ segments: [DiarizedSegment],
@@ -604,6 +726,8 @@ private final class WAVCaptureWriter {
 
 private final class LiveTranscriptionSession {
   private let captureWriter: WAVCaptureWriter
+  private let finalRecordingURL: URL
+  private let workingRecordingURL: URL
   private let recordingPath: String
   private let mode: ProcessingMode
   private let streamingSessions: [TranscriptSource: StreamingSession]
@@ -628,8 +752,11 @@ private final class LiveTranscriptionSession {
     streamingModel: ParakeetStreamingASRModel? = nil
   ) throws {
     self.mode = mode
+    finalRecordingURL = recordingURL
+    workingRecordingURL = Self.workingRecordingURL(for: recordingURL)
     recordingPath = recordingURL.path
-    captureWriter = try WAVCaptureWriter(url: recordingURL)
+    try Self.prepareWorkingRecording(at: workingRecordingURL, from: finalRecordingURL)
+    captureWriter = try WAVCaptureWriter(url: workingRecordingURL)
     if let streamingModel {
       streamingSessions = [
         .microphone: try streamingModel.createSession(),
@@ -692,14 +819,16 @@ private final class LiveTranscriptionSession {
       }
     }
 
-    let audioPath = try captureWriter.finish()
+    _ = try captureWriter.finish()
+    try Self.encodeWorkingRecording(from: workingRecordingURL, to: finalRecordingURL)
+    try? FileManager.default.removeItem(at: workingRecordingURL)
     let snapshot = snapshot()
     return TranscriptionPayload(
       running: false,
       text: snapshot.text,
       error: snapshot.error,
       entries: snapshot.entries,
-      audioPath: audioPath,
+      audioPath: finalRecordingURL.path,
       mode: mode.rawValue
     )
   }
@@ -713,6 +842,9 @@ private final class LiveTranscriptionSession {
     processingTimer = nil
     timer?.cancel()
     captureWriter.cancel(removeFile: removeRecording)
+    if removeRecording {
+      try? FileManager.default.removeItem(at: finalRecordingURL)
+    }
   }
 
   func requestStop() {
@@ -875,6 +1007,111 @@ private final class LiveTranscriptionSession {
       .map(\.text)
       .joined(separator: "\n")
   }
+
+  private static func workingRecordingURL(for finalRecordingURL: URL) -> URL {
+    finalRecordingURL
+      .deletingPathExtension()
+      .appendingPathExtension("recording.wav")
+  }
+
+  private static func legacyRecordingURL(for finalRecordingURL: URL) -> URL {
+    finalRecordingURL
+      .deletingPathExtension()
+      .appendingPathExtension("wav")
+  }
+
+  private static func prepareWorkingRecording(at workingRecordingURL: URL, from finalRecordingURL: URL)
+    throws
+  {
+    let fileManager = FileManager.default
+    try fileManager.createDirectory(
+      at: finalRecordingURL.deletingLastPathComponent(),
+      withIntermediateDirectories: true,
+      attributes: nil
+    )
+
+    if fileManager.fileExists(atPath: workingRecordingURL.path) {
+      return
+    }
+
+    if fileManager.fileExists(atPath: finalRecordingURL.path) {
+      try decodeSavedRecording(from: finalRecordingURL, to: workingRecordingURL)
+      return
+    }
+
+    let legacyRecordingURL = legacyRecordingURL(for: finalRecordingURL)
+    guard fileManager.fileExists(atPath: legacyRecordingURL.path) else {
+      return
+    }
+
+    try? fileManager.removeItem(at: workingRecordingURL)
+    try fileManager.moveItem(at: legacyRecordingURL, to: workingRecordingURL)
+  }
+
+  private static func encodeWorkingRecording(from sourceURL: URL, to destinationURL: URL) throws {
+    let fileManager = FileManager.default
+    let temporaryDestinationURL = destinationURL.appendingPathExtension("tmp")
+
+    try runAudioConvert(
+      arguments: ["-f", "m4af", "-d", "aac ", "-s", "1", sourceURL.path, temporaryDestinationURL.path],
+      failureMessage: "Failed to convert meeting audio to M4A"
+    )
+
+    if fileManager.fileExists(atPath: destinationURL.path) {
+      _ = try fileManager.replaceItemAt(destinationURL, withItemAt: temporaryDestinationURL)
+      return
+    }
+
+    try fileManager.moveItem(at: temporaryDestinationURL, to: destinationURL)
+  }
+
+  private static func decodeSavedRecording(from sourceURL: URL, to destinationURL: URL) throws {
+    try runAudioConvert(
+      arguments: [
+        "-f", "WAVE",
+        "-d", "LEI16@16000",
+        "-c", "1",
+        sourceURL.path,
+        destinationURL.path,
+      ],
+      failureMessage: "Failed to prepare the meeting audio for recording"
+    )
+  }
+
+  private static func runAudioConvert(arguments: [String], failureMessage: String) throws {
+    let fileManager = FileManager.default
+    guard let destinationPath = arguments.last else {
+      throw SpeechBridgeError.message("\(failureMessage).")
+    }
+
+    try fileManager.createDirectory(
+      at: URL(fileURLWithPath: destinationPath).deletingLastPathComponent(),
+      withIntermediateDirectories: true,
+      attributes: nil
+    )
+
+    if fileManager.fileExists(atPath: destinationPath) {
+      try? fileManager.removeItem(atPath: destinationPath)
+    }
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/afconvert")
+    process.arguments = arguments
+
+    let outputPipe = Pipe()
+    process.standardOutput = outputPipe
+    process.standardError = outputPipe
+
+    try process.run()
+    process.waitUntilExit()
+
+    guard process.terminationStatus == 0 else {
+      let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let detail = (output?.isEmpty == false) ? ": \(output!)" : "."
+      throw SpeechBridgeError.message("\(failureMessage)\(detail)")
+    }
+  }
 }
 
 private actor DiarizationPipeline {
@@ -937,6 +1174,83 @@ private actor DiarizationPipeline {
   }
 }
 
+private actor SpeakerEmbeddingPipeline {
+  private var model: WeSpeakerModel?
+  private var modelTask: Task<WeSpeakerModel, Error>?
+
+  func analyzeAudioFile(
+    atPath path: String,
+    requests: [SpeakerEmbeddingRequestPayload],
+    sampleLimit: Int
+  ) async throws -> FileSpeakerEmbeddingPayload {
+    let url = URL(fileURLWithPath: path)
+    let audio = try AudioFileLoader.load(url: url, targetSampleRate: 16000)
+    let model = try await ensureLoaded()
+
+    let speakers = requests.map { request in
+      let samples = selectSpeakerEmbeddingSegments(request.segments, limit: sampleLimit)
+        .compactMap { segment -> SpeakerEmbeddingSamplePayload? in
+          let clippedAudio = sliceAudio(
+            audio,
+            sampleRate: 16000,
+            startSeconds: segment.startSeconds,
+            endSeconds: segment.endSeconds
+          )
+          guard clippedAudio.count >= 16000 else {
+            return nil
+          }
+
+          let embedding = model.embed(audio: clippedAudio, sampleRate: 16000)
+          guard embedding.contains(where: { $0 != 0 }) else {
+            return nil
+          }
+
+          return SpeakerEmbeddingSamplePayload(
+            startSeconds: segment.startSeconds,
+            endSeconds: segment.endSeconds,
+            durationSeconds: diarizationSegmentDuration(segment),
+            embedding: embedding
+          )
+        }
+
+      return SpeakerEmbeddingPayload(
+        speaker: request.speaker,
+        embedding: normalizedEmbeddingCentroid(samples.map(\.embedding)),
+        samples: samples
+      )
+    }
+
+    return FileSpeakerEmbeddingPayload(speakers: speakers, error: nil)
+  }
+
+  private func ensureLoaded() async throws -> WeSpeakerModel {
+    if let model {
+      return model
+    }
+
+    if let task = modelTask {
+      let model = try await task.value
+      self.model = model
+      return model
+    }
+
+    let task = Task<WeSpeakerModel, Error> {
+      try await WeSpeakerModel.fromPretrained(engine: .coreml)
+    }
+    modelTask = task
+
+    do {
+      let model = try await task.value
+      self.model = model
+      modelTask = nil
+      return model
+    } catch {
+      modelTask = nil
+      throw error
+    }
+  }
+}
+
 private actor SpeechBridge {
   static let shared = SpeechBridge()
 
@@ -944,6 +1258,7 @@ private actor SpeechBridge {
   private var modelTasks: [SpeechModelKind: Task<LoadedSpeechModel, Error>] = [:]
   private var downloadStates: [SpeechModelKind: ModelDownloadPayload] = [:]
   private let diarizationPipeline = DiarizationPipeline()
+  private let speakerEmbeddingPipeline = SpeakerEmbeddingPipeline()
 
   private var activeSession: LiveTranscriptionSession?
   private var activeMode: ProcessingMode?
@@ -1295,6 +1610,24 @@ private actor SpeechBridge {
     }
   }
 
+  func analyzeSpeakerEmbeddingsJSON(audioPath: String, speakersJSON: String) async -> String {
+    do {
+      guard let data = speakersJSON.data(using: .utf8) else {
+        throw SpeechBridgeError.message("Failed to decode speaker analysis request.")
+      }
+
+      let speakers = try JSONDecoder().decode([SpeakerEmbeddingRequestPayload].self, from: data)
+      let payload = try await speakerEmbeddingPipeline.analyzeAudioFile(
+        atPath: audioPath,
+        requests: speakers,
+        sampleLimit: 3
+      )
+      return encodeJSON(payload)
+    } catch {
+      return encodeJSON(FileSpeakerEmbeddingPayload(speakers: [], error: error.localizedDescription))
+    }
+  }
+
   private func ensureModelLoaded(_ kind: SpeechModelKind) async throws -> LoadedSpeechModel {
     refreshReadyState(for: kind)
 
@@ -1449,6 +1782,19 @@ public func _speech_diarize_audio_file(audioPath: SRString, speakerCount: Int) -
     await SpeechBridge.shared.diarizeAudioFileJSON(
       audioPath: audioPath.toString(),
       speakerCount: speakerCount
+    )
+  })
+}
+
+@_cdecl("_speech_embed_speaker_audio_file")
+public func _speech_embed_speaker_audio_file(
+  audioPath: SRString,
+  speakersJSON: SRString
+) -> SRString {
+  SRString(waitForValue {
+    await SpeechBridge.shared.analyzeSpeakerEmbeddingsJSON(
+      audioPath: audioPath.toString(),
+      speakersJSON: speakersJSON.toString()
     )
   })
 }

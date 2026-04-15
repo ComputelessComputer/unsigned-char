@@ -25,6 +25,8 @@ swift!(fn _speech_transcribe_audio_file(
 #[cfg(target_os = "macos")]
 swift!(fn _speech_diarize_audio_file(audio_path: &SRString, speaker_count: Int) -> SRString);
 #[cfg(target_os = "macos")]
+swift!(fn _speech_embed_speaker_audio_file(audio_path: &SRString, speakers_json: &SRString) -> SRString);
+#[cfg(target_os = "macos")]
 swift!(fn _speech_live_transcription_start(
     mode: &SRString,
     model_id: &SRString,
@@ -97,7 +99,7 @@ struct FileTranscriptionPayload {
     error: Option<String>,
 }
 
-#[derive(Clone, Default, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiarizationSegmentPayload {
     #[serde(default)]
@@ -117,6 +119,47 @@ pub struct FileDiarizationPayload {
     pub speaker_count: usize,
     #[serde(default)]
     pub pipeline_source: String,
+    error: Option<String>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerEmbeddingRequest {
+    #[serde(default)]
+    pub speaker: String,
+    #[serde(default)]
+    pub segments: Vec<DiarizationSegmentPayload>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerEmbeddingSamplePayload {
+    #[serde(default)]
+    pub start_seconds: f64,
+    #[serde(default)]
+    pub end_seconds: f64,
+    #[serde(default)]
+    pub duration_seconds: f64,
+    #[serde(default)]
+    pub embedding: Vec<f32>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeakerEmbeddingPayload {
+    #[serde(default)]
+    pub speaker: String,
+    #[serde(default)]
+    pub embedding: Vec<f32>,
+    #[serde(default)]
+    pub samples: Vec<SpeakerEmbeddingSamplePayload>,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSpeakerEmbeddingPayload {
+    #[serde(default)]
+    pub speakers: Vec<SpeakerEmbeddingPayload>,
     error: Option<String>,
 }
 
@@ -345,6 +388,41 @@ pub fn diarize_audio_file(
     {
         let _ = audio_path;
         let _ = speaker_count;
+        Err("speech-swift is only available on macOS.".to_string())
+    }
+}
+
+pub fn embed_speaker_audio_file(
+    audio_path: &Path,
+    speakers: &[SpeakerEmbeddingRequest],
+) -> Result<FileSpeakerEmbeddingPayload, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let audio_path_string = audio_path.display().to_string();
+        let audio_path: SRString = audio_path_string.as_str().into();
+        let speakers_json = serde_json::to_string(speakers)
+            .map_err(|error| format!("Failed to encode speaker embedding request: {error}"))?;
+        let speakers_json: SRString = speakers_json.as_str().into();
+        let response: FileSpeakerEmbeddingPayload = decode_json(
+            unsafe { _speech_embed_speaker_audio_file(&audio_path, &speakers_json) },
+            "speech-swift speaker embeddings",
+        )?;
+
+        if let Some(error) = response
+            .error
+            .as_ref()
+            .filter(|value| !value.trim().is_empty())
+        {
+            return Err(error.clone());
+        }
+
+        Ok(response)
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = audio_path;
+        let _ = speakers;
         Err("speech-swift is only available on macOS.".to_string())
     }
 }
