@@ -1,4 +1,5 @@
-fixtures/
+ground/
+meetings/
 results/
 .venv/
 __pycache__/
